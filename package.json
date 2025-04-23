@@ -1,0 +1,91 @@
+{
+  "name": "neon-local",
+  "displayName": "Neon Local",
+  "description": "Local development environment for Neon Database with branch management",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "neon-local.configure",
+        "title": "Neon: Configure Local Environment"
+      },
+      {
+        "command": "neon-local.startProxy",
+        "title": "Neon: Start Local Proxy"
+      },
+      {
+        "command": "neon-local.stopProxy",
+        "title": "Neon: Stop Local Proxy"
+      },
+      {
+        "command": "neon-local.createBranch",
+        "title": "Neon: Create New Branch"
+      },
+      {
+        "command": "neon-local.switchBranch",
+        "title": "Neon: Switch Branch"
+      },
+      {
+        "command": "neon-local.deleteBranch",
+        "title": "Neon: Delete Branch"
+      }
+    ],
+    "configuration": {
+      "title": "Neon Local",
+      "properties": {
+        "neonLocal.apiKey": {
+          "type": "string",
+          "description": "Your Neon API Key"
+        },
+        "neonLocal.projectId": {
+          "type": "string",
+          "description": "Your Neon Project ID"
+        },
+        "neonLocal.driver": {
+          "type": "string",
+          "enum": ["postgres", "serverless"],
+          "default": "postgres",
+          "description": "Driver to use for connecting to Neon"
+        },
+        "neonLocal.deleteOnStop": {
+          "type": "boolean",
+          "default": true,
+          "description": "Delete branch when stopping the proxy"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . --outDir out --watch",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.1",
+    "@typescript-eslint/parser": "^6.13.1",
+    "eslint": "^8.54.0",
+    "typescript": "^5.3.2",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "ts-loader": "^9.5.1"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "docker-compose": "^0.24.2",
+    "dockerode": "^4.0.0"
+  }
+} 
