@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Local</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 20px;
+            color: var(--vscode-foreground);
+            background-color: var(--vscode-editor-background);
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        select, input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid var(--vscode-input-border);
+            background-color: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border-radius: 3px;
+        }
+        button {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 0 0 20px 0;
+            margin-bottom: 0;
+            font-weight: bold;
+            white-space: pre-wrap;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .status .connection-string {
+            font-weight: normal;
+            margin-top: 4px;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+        .connection-string-text {
+            word-break: break-all;
+            flex: 1;
+        }
+        .copy-button {
+            background: none;
+            border: none;
+            padding: 4px;
+            cursor: pointer;
+            color: var(--vscode-button-foreground);
+            opacity: 0.8;
+            border-radius: 3px;
+            display: inline-flex;
+            align-items: center;
+            min-width: auto;
+            margin: 0;
+            flex-shrink: 0;
+        }
+        .copy-button:hover {
+            opacity: 1;
+            background-color: var(--vscode-button-secondaryHoverBackground);
+        }
+        .copy-button svg {
+            width: 14px;
+            height: 14px;
+        }
+        .status.connected {
+            color: #2e7d32;
+        }
+        .status.disconnected {
+            color: #c62828;
+        }
+        .status.loading {
+            color: #1565c0;
+        }
+        .status.error {
+            border: 1px solid var(--vscode-terminal-ansiRed);
+        }
+        .connection-info {
+            background-color: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--vscode-foreground);
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        .button.primary {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
+        .button.primary:hover {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+        .button.danger {
+            background-color: #c62828;
+            color: white;
+        }
+        .button.danger:hover {
+            background-color: #b71c1c;
+        }
+        .button.secondary {
+            background-color: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+        }
+        .button.secondary:hover {
+            background-color: var(--vscode-button-secondaryHoverBackground);
+        }
+        .button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        select:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Neon Local</h1>
+        
+        <div class="form-group">
+            <label for="org">Organization</label>
+            <select id="org" disabled></select>
+        </div>
+
+        <div class="form-group">
+            <label for="project">Project</label>
+            <select id="project" disabled></select>
+        </div>
+
+        <div class="form-group">
+            <label for="branch">Branch</label>
+            <select id="branch" disabled></select>
+        </div>
+
+        <div class="form-group">
+            <label for="driver">Driver</label>
+            <select id="driver">
+                <option value="postgres">PostgreSQL</option>
+                <option value="serverless">Neon Serverless</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <div id="status" class="status disconnected">
+                Status: Disconnected
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button id="startProxy" class="button primary">Connect</button>
+            <button id="stopProxy" class="button danger" style="display: none;">Disconnect</button>
+        </div>
+    </div>
+
+    <script>
+        const vscode = acquireVsCodeApi();
+
+        // Elements
+        const orgSelect = document.getElementById('org');
+        const projectSelect = document.getElementById('project');
+        const branchSelect = document.getElementById('branch');
+        const driverSelect = document.getElementById('driver');
+        const startButton = document.getElementById('startProxy');
+        const stopButton = document.getElementById('stopProxy');
+        const statusDiv = document.getElementById('status');
+
+        // Event Listeners
+        orgSelect.addEventListener('change', (event) => {
+            const select = event.target;
+            if (select.value) {
+                // First stop proxy if it's running
+                if (document.getElementById('stopProxy').style.display === 'block') {
+                    vscode.postMessage({ command: 'stopProxy' });
+                }
+                
+                vscode.postMessage({
+                    command: 'selectOrg',
+                    orgId: select.value
+                });
+                
+                // Reset project and branch selections
+                projectSelect.innerHTML = '';
+                projectSelect.disabled = true;
+                branchSelect.innerHTML = '';
+                branchSelect.disabled = true;
+            }
+        });
+
+        projectSelect.addEventListener('change', (event) => {
+            const select = event.target;
+            if (select.value) {
+                // First stop proxy if it's running
+                if (document.getElementById('stopProxy').style.display === 'block') {
+                    vscode.postMessage({ command: 'stopProxy' });
+                }
+                
+                vscode.postMessage({
+                    command: 'selectProject',
+                    projectId: select.value
+                });
+                
+                // Reset branch selection
+                branchSelect.innerHTML = '';
+                branchSelect.disabled = true;
+            }
+        });
+
+        branchSelect.addEventListener('change', (event) => {
+            const select = event.target;
+            if (select.value === 'create') {
+                vscode.postMessage({ command: 'createBranch' });
+                // Reset to default option
+                select.value = '';
+            } else if (select.value) {
+                const isProxyRunning = document.getElementById('stopProxy').style.display === 'block';
+                if (isProxyRunning) {
+                    // Stop proxy first, then select new branch and restart
+                    vscode.postMessage({ command: 'stopProxy' });
+                }
+                
+                vscode.postMessage({
+                    command: 'selectBranch',
+                    branchId: select.value,
+                    restartProxy: isProxyRunning,
+                    driver: driverSelect.value
+                });
+            }
+        });
+
+        driverSelect.addEventListener('change', () => {
+            const isProxyRunning = document.getElementById('stopProxy').style.display === 'block';
+            if (isProxyRunning) {
+                // Stop proxy first, then restart with new driver
+                vscode.postMessage({ command: 'stopProxy' });
+                
+                // Get the current branch value
+                const currentBranch = branchSelect.value;
+                if (currentBranch && currentBranch !== 'create') {
+                    vscode.postMessage({
+                        command: 'selectBranch',
+                        branchId: currentBranch,
+                        restartProxy: true,
+                        driver: driverSelect.value
+                    });
+                }
+            }
+        });
+
+        startButton.addEventListener('click', () => {
+            vscode.postMessage({ 
+                command: 'startProxy',
+                driver: driverSelect.value
+            });
+        });
+
+        stopButton.addEventListener('click', () => {
+            vscode.postMessage({ command: 'stopProxy' });
+        });
+
+        // Message handler
+        window.addEventListener('message', event => {
+            const message = event.data;
+            console.log('Received message:', message);
+
+            switch (message.command) {
+                case 'updateOrgs':
+                    console.log('Updating orgs:', message.orgs);
+                    updateSelect('org', message.orgs);
+                    if (message.selectedOrg) {
+                        document.getElementById('org').value = message.selectedOrg;
+                    }
+                    break;
+                case 'updateProjects':
+                    console.log('Updating projects:', message.projects);
+                    console.log('Selected project:', message.selectedProject);
+                    updateSelect('project', message.projects);
+                    if (message.selectedProject) {
+                        document.getElementById('project').value = message.selectedProject;
+                    }
+                    break;
+                case 'updateBranches':
+                    console.log('Updating branches:', message.branches);
+                    updateSelect('branch', message.branches);
+                    if (message.selectedBranch) {
+                        document.getElementById('branch').value = message.selectedBranch;
+                    }
+                    break;
+                case 'updateStatus':
+                    const statusDiv = document.getElementById('status');
+                    if (message.connected) {
+                        statusDiv.innerHTML = 'Status: Connected';
+                        if (message.connectionInfo) {
+                            // Create a data attribute with the connection string
+                            const escapedConnectionString = message.connectionInfo.replace(/"/g, '&quot;');
+                            const copyButton = `<button class="copy-button" data-connection-string="${escapedConnectionString}" onclick="copyConnectionString(this)" title="Copy connection string">
+                                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M5.75 4.75h5.5v6.5h-5.5z"/>
+                                    <path d="M9.75 4.75h1.5v8.5h-5.5v-1.5"/>
+                                </svg>
+                            </button>`;
+                            statusDiv.innerHTML += '<br><span class="connection-string"><span class="connection-string-text">' + message.connectionInfo + '</span>' + copyButton + '</span>';
+                        }
+                        statusDiv.className = 'status connected';
+                    } else {
+                        statusDiv.textContent = 'Status: Disconnected';
+                        statusDiv.className = 'status disconnected';
+                    }
+                    
+                    if (message.loading) {
+                        statusDiv.textContent = 'Status: Loading...';
+                        statusDiv.className = 'status loading';
+                    }
+                    
+                    // Show/hide start/stop buttons based on connection status
+                    document.getElementById('startProxy').style.display = message.connected ? 'none' : 'block';
+                    document.getElementById('stopProxy').style.display = message.connected ? 'block' : 'none';
+                    break;
+            }
+        });
+
+        function updateSelect(selectId, items) {
+            console.log('Updating select:', selectId, 'with items:', items);
+            const select = document.getElementById(selectId);
+            if (!select) {
+                console.error('Select element not found:', selectId);
+                return;
+            }
+            
+            // Clear existing options
+            select.innerHTML = '';
+            
+            // Add default empty option
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.disabled = true;
+            defaultOption.selected = true;
+            
+            switch (selectId) {
+                case 'org':
+                    defaultOption.textContent = 'Select an organization';
+                    select.appendChild(defaultOption);
+                    break;
+                case 'project':
+                    defaultOption.textContent = 'Select a project';
+                    select.appendChild(defaultOption);
+                    break;
+                case 'branch':
+                    // For branch dropdown, we'll add the default option after the divider
+                    break;
+            }
+
+            // Add Create Branch option at the top of branch dropdown
+            if (selectId === 'branch') {
+                const createOption = document.createElement('option');
+                createOption.value = 'create';
+                createOption.textContent = '➕ Create New Branch';
+                select.appendChild(createOption);
+
+                // Add separator
+                const separator = document.createElement('option');
+                separator.disabled = true;
+                separator.textContent = '───────────────';
+                select.appendChild(separator);
+
+                // Add default option after the divider
+                defaultOption.textContent = 'Select a branch';
+                select.appendChild(defaultOption);
+            }
+            
+            // Add new options
+            items.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.id;
+                option.textContent = item.name;
+                select.appendChild(option);
+            });
+
+            // Enable the select
+            select.disabled = false;
+            console.log('Select updated:', selectId, 'options:', select.options.length);
+        }
+
+        // Add the copy function to the window object
+        window.copyConnectionString = function(button) {
+            const connectionString = button.dataset.connectionString;
+            if (!connectionString) {
+                vscode.postMessage({
+                    command: 'showError',
+                    text: 'No connection string found to copy'
+                });
+                return;
+            }
+
+            navigator.clipboard.writeText(connectionString).then(() => {
+                vscode.postMessage({
+                    command: 'showInfo',
+                    text: 'Connection string copied to clipboard'
+                });
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                vscode.postMessage({
+                    command: 'showError',
+                    text: 'Failed to copy connection string'
+                });
+            });
+        };
+
+    </script>
+</body>
+</html> 
