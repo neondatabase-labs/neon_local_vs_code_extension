@@ -32,6 +32,9 @@ interface ViewData {
     selectedOrg: string | undefined;
     selectedProject: string | undefined;
     selectedBranch: string | undefined;
+    selectedOrgName: string | undefined;
+    selectedProjectName: string | undefined;
+    selectedBranchName: string | undefined;
     connected: boolean;
     loading: boolean;
     connectionInfo: string | undefined;
@@ -841,6 +844,9 @@ export class NeonLocalManager {
                 selectedOrg: this.currentOrg,
                 selectedProject: this.currentProject,
                 selectedBranch: this.currentBranch,
+                selectedOrgName: undefined,
+                selectedProjectName: undefined,
+                selectedBranchName: undefined,
                 connected: this.isProxyRunning,
                 loading: false,
                 connectionInfo: undefined
@@ -849,16 +855,35 @@ export class NeonLocalManager {
             // Get organizations
             const orgs = await this.getOrgs();
             data.orgs = orgs.map(org => ({ id: org.id, name: org.name }));
-
-            // If we have a selected org, get projects
+            // Set selected org name
             if (this.currentOrg) {
+                const selectedOrg = orgs.find(org => org.id === this.currentOrg);
+                if (selectedOrg) {
+                    data.selectedOrgName = selectedOrg.name;
+                }
+
+                // If we have a selected org, get projects
                 const projects = await this.getProjects(this.currentOrg);
                 data.projects = projects.map(project => ({ id: project.id, name: project.name }));
-
-                // If we have a selected project, get branches
+                
+                // Set selected project name
                 if (this.currentProject) {
+                    const selectedProject = projects.find(project => project.id === this.currentProject);
+                    if (selectedProject) {
+                        data.selectedProjectName = selectedProject.name;
+                    }
+
+                    // If we have a selected project, get branches
                     const branches = await this.getBranches(this.currentProject);
                     data.branches = branches.map(branch => ({ id: branch.id, name: branch.name }));
+                    
+                    // Set selected branch name
+                    if (this.currentBranch) {
+                        const selectedBranch = branches.find(branch => branch.id === this.currentBranch);
+                        if (selectedBranch) {
+                            data.selectedBranchName = selectedBranch.name;
+                        }
+                    }
                 }
             }
 

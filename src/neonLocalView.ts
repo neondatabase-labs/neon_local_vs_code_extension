@@ -346,15 +346,11 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
             organizations: data.orgs,
             selectedOrgId: data.selectedOrgId,
             connected: isConnected,
-            selectedOrg: (data.orgs || []).find(org => org.id === data.selectedOrgId),
-            selectedProject: (data.projects || []).find(project => project.id === data.selectedProjectId),
-            selectedBranch: (data.branches || []).find(branch => branch.id === data.selectedBranchId)
+            selectedOrgName: data.selectedOrgName,
+            selectedProjectName: data.selectedProjectName,
+            selectedBranchName: data.selectedBranchName,
+            selectedDriver: data.selectedDriver
         }, null, 2));
-
-        // Find the selected organization name
-        const selectedOrg = (data.orgs || []).find(org => org.id === data.selectedOrgId);
-        const selectedProject = (data.projects || []).find(project => project.id === data.selectedProjectId);
-        const selectedBranch = (data.branches || []).find(branch => branch.id === data.selectedBranchId);
 
         return `<!DOCTYPE html>
             <html lang="en">
@@ -388,15 +384,15 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     <div class="connection-details">
                         <div class="detail-row">
                             <div class="detail-label">Organization</div>
-                            <div class="detail-value">${selectedOrg ? selectedOrg.name : 'Not selected'}</div>
+                            <div class="detail-value">${data.selectedOrgName || 'Not selected'}</div>
                         </div>
                         <div class="detail-row">
                             <div class="detail-label">Project</div>
-                            <div class="detail-value">${selectedProject ? selectedProject.name : 'Not selected'}</div>
+                            <div class="detail-value">${data.selectedProjectName || 'Not selected'}</div>
                         </div>
                         <div class="detail-row">
                             <div class="detail-label">Parent Branch</div>
-                            <div class="detail-value">${selectedBranch ? selectedBranch.name : 'Not selected'}</div>
+                            <div class="detail-value">${data.selectedBranchName || 'Not selected'}</div>
                         </div>
                         <div class="detail-row">
                             <div class="detail-label">Driver</div>
@@ -867,45 +863,11 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     console.log('Connection state change:', { wasConnected, isConnected: currentState.connected });
                     saveState();
 
-                    // If connection state changed, request a full page refresh
+                    // Always request a full refresh when connection state changes
                     if (wasConnected !== currentState.connected) {
                         console.log('Connection state changed, requesting refresh');
                         vscode.postMessage({ command: 'refresh' });
                         return;
-                    }
-
-                    // Update the UI based on connection state
-                    const formContent = document.querySelector('.form-content');
-                    const connectionStatus = document.querySelector('.connection-status');
-                    const connectionDetails = document.querySelector('.connection-details');
-
-                    if (currentState.connected) {
-                        // Hide form content if it exists
-                        if (formContent) {
-                            formContent.style.display = 'none';
-                        }
-
-                        // Show connection status and details
-                        if (connectionStatus && connectionDetails) {
-                            connectionStatus.style.display = 'block';
-                            connectionDetails.style.display = 'block';
-                        } else {
-                            // If elements don't exist, request a full refresh
-                            vscode.postMessage({ command: 'refresh' });
-                        }
-                    } else {
-                        // Show form content
-                        if (formContent) {
-                            formContent.style.display = 'block';
-                        }
-
-                        // Hide connection status and details
-                        if (connectionStatus) {
-                            connectionStatus.style.display = 'none';
-                        }
-                        if (connectionDetails) {
-                            connectionDetails.style.display = 'none';
-                        }
                     }
 
                     // Update proxy button
