@@ -4,8 +4,20 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 interface ViewData {
-    // Define your view data structure here
-    [key: string]: any;
+    connected?: boolean;
+    connectionInfo?: string;
+    orgs?: Array<{ id: string; name: string }>;
+    projects?: Array<{ id: string; name: string }>;
+    branches?: Array<{ id: string; name: string }>;
+    selectedOrgId?: string;
+    selectedProjectId?: string;
+    selectedBranchId?: string;
+    selectedDriver?: string;
+    selectedOrgName?: string;
+    selectedProjectName?: string;
+    selectedBranchName?: string;
+    selectedBranch?: any;
+    loading?: boolean;
 }
 
 export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
@@ -82,6 +94,10 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         break;
                     case 'createBranch':
                         await this._neonLocal.handleCreateBranch();
+                        break;
+                    case 'refresh':
+                        console.log('Handling refresh request');
+                        await this.updateView();
                         break;
                 }
             } catch (error) {
@@ -309,79 +325,32 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
         </html>`;
     }
 
+    private getWebviewContent(data: ViewData): string {
+        console.log('getWebviewContent data:', JSON.stringify({
+            organizations: data.orgs,
+            selectedOrgId: data.selectedOrgId,
+            connected: data.connected
+        }, null, 2));
+        
+        // Rename to getMainHtml for consistency
+        return this.getMainHtml(data);
+    }
+
     private getMainHtml(data: ViewData): string {
+        const isConnected = data.connected || !!data.connectionInfo;
+        console.log('Main HTML data:', JSON.stringify({
+            organizations: data.orgs,
+            selectedOrgId: data.selectedOrgId,
+            connected: isConnected
+        }, null, 2));
+
         return `<!DOCTYPE html>
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>Neon Local</title>
-                <style>
-                    body {
-                        padding: 20px;
-                        font-family: var(--vscode-font-family);
-                        background-color: var(--vscode-editor-background);
-                        color: var(--vscode-editor-foreground);
-                    }
-                    select, button {
-                        padding: 8px;
-                        margin: 8px 0;
-                        background-color: var(--vscode-dropdown-background);
-                        color: var(--vscode-dropdown-foreground);
-                        border: 1px solid var(--vscode-dropdown-border);
-                        border-radius: 4px;
-                    }
-                    button {
-                        background-color: var(--vscode-button-background);
-                        color: var(--vscode-button-foreground);
-                        border: none;
-                        cursor: pointer;
-                        width: 100%;
-                    }
-                    button:hover {
-                        background-color: var(--vscode-button-hoverBackground);
-                    }
-                    button:disabled {
-                        opacity: 0.5;
-                        cursor: not-allowed;
-                    }
-                    .section {
-                        margin-bottom: 20px;
-                    }
-                    .connection-info {
-                        background-color: var(--vscode-textBlockQuote-background);
-                        padding: 10px;
-                        border-radius: 4px;
-                        margin-top: 10px;
-                        white-space: pre-wrap;
-                    }
-                    .proxy-buttons {
-                        display: flex;
-                        gap: 10px;
-                    }
-                    .header {
-                        display: flex;
-                        align-items: center;
-                        margin-bottom: 20px;
-                        gap: 10px;
-                    }
-                    .header h1 {
-                        margin: 0;
-                        font-size: 1.2em;
-                        color: var(--vscode-foreground);
-                    }
-                    .neon-logo {
-                        width: 24px;
-                        height: 24px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        color: #00E699;
-                    }
-                    select {
-                        width: 100%;
-                    }
-                </style>
+                ${this.getStyles()}
             </head>
             <body>
                 <div id="app">
@@ -396,436 +365,748 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         <h1>Neon Local</h1>
                     </div>
 
-                    <div class="section">
-                        <label for="org-select">Organization:</label>
-                        <select id="org-select">
-                            <option value="">Select Organization</option>
-                            ${data.orgs.map((org: { id: string; name: string }) => `
-                                <option value="${org.id}" ${org.id === data.selectedOrg ? 'selected' : ''}>
-                                    ${org.name}
-                                </option>
-                            `).join('')}
-                        </select>
-                    </div>
-
-                    <div class="section">
-                        <label for="project-select">Project:</label>
-                        <select id="project-select" ${!data.selectedOrg ? 'disabled' : ''}>
-                            <option value="">Select Project</option>
-                            ${data.projects.map((project: { id: string; name: string }) => `
-                                <option value="${project.id}" ${project.id === data.selectedProject ? 'selected' : ''}>
-                                    ${project.name}
-                                </option>
-                            `).join('')}
-                        </select>
-                    </div>
-
-                    <div class="section">
-                        <label for="branch-select">Branch:</label>
-                        <select id="branch-select" ${!data.selectedProject ? 'disabled' : ''}>
-                            <option value="">Select Branch</option>
-                            ${data.branches.map((branch: { id: string; name: string }) => `
-                                <option value="${branch.id}" ${branch.id === data.selectedBranch ? 'selected' : ''}>
-                                    ${branch.name}
-                                </option>
-                            `).join('')}
-                        </select>
-                    </div>
-
-                    <div class="section">
-                        <label for="driver-select">Driver:</label>
-                        <select id="driver-select">
-                            <option value="postgres">PostgreSQL</option>
-                            <option value="neon">Neon Serverless</option>
-                        </select>
-                    </div>
-
-                    <div class="section proxy-buttons">
-                        ${data.connected ? 
-                            `<button id="stop-proxy">Stop Proxy</button>` : 
-                            `<button id="start-proxy" ${!data.selectedBranch ? 'disabled' : ''}>Start Proxy</button>`
-                        }
-                    </div>
-
-                    ${data.connectionInfo ? `
-                        <div class="connection-info">
-                            <strong>Connection Info:</strong><br>
-                            ${data.connectionInfo}
+                    <div class="main-content">
+                        <div class="connection-status">
+                            <div class="status-indicator ${isConnected ? 'connected' : 'disconnected'}">
+                                <span class="status-dot"></span>
+                                ${isConnected ? 'Connected' : 'Not Connected'}
+                            </div>
                         </div>
-                    ` : ''}
+
+                        ${isConnected ? `
+                            <div class="readonly-view">
+                                <div class="readonly-section">
+                                    <div class="readonly-label">Organization</div>
+                                    <div class="readonly-value">${data.selectedOrgName || 'Not selected'}</div>
+                                </div>
+                                <div class="readonly-section">
+                                    <div class="readonly-label">Project</div>
+                                    <div class="readonly-value">${data.selectedProjectName || 'Not selected'}</div>
+                                </div>
+                                <div class="readonly-section">
+                                    <div class="readonly-label">Branch</div>
+                                    <div class="readonly-value">${data.selectedBranchName || 'Not selected'}</div>
+                                </div>
+                                <div class="readonly-section">
+                                    <div class="readonly-label">Driver</div>
+                                    <div class="readonly-value">${data.selectedDriver === 'neon' ? 'Neon Serverless' : 'PostgreSQL'}</div>
+                                </div>
+                            </div>
+                        ` : this.getFormContent(data)}
+                    </div>
+
+                    ${this.getProxyContent(data)}
                 </div>
-
-                <script>
-                    const vscode = acquireVsCodeApi();
-                    let currentState = ${JSON.stringify(data)};
-
-                    // Track branch selection state
-                    const branchState = {
-                        selectedBranch: null,
-                        branchList: [],
-                        isProxyOperation: false,
-                        lastKnownValue: null,
-                        ignoreNextUpdate: false
-                    };
-
-                    function updateBranches(branches, selectedBranch, source = 'unknown') {
-                        console.log('updateBranches called with:', { 
-                            branches, 
-                            selectedBranch, 
-                            source,
-                            branchState,
-                            ignoreUpdate: branchState.ignoreNextUpdate 
-                        });
-
-                        const select = document.getElementById('branch-select');
-                        if (!select) return;
-
-                        // If we should ignore this update, just store the branch list
-                        if (branchState.ignoreNextUpdate) {
-                            console.log('Ignoring branch update as requested');
-                            branchState.branchList = branches;
-                            branchState.ignoreNextUpdate = false;
-                            return;
-                        }
-
-                        // During proxy operations, only store the branch list but don't update the UI
-                        if (branchState.isProxyOperation) {
-                            console.log('Proxy operation in progress, storing branch list without UI update');
-                            branchState.branchList = branches;
-                            return;
-                        }
-
-                        // If we have a selected branch during a status update, preserve it
-                        if (branchState.selectedBranch && source === 'status') {
-                            console.log('Preserving selected branch during status update:', branchState.selectedBranch);
-                            return;
-                        }
-
-                        // Store the current value before any changes
-                        const currentValue = select.value || branchState.selectedBranch;
-                        if (currentValue) {
-                            branchState.lastKnownValue = currentValue;
-                            console.log('Stored current value:', currentValue);
-                        }
-
-                        // Update branch list
-                        branchState.branchList = branches;
-
-                        // Save current options
-                        const defaultOption = select.options[0];
-                        
-                        // Clear current options
-                        select.innerHTML = '';
-                        
-                        // Restore default option
-                        select.add(defaultOption);
-                        
-                        // Add new options
-                        branches.forEach(branch => {
-                            const option = document.createElement('option');
-                            option.value = branch.id;
-                            option.text = branch.name;
-                            
-                            // Use the most appropriate value for selection
-                            const valueToUse = branchState.lastKnownValue || selectedBranch;
-                            option.selected = branch.id === valueToUse;
-                            
-                            select.add(option);
-                        });
-
-                        select.disabled = branches.length === 0;
-
-                        // Update selected branch if this is an explicit selection
-                        if (selectedBranch && source !== 'status') {
-                            branchState.selectedBranch = selectedBranch;
-                            branchState.lastKnownValue = selectedBranch;
-                            console.log('Updated selected branch to:', selectedBranch);
-                        }
-                    }
-
-                    // Handle all incoming messages
-                    window.addEventListener('message', event => {
-                        const message = event.data;
-                        console.log('Received message:', message);
-
-                        switch (message.command) {
-                            case 'updateOrgs':
-                                updateOrganizations(message.orgs, message.selectedOrg);
-                                break;
-                            case 'updateProjects':
-                                updateProjects(message.projects, message.selectedProject);
-                                // Reset branch state when project changes
-                                branchState.selectedBranch = null;
-                                branchState.lastKnownValue = null;
-                                branchState.branchList = [];
-                                branchState.isProxyOperation = false;
-                                branchState.ignoreNextUpdate = false;
-                                break;
-                            case 'updateBranches':
-                                updateBranches(message.branches, message.selectedBranch, 'message');
-                                break;
-                            case 'updateStatus':
-                                console.log('Status update received:', { 
-                                    branchState,
-                                    connected: message.connected,
-                                    loading: message.loading
-                                });
-                                
-                                // If we're in a proxy operation, ignore the next branch update
-                                if (branchState.isProxyOperation) {
-                                    branchState.ignoreNextUpdate = true;
-                                }
-                                
-                                updateStatus(message);
-                                break;
-                        }
-                    });
-
-                    // Event Listeners for buttons
-                    document.getElementById('branch-select')?.addEventListener('change', (e) => {
-                        const target = e.target;
-                        if (!target) return;
-                        
-                        console.log('Branch selected:', target.value);
-                        branchState.selectedBranch = target.value;
-                        branchState.lastKnownValue = target.value;
-                        currentState.selectedBranch = target.value;
-                        branchState.isProxyOperation = false;
-                        branchState.ignoreNextUpdate = false;
-                        
-                        vscode.postMessage({
-                            command: 'selectBranch',
-                            branchId: target.value,
-                            restartProxy: false,
-                            driver: document.getElementById('driver-select')?.value || 'postgres'
-                        });
-                    });
-
-                    function updateStatus(status) {
-                        console.log('Updating status with full details:', {
-                            status,
-                            currentState,
-                            branchState
-                        });
-                        
-                        const proxyButtonsContainer = document.querySelector('.proxy-buttons');
-                        const connectionInfo = document.querySelector('.connection-info');
-
-                        // Update current state first
-                        currentState.connected = status.connected;
-
-                        if (proxyButtonsContainer) {
-                            // Clear existing content
-                            proxyButtonsContainer.innerHTML = '';
-
-                            // Determine if we're connected based on both status and connection info
-                            const isConnected = status.connected || !!status.connectionInfo;
-                            console.log('Connection state:', { 
-                                statusConnected: status.connected, 
-                                hasConnectionInfo: !!status.connectionInfo,
-                                isConnected 
-                            });
-
-                            if (isConnected) {
-                                console.log('Creating stop proxy button');
-                                const stopButton = document.createElement('button');
-                                stopButton.id = 'stop-proxy';
-                                stopButton.textContent = 'Stop Proxy';
-                                proxyButtonsContainer.appendChild(stopButton);
-                                
-                                stopButton.addEventListener('click', () => {
-                                    console.log('Stop proxy clicked');
-                                    branchState.isProxyOperation = true;
-                                    branchState.ignoreNextUpdate = true;
-                                    stopButton.disabled = true;
-                                    stopButton.textContent = 'Stopping...';
-                                    vscode.postMessage({ command: 'stopProxy' });
-                                });
-                            } else {
-                                console.log('Creating start proxy button');
-                                const startButton = document.createElement('button');
-                                startButton.id = 'start-proxy';
-                                startButton.textContent = 'Start Proxy';
-                                startButton.disabled = !branchState.selectedBranch;
-                                proxyButtonsContainer.appendChild(startButton);
-                                
-                                startButton.addEventListener('click', () => {
-                                    console.log('Start proxy clicked');
-                                    branchState.isProxyOperation = true;
-                                    branchState.ignoreNextUpdate = true;
-                                    startButton.disabled = true;
-                                    startButton.textContent = 'Starting...';
-                                    const driverSelect = document.getElementById('driver-select');
-                                    const message = {
-                                        command: 'startProxy',
-                                        driver: driverSelect?.value || 'postgres'
-                                    };
-                                    console.log('Sending message:', message);
-                                    vscode.postMessage(message);
-                                });
-                            }
-                        }
-
-                        // Update connection info
-                        const appDiv = document.getElementById('app');
-                        if (appDiv) {
-                            // Remove existing connection info if present
-                            const existingInfo = appDiv.querySelector('.connection-info');
-                            if (existingInfo) {
-                                existingInfo.remove();
-                            }
-
-                            // Add new connection info if available
-                            if (status.connectionInfo) {
-                                console.log('Adding connection info');
-                                const div = document.createElement('div');
-                                div.className = 'connection-info';
-                                div.innerHTML = \`<strong>Connection Info:</strong><br>\${status.connectionInfo}\`;
-                                appDiv.appendChild(div);
-                            }
-                        }
-
-                        // Ensure branch selection is preserved
-                        const branchSelect = document.getElementById('branch-select');
-                        if (branchSelect && branchState.lastKnownValue) {
-                            console.log('Restoring branch selection to last known value:', branchState.lastKnownValue);
-                            branchSelect.value = branchState.lastKnownValue;
-                        }
-
-                        // If this was a proxy operation completion, reset the flags
-                        if (!status.loading) {
-                            setTimeout(() => {
-                                branchState.isProxyOperation = false;
-                                branchState.ignoreNextUpdate = false;
-                            }, 100);
-                        }
-                    }
-
-                    // Setup initial button event listeners
-                    function setupButtonListeners() {
-                        console.log('Setting up button listeners');
-                        
-                        // Setup start proxy button
-                        const startButton = document.getElementById('start-proxy');
-                        if (startButton) {
-                            startButton.addEventListener('click', () => {
-                                console.log('Start proxy clicked');
-                                startButton.disabled = true;
-                                startButton.textContent = 'Starting...';
-                                const driverSelect = document.getElementById('driver-select');
-                                const message = {
-                                    command: 'startProxy',
-                                    driver: driverSelect?.value || 'postgres'
-                                };
-                                console.log('Sending message:', message);
-                                vscode.postMessage(message);
-                            });
-                        }
-
-                        // Setup stop proxy button
-                        const stopButton = document.getElementById('stop-proxy');
-                        if (stopButton) {
-                            stopButton.addEventListener('click', () => {
-                                console.log('Stop proxy clicked');
-                                stopButton.disabled = true;
-                                stopButton.textContent = 'Stopping...';
-                                vscode.postMessage({ command: 'stopProxy' });
-                            });
-                        }
-                    }
-
-                    // Call setup immediately
-                    setupButtonListeners();
-
-                    function updateOrganizations(orgs, selectedOrg) {
-                        const select = document.getElementById('org-select');
-                        if (!select) return;
-
-                        // Save current options
-                        const defaultOption = select.options[0];
-                        
-                        // Clear current options
-                        select.innerHTML = '';
-                        
-                        // Restore default option
-                        select.add(defaultOption);
-                        
-                        // Add new options
-                        orgs.forEach(org => {
-                            const option = document.createElement('option');
-                            option.value = org.id;
-                            option.text = org.name;
-                            option.selected = org.id === selectedOrg;
-                            select.add(option);
-                        });
-                    }
-
-                    function updateProjects(projects, selectedProject) {
-                        console.log('Updating projects:', projects);
-                        const select = document.getElementById('project-select');
-                        if (!select) return;
-
-                        // Save current options
-                        const defaultOption = select.options[0];
-                        
-                        // Clear current options
-                        select.innerHTML = '';
-                        
-                        // Restore default option
-                        select.add(defaultOption);
-                        
-                        // Add new options
-                        projects.forEach(project => {
-                            const option = document.createElement('option');
-                            option.value = project.id;
-                            option.text = project.name;
-                            option.selected = project.id === selectedProject;
-                            select.add(option);
-                        });
-
-                        select.disabled = projects.length === 0;
-                        
-                        // Clear and disable branch select
-                        const branchSelect = document.getElementById('branch-select');
-                        if (branchSelect) {
-                            branchSelect.value = '';
-                            branchSelect.disabled = true;
-                        }
-                    }
-
-                    // Event Listeners for org and project selects
-                    document.getElementById('org-select')?.addEventListener('change', (e) => {
-                        const target = e.target;
-                        if (!target) return;
-                        
-                        console.log('Organization selected:', target.value);
-                        currentState.selectedOrg = target.value;
-                        currentState.selectedProject = undefined;
-                        currentState.selectedBranch = undefined;
-                        branchState.selectedBranch = null; // Reset branch state when org changes
-                        
-                        vscode.postMessage({
-                            command: 'selectOrg',
-                            orgId: target.value
-                        });
-                    });
-
-                    document.getElementById('project-select')?.addEventListener('change', (e) => {
-                        const target = e.target;
-                        if (!target) return;
-                        
-                        console.log('Project selected:', target.value);
-                        currentState.selectedProject = target.value;
-                        currentState.selectedBranch = undefined;
-                        branchState.selectedBranch = null; // Reset branch state when project changes
-                        
-                        vscode.postMessage({
-                            command: 'selectProject',
-                            projectId: target.value
-                        });
-                    });
-                </script>
+                ${this.getScriptContent(data)}
             </body>
             </html>`;
+    }
+
+    private getFormContent(data: ViewData): string {
+        // Debug logging
+        console.log('Form content data:', {
+            selectedOrgId: data.selectedOrgId,
+            projects: data.projects,
+            connected: data.connected
+        });
+        
+        // Use orgs instead of organizations
+        const organizations = Array.isArray(data.orgs) ? data.orgs : [];
+        
+        return `
+            <div class="form-content">
+                <div class="section">
+                    <label for="org-select">Organization</label>
+                    <select id="org-select" ${data.connected ? 'disabled' : ''}>
+                        <option value="">Select Organization</option>
+                        ${organizations.map((org) => `
+                            <option value="${org.id}" ${org.id === data.selectedOrgId ? 'selected' : ''}>
+                                ${org.name}
+                            </option>
+                        `).join('')}
+                    </select>
+                </div>
+
+                <div class="section">
+                    <label for="project-select">Project</label>
+                    <select id="project-select" ${!data.selectedOrgId || data.connected ? 'disabled' : ''}>
+                        <option value="">Select Project</option>
+                        ${Array.isArray(data.projects) ? data.projects.map((project) => `
+                            <option value="${project.id}" ${project.id === data.selectedProjectId ? 'selected' : ''}>
+                                ${project.name}
+                            </option>
+                        `).join('') : ''}
+                    </select>
+                </div>
+
+                <div class="section">
+                    <label for="branch-select">Branch</label>
+                    <select id="branch-select" ${!data.selectedProjectId || data.connected ? 'disabled' : ''}>
+                        <option value="">Select Branch</option>
+                        ${Array.isArray(data.branches) ? data.branches.map((branch) => `
+                            <option value="${branch.id}" ${branch.id === data.selectedBranchId ? 'selected' : ''}>
+                                ${branch.name}
+                            </option>
+                        `).join('') : ''}
+                    </select>
+                </div>
+
+                <div class="section">
+                    <label for="driver-select">Driver</label>
+                    <select id="driver-select" ${!data.selectedBranchId || data.connected ? 'disabled' : ''}>
+                        <option value="neon" ${data.selectedDriver === 'neon' ? 'selected' : ''}>Neon Serverless</option>
+                        <option value="postgres" ${data.selectedDriver === 'postgres' ? 'selected' : ''}>PostgreSQL</option>
+                    </select>
+                </div>
+            </div>
+        `;
+    }
+
+    private getProxyContent(data: ViewData): string {
+        return `
+            <div class="section proxy-buttons">
+                ${data.connected ? 
+                    `<button id="stop-proxy">Stop Proxy</button>` : 
+                    `<button id="start-proxy" ${!data.selectedBranch ? 'disabled' : ''}>Start Proxy</button>`
+                }
+            </div>
+
+            ${data.connectionInfo ? `
+                <div class="connection-info">
+                    <div class="connection-header">
+                        <strong>Connection Info</strong>
+                        <button class="copy-button">
+                            Copy
+                            <span class="copy-success">Copied!</span>
+                        </button>
+                    </div>
+                    <div class="connection-string">${data.connectionInfo}</div>
+                </div>
+            ` : ''}`;
+    }
+
+    private getScriptContent(data: ViewData): string {
+        return `
+            <script>
+                const vscode = acquireVsCodeApi();
+                let currentState = ${JSON.stringify({
+                    organizations: data.orgs || [],
+                    projects: data.projects || [],
+                    branches: data.branches || [],
+                    selectedOrgId: data.selectedOrgId,
+                    selectedProjectId: data.selectedProjectId,
+                    selectedBranchId: data.selectedBranchId,
+                    selectedDriver: data.selectedDriver,
+                    connected: data.connected,
+                    connectionInfo: data.connectionInfo
+                })};
+                console.log('Initial state:', currentState);
+
+                function updateStartProxyButton() {
+                    const startButton = document.getElementById('start-proxy');
+                    if (!startButton) return;
+
+                    const orgSelect = document.getElementById('org-select');
+                    const projectSelect = document.getElementById('project-select');
+                    const branchSelect = document.getElementById('branch-select');
+                    const driverSelect = document.getElementById('driver-select');
+
+                    const allSelected = orgSelect?.value && 
+                                      projectSelect?.value && 
+                                      branchSelect?.value && 
+                                      driverSelect?.value;
+
+                    startButton.disabled = !allSelected || currentState.connected;
+                }
+
+                function updateProjectDropdown(projects) {
+                    console.log('Updating project dropdown with:', projects);
+                    const projectSelect = document.getElementById('project-select');
+                    if (!projectSelect) return;
+
+                    // Store current selection
+                    const currentSelection = projectSelect.value;
+
+                    // Clear existing options except the first one
+                    while (projectSelect.options.length > 1) {
+                        projectSelect.remove(1);
+                    }
+
+                    // Add new options
+                    projects.forEach(project => {
+                        const option = document.createElement('option');
+                        option.value = project.id;
+                        option.text = project.name;
+                        option.selected = project.id === currentSelection;
+                        projectSelect.add(option);
+                    });
+
+                    // Enable the dropdown if we have an organization selected
+                    const orgSelect = document.getElementById('org-select');
+                    projectSelect.disabled = !orgSelect.value || currentState.connected;
+
+                    // Update start proxy button state
+                    updateStartProxyButton();
+                }
+
+                function updateBranchDropdown(branches) {
+                    console.log('Updating branch dropdown with:', branches);
+                    const branchSelect = document.getElementById('branch-select');
+                    if (!branchSelect) return;
+
+                    // Store current selection
+                    const currentSelection = branchSelect.value;
+
+                    // Clear existing options except the first one
+                    while (branchSelect.options.length > 1) {
+                        branchSelect.remove(1);
+                    }
+
+                    // Add new options
+                    branches.forEach(branch => {
+                        const option = document.createElement('option');
+                        option.value = branch.id;
+                        option.text = branch.name;
+                        option.selected = branch.id === currentSelection;
+                        branchSelect.add(option);
+                    });
+
+                    // Enable the dropdown if we have a project selected
+                    const projectSelect = document.getElementById('project-select');
+                    branchSelect.disabled = !projectSelect.value || currentState.connected;
+
+                    // Update driver dropdown state
+                    const driverSelect = document.getElementById('driver-select');
+                    if (driverSelect) {
+                        driverSelect.disabled = !branchSelect.value || currentState.connected;
+                    }
+
+                    // Update start proxy button state
+                    updateStartProxyButton();
+                }
+
+                function initializeDropdowns() {
+                    // Setup organization dropdown
+                    const orgSelect = document.getElementById('org-select');
+                    if (orgSelect) {
+                        orgSelect.addEventListener('change', function() {
+                            console.log('Organization selected:', this.value);
+                            currentState.selectedOrgId = this.value;
+                            
+                            // Clear and disable dependent dropdowns
+                            const projectSelect = document.getElementById('project-select');
+                            const branchSelect = document.getElementById('branch-select');
+                            const driverSelect = document.getElementById('driver-select');
+                            
+                            if (projectSelect) {
+                                projectSelect.value = '';
+                                projectSelect.disabled = !this.value || currentState.connected;
+                                currentState.selectedProjectId = '';
+                            }
+                            if (branchSelect) {
+                                branchSelect.value = '';
+                                branchSelect.disabled = true;
+                                currentState.selectedBranchId = '';
+                            }
+                            if (driverSelect) {
+                                driverSelect.value = 'postgres';
+                                driverSelect.disabled = true;
+                            }
+
+                            // Update start proxy button state
+                            updateStartProxyButton();
+
+                            vscode.postMessage({
+                                command: 'selectOrg',
+                                orgId: this.value
+                            });
+                        });
+                    }
+
+                    // Setup project dropdown
+                    const projectSelect = document.getElementById('project-select');
+                    if (projectSelect) {
+                        projectSelect.addEventListener('change', function() {
+                            console.log('Project selected:', this.value);
+                            currentState.selectedProjectId = this.value;
+                            
+                            // Clear and disable dependent dropdowns
+                            const branchSelect = document.getElementById('branch-select');
+                            const driverSelect = document.getElementById('driver-select');
+                            
+                            if (branchSelect) {
+                                branchSelect.value = '';
+                                branchSelect.disabled = !this.value || currentState.connected;
+                                currentState.selectedBranchId = '';
+                            }
+                            if (driverSelect) {
+                                driverSelect.value = 'postgres';
+                                driverSelect.disabled = true;
+                            }
+
+                            // Update start proxy button state
+                            updateStartProxyButton();
+
+                            vscode.postMessage({
+                                command: 'selectProject',
+                                projectId: this.value
+                            });
+                        });
+                    }
+
+                    // Setup branch dropdown
+                    const branchSelect = document.getElementById('branch-select');
+                    if (branchSelect) {
+                        branchSelect.addEventListener('change', function() {
+                            console.log('Branch selected:', this.value);
+                            currentState.selectedBranchId = this.value;
+                            
+                            const driverSelect = document.getElementById('driver-select');
+                            if (driverSelect) {
+                                driverSelect.disabled = !this.value || currentState.connected;
+                            }
+
+                            // Update start proxy button state
+                            updateStartProxyButton();
+
+                            vscode.postMessage({
+                                command: 'selectBranch',
+                                branchId: this.value,
+                                restartProxy: false,
+                                driver: driverSelect?.value || 'postgres'
+                            });
+                        });
+                    }
+
+                    // Setup driver dropdown
+                    const driverSelect = document.getElementById('driver-select');
+                    if (driverSelect) {
+                        driverSelect.addEventListener('change', function() {
+                            console.log('Driver selected:', this.value);
+                            currentState.selectedDriver = this.value;
+
+                            // Update start proxy button state
+                            updateStartProxyButton();
+                            
+                            const branchSelect = document.getElementById('branch-select');
+                            if (branchSelect && branchSelect.value) {
+                                vscode.postMessage({
+                                    command: 'selectBranch',
+                                    branchId: branchSelect.value,
+                                    restartProxy: true,
+                                    driver: this.value
+                                });
+                            }
+                        });
+                    }
+
+                    // Setup proxy buttons
+                    const startButton = document.getElementById('start-proxy');
+                    if (startButton) {
+                        startButton.addEventListener('click', handleStartProxy);
+                    }
+
+                    const stopButton = document.getElementById('stop-proxy');
+                    if (stopButton) {
+                        stopButton.addEventListener('click', handleStopProxy);
+                    }
+
+                    // Setup copy button
+                    const copyButton = document.querySelector('.copy-button');
+                    if (copyButton) {
+                        copyButton.addEventListener('click', copyConnectionString);
+                    }
+
+                    // Initialize dropdowns with current state if available
+                    if (currentState.projects && currentState.projects.length > 0) {
+                        updateProjectDropdown(currentState.projects);
+                    }
+                    if (currentState.branches && currentState.branches.length > 0) {
+                        updateBranchDropdown(currentState.branches);
+                    }
+                }
+
+                function handleStartProxy() {
+                    console.log('Start proxy clicked');
+                    const startButton = document.getElementById('start-proxy');
+                    const driverSelect = document.getElementById('driver-select');
+                    
+                    if (startButton) {
+                        startButton.disabled = true;
+                        startButton.textContent = 'Starting...';
+                    }
+                    
+                    vscode.postMessage({
+                        command: 'startProxy',
+                        driver: driverSelect?.value || 'postgres'
+                    });
+                }
+
+                function handleStopProxy() {
+                    console.log('Stop proxy clicked');
+                    const stopButton = document.getElementById('stop-proxy');
+                    
+                    if (stopButton) {
+                        stopButton.disabled = true;
+                        stopButton.textContent = 'Stopping...';
+                    }
+                    
+                    vscode.postMessage({ command: 'stopProxy' });
+                }
+
+                function copyConnectionString() {
+                    const connectionString = document.querySelector('.connection-string')?.textContent;
+                    if (connectionString) {
+                        navigator.clipboard.writeText(connectionString).then(() => {
+                            const successMessage = document.querySelector('.copy-success');
+                            if (successMessage) {
+                                successMessage.classList.add('visible');
+                                setTimeout(() => {
+                                    successMessage.classList.remove('visible');
+                                }, 2000);
+                            }
+                        });
+                    }
+                }
+
+                // Handle all incoming messages
+                window.addEventListener('message', event => {
+                    const message = event.data;
+                    console.log('Received message:', message);
+
+                    switch (message.command) {
+                        case 'updateStatus':
+                            console.log('Status update received:', message);
+                            updateStatus(message);
+                            break;
+                        case 'updateProjects':
+                            console.log('Projects update received:', message.projects);
+                            currentState.projects = message.projects;
+                            updateProjectDropdown(message.projects);
+                            break;
+                        case 'updateBranches':
+                            console.log('Branches update received:', message.branches);
+                            currentState.branches = message.branches;
+                            updateBranchDropdown(message.branches);
+                            break;
+                    }
+                });
+
+                function updateStatus(status) {
+                    console.log('Updating status with full details:', {
+                        status,
+                        currentState
+                    });
+                    
+                    // Update current state first
+                    const wasConnected = currentState.connected;
+                    currentState.connected = status.connected || !!status.connectionInfo;
+                    console.log('Connection state change:', { wasConnected, isConnected: currentState.connected });
+
+                    // If connection state changed, request a full page refresh
+                    if (wasConnected !== currentState.connected) {
+                        console.log('Connection state changed, requesting refresh');
+                        vscode.postMessage({ command: 'refresh' });
+                        return;
+                    }
+
+                    // Update proxy buttons
+                    const proxyButtonsContainer = document.querySelector('.proxy-buttons');
+                    if (proxyButtonsContainer) {
+                        proxyButtonsContainer.innerHTML = currentState.connected ?
+                            \`<button id="stop-proxy">Stop Proxy</button>\` :
+                            \`<button id="start-proxy">Start Proxy</button>\`;
+                        
+                        // Re-attach event listeners
+                        const startButton = document.getElementById('start-proxy');
+                        const stopButton = document.getElementById('stop-proxy');
+                        if (startButton) {
+                            startButton.addEventListener('click', handleStartProxy);
+                            // Update button state
+                            updateStartProxyButton();
+                        }
+                        if (stopButton) {
+                            stopButton.addEventListener('click', handleStopProxy);
+                        }
+                    }
+
+                    // Update connection info
+                    const appDiv = document.getElementById('app');
+                    if (appDiv) {
+                        const existingInfo = appDiv.querySelector('.connection-info');
+                        if (existingInfo) {
+                            existingInfo.remove();
+                        }
+
+                        if (status.connectionInfo) {
+                            const div = document.createElement('div');
+                            div.className = 'connection-info';
+                            div.innerHTML = \`
+                                <div class="connection-header">
+                                    <strong>Connection Info</strong>
+                                    <button class="copy-button">
+                                        Copy
+                                        <span class="copy-success">Copied!</span>
+                                    </button>
+                                </div>
+                                <div class="connection-string">\${status.connectionInfo}</div>
+                            \`;
+                            appDiv.appendChild(div);
+
+                            // Re-attach copy button event listener
+                            const copyButton = div.querySelector('.copy-button');
+                            if (copyButton) {
+                                copyButton.addEventListener('click', copyConnectionString);
+                            }
+                        }
+                    }
+                }
+
+                // Initialize dropdowns when the DOM is loaded
+                document.addEventListener('DOMContentLoaded', () => {
+                    console.log('DOM loaded, initializing dropdowns');
+                    initializeDropdowns();
+                });
+            </script>`;
+    }
+
+    private getStyles(): string {
+        return `
+            <style>
+                body {
+                    padding: 20px;
+                    font-family: var(--vscode-font-family);
+                    background-color: var(--vscode-editor-background);
+                    color: var(--vscode-editor-foreground);
+                    line-height: 1.5;
+                }
+                select, button {
+                    width: 100%;
+                    padding: 8px 12px;
+                    margin: 8px 0;
+                    background-color: var(--vscode-dropdown-background);
+                    color: var(--vscode-dropdown-foreground);
+                    border: 1px solid var(--vscode-dropdown-border);
+                    border-radius: 4px;
+                    font-size: 13px;
+                    transition: border-color 0.2s, opacity 0.2s;
+                }
+                select:focus, button:focus {
+                    outline: 1px solid var(--vscode-focusBorder);
+                    outline-offset: -1px;
+                }
+                select:hover:not(:disabled) {
+                    border-color: var(--vscode-dropdown-listBackground);
+                }
+                button {
+                    background-color: var(--vscode-button-background);
+                    color: var(--vscode-button-foreground);
+                    border: none;
+                    cursor: pointer;
+                    font-weight: 500;
+                    text-align: center;
+                    transition: background-color 0.2s;
+                }
+                button:hover:not(:disabled) {
+                    background-color: var(--vscode-button-hoverBackground);
+                }
+                button:disabled {
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                }
+                .section {
+                    margin-bottom: 20px;
+                }
+                .section label {
+                    display: block;
+                    margin-bottom: 6px;
+                    color: var(--vscode-foreground);
+                    font-size: 13px;
+                    font-weight: 500;
+                }
+                .connection-info {
+                    background-color: var(--vscode-textBlockQuote-background);
+                    padding: 12px;
+                    border-radius: 4px;
+                    margin-top: 16px;
+                    white-space: pre-wrap;
+                    font-family: var(--vscode-editor-font-family);
+                    font-size: 13px;
+                    border-left: 4px solid var(--vscode-textBlockQuote-border);
+                }
+                .connection-info strong {
+                    color: var(--vscode-foreground);
+                    display: block;
+                    margin-bottom: 8px;
+                }
+                .proxy-buttons {
+                    display: flex;
+                    gap: 12px;
+                }
+                .header {
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 24px;
+                    gap: 12px;
+                    padding-bottom: 12px;
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                }
+                .header h1 {
+                    margin: 0;
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: var(--vscode-foreground);
+                }
+                .neon-logo {
+                    width: 24px;
+                    height: 24px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: #00E699;
+                }
+                select:disabled {
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                }
+                .copy-button {
+                    background-color: var(--vscode-button-secondaryBackground);
+                    color: var(--vscode-button-secondaryForeground);
+                    padding: 4px 8px;
+                    margin-left: 8px;
+                    font-size: 12px;
+                    border-radius: 3px;
+                }
+                .copy-button:hover:not(:disabled) {
+                    background-color: var(--vscode-button-secondaryHoverBackground);
+                }
+                .copy-success {
+                    color: var(--vscode-notificationsSuccessIcon-foreground, #89D185);
+                    font-size: 12px;
+                    margin-left: 8px;
+                    opacity: 0;
+                    transition: opacity 0.3s;
+                }
+                .copy-success.visible {
+                    opacity: 1;
+                }
+                .connection-info-container {
+                    position: relative;
+                }
+                .connection-string {
+                    margin-top: 8px;
+                    padding: 8px;
+                    background-color: var(--vscode-input-background);
+                    border: 1px solid var(--vscode-input-border);
+                    border-radius: 3px;
+                    font-family: var(--vscode-editor-font-family);
+                    font-size: 12px;
+                }
+                .tooltip {
+                    position: absolute;
+                    background-color: var(--vscode-notifications-background);
+                    color: var(--vscode-notifications-foreground);
+                    padding: 4px 8px;
+                    border-radius: 3px;
+                    font-size: 12px;
+                    z-index: 1000;
+                    opacity: 0;
+                    transition: opacity 0.2s;
+                    pointer-events: none;
+                }
+                .tooltip.visible {
+                    opacity: 1;
+                }
+                .connection-details {
+                    background-color: var(--vscode-editor-background);
+                    border: 1px solid var(--vscode-panel-border);
+                    border-radius: 4px;
+                    padding: 12px;
+                    margin: 16px 0;
+                }
+                .detail-row {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 6px 0;
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                }
+                .detail-row:last-child {
+                    border-bottom: none;
+                }
+                .detail-label {
+                    color: var(--vscode-descriptionForeground);
+                    font-size: 13px;
+                    font-weight: 500;
+                }
+                .detail-value {
+                    color: var(--vscode-foreground);
+                    font-size: 13px;
+                    font-weight: normal;
+                }
+                .connection-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 8px;
+                }
+                .connection-header strong {
+                    margin-bottom: 0;
+                }
+                .connection-status {
+                    margin-bottom: 20px;
+                    padding: 8px 0;
+                }
+                .status-indicator {
+                    display: flex;
+                    align-items: center;
+                    font-size: 13px;
+                    font-weight: 500;
+                }
+                .status-dot {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 50%;
+                    margin-right: 8px;
+                }
+                .status-indicator.connected {
+                    color: var(--vscode-testing-iconPassed, #73C991);
+                }
+                .status-indicator.connected .status-dot {
+                    background-color: var(--vscode-testing-iconPassed, #73C991);
+                    box-shadow: 0 0 4px var(--vscode-testing-iconPassed, #73C991);
+                }
+                .status-indicator.disconnected {
+                    color: var(--vscode-testing-iconQueued, #919191);
+                }
+                .status-indicator.disconnected .status-dot {
+                    background-color: var(--vscode-testing-iconQueued, #919191);
+                }
+                .readonly-view {
+                    background-color: var(--vscode-editor-background);
+                    border: 1px solid var(--vscode-panel-border);
+                    border-radius: 4px;
+                    overflow: hidden;
+                }
+                .readonly-section {
+                    display: flex;
+                    padding: 10px 12px;
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                }
+                .readonly-section:last-child {
+                    border-bottom: none;
+                }
+                .readonly-label {
+                    flex: 0 0 100px;
+                    color: var(--vscode-descriptionForeground);
+                    font-size: 13px;
+                }
+                .readonly-value {
+                    flex: 1;
+                    color: var(--vscode-foreground);
+                    font-size: 13px;
+                    font-weight: 500;
+                }
+            </style>`;
     }
 }
