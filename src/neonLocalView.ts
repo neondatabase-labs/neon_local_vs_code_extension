@@ -395,7 +395,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                             <div class="detail-value">${selectedProject ? selectedProject.name : 'Not selected'}</div>
                         </div>
                         <div class="detail-row">
-                            <div class="detail-label">Branch</div>
+                            <div class="detail-label">Parent Branch</div>
                             <div class="detail-value">${selectedBranch ? selectedBranch.name : 'Not selected'}</div>
                         </div>
                         <div class="detail-row">
@@ -1057,25 +1057,24 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                 }
                 .connection-details {
                     background-color: var(--vscode-editor-background);
-                    border: 1px solid var(--vscode-panel-border);
-                    border-radius: 4px;
-                    padding: 12px;
-                    margin: 16px 0;
+                    padding: 0;
+                    margin-top: 8px;
                 }
                 .detail-row {
                     display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    padding: 6px 0;
-                    border-bottom: 1px solid var(--vscode-panel-border);
+                    flex-direction: column;
+                    padding: 8px 0;
+                    gap: 2px;
                 }
                 .detail-row:last-child {
-                    border-bottom: none;
+                    padding-bottom: 0;
                 }
                 .detail-label {
                     color: var(--vscode-descriptionForeground);
-                    font-size: 13px;
+                    font-size: 10px;
                     font-weight: 500;
+                    text-transform: uppercase;
+                    letter-spacing: 0.04em;
                 }
                 .detail-value {
                     color: var(--vscode-foreground);
@@ -1083,8 +1082,8 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     font-weight: normal;
                 }
                 .connection-status {
-                    margin-bottom: 20px;
-                    padding: 8px 0;
+                    margin: 0;
+                    padding: 0;
                 }
                 .status-indicator {
                     display: flex;
