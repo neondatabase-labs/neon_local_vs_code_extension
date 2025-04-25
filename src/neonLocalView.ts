@@ -88,9 +88,13 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     case 'startProxy':
                         console.log('Handling startProxy command with driver:', message.driver);
                         await this._neonLocal.handleStartProxy(message.driver);
+                        // Force a view refresh after starting the proxy
+                        await this.updateView();
                         break;
                     case 'stopProxy':
                         await this._neonLocal.handleStopProxy();
+                        // Force a view refresh after stopping the proxy
+                        await this.updateView();
                         break;
                     case 'createBranch':
                         await this._neonLocal.handleCreateBranch();
@@ -341,8 +345,16 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
         console.log('Main HTML data:', JSON.stringify({
             organizations: data.orgs,
             selectedOrgId: data.selectedOrgId,
-            connected: isConnected
+            connected: isConnected,
+            selectedOrg: (data.orgs || []).find(org => org.id === data.selectedOrgId),
+            selectedProject: (data.projects || []).find(project => project.id === data.selectedProjectId),
+            selectedBranch: (data.branches || []).find(branch => branch.id === data.selectedBranchId)
         }, null, 2));
+
+        // Find the selected organization name
+        const selectedOrg = (data.orgs || []).find(org => org.id === data.selectedOrgId);
+        const selectedProject = (data.projects || []).find(project => project.id === data.selectedProjectId);
+        const selectedBranch = (data.branches || []).find(branch => branch.id === data.selectedBranchId);
 
         return `<!DOCTYPE html>
             <html lang="en">
@@ -365,37 +377,52 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         <h1>Neon Local</h1>
                     </div>
 
-                    <div class="main-content">
-                        <div class="connection-status">
-                            <div class="status-indicator ${isConnected ? 'connected' : 'disconnected'}">
-                                <span class="status-dot"></span>
-                                ${isConnected ? 'Connected' : 'Not Connected'}
-                            </div>
+                    ${isConnected ? `
+                    <div class="connection-status">
+                        <div class="status-indicator connected">
+                            <span class="status-dot"></span>
+                            Connected
                         </div>
-
-                        ${isConnected ? `
-                            <div class="readonly-view">
-                                <div class="readonly-section">
-                                    <div class="readonly-label">Organization</div>
-                                    <div class="readonly-value">${data.selectedOrgName || 'Not selected'}</div>
-                                </div>
-                                <div class="readonly-section">
-                                    <div class="readonly-label">Project</div>
-                                    <div class="readonly-value">${data.selectedProjectName || 'Not selected'}</div>
-                                </div>
-                                <div class="readonly-section">
-                                    <div class="readonly-label">Branch</div>
-                                    <div class="readonly-value">${data.selectedBranchName || 'Not selected'}</div>
-                                </div>
-                                <div class="readonly-section">
-                                    <div class="readonly-label">Driver</div>
-                                    <div class="readonly-value">${data.selectedDriver === 'neon' ? 'Neon Serverless' : 'PostgreSQL'}</div>
-                                </div>
-                            </div>
-                        ` : this.getFormContent(data)}
                     </div>
 
-                    ${this.getProxyContent(data)}
+                    <div class="connection-details">
+                        <div class="detail-row">
+                            <div class="detail-label">Organization</div>
+                            <div class="detail-value">${selectedOrg ? selectedOrg.name : 'Not selected'}</div>
+                        </div>
+                        <div class="detail-row">
+                            <div class="detail-label">Project</div>
+                            <div class="detail-value">${selectedProject ? selectedProject.name : 'Not selected'}</div>
+                        </div>
+                        <div class="detail-row">
+                            <div class="detail-label">Branch</div>
+                            <div class="detail-value">${selectedBranch ? selectedBranch.name : 'Not selected'}</div>
+                        </div>
+                        <div class="detail-row">
+                            <div class="detail-label">Driver</div>
+                            <div class="detail-value">${data.selectedDriver === 'neon' ? 'Neon Serverless' : 'PostgreSQL'}</div>
+                        </div>
+                        ${data.connectionInfo ? `
+                        <div class="detail-row">
+                            <div class="detail-label">Connection Info</div>
+                            <div class="detail-value connection-string-container">
+                                <div class="connection-string">${data.connectionInfo}</div>
+                                <button class="copy-button">
+                                    Copy
+                                    <span class="copy-success">Copied!</span>
+                                </button>
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
+                    ` : this.getFormContent(data)}
+
+                    <div class="section proxy-buttons">
+                        ${isConnected ? 
+                            `<button id="stop-proxy" class="stop-button">Stop Proxy</button>` : 
+                            `<button id="start-proxy" ${!data.selectedBranch ? 'disabled' : ''}>Start Proxy</button>`
+                        }
+                    </div>
                 </div>
                 ${this.getScriptContent(data)}
             </body>
@@ -406,18 +433,25 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
         // Debug logging
         console.log('Form content data:', {
             selectedOrgId: data.selectedOrgId,
+            selectedProjectId: data.selectedProjectId,
+            selectedBranchId: data.selectedBranchId,
+            selectedDriver: data.selectedDriver,
+            organizations: data.orgs,
             projects: data.projects,
+            branches: data.branches,
             connected: data.connected
         });
         
         // Use orgs instead of organizations
         const organizations = Array.isArray(data.orgs) ? data.orgs : [];
+        const projects = Array.isArray(data.projects) ? data.projects : [];
+        const branches = Array.isArray(data.branches) ? data.branches : [];
         
         return `
             <div class="form-content">
                 <div class="section">
                     <label for="org-select">Organization</label>
-                    <select id="org-select" ${data.connected ? 'disabled' : ''}>
+                    <select id="org-select">
                         <option value="">Select Organization</option>
                         ${organizations.map((org) => `
                             <option value="${org.id}" ${org.id === data.selectedOrgId ? 'selected' : ''}>
@@ -429,78 +463,81 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
 
                 <div class="section">
                     <label for="project-select">Project</label>
-                    <select id="project-select" ${!data.selectedOrgId || data.connected ? 'disabled' : ''}>
+                    <select id="project-select" ${!data.selectedOrgId ? 'disabled' : ''}>
                         <option value="">Select Project</option>
-                        ${Array.isArray(data.projects) ? data.projects.map((project) => `
+                        ${projects.map((project) => `
                             <option value="${project.id}" ${project.id === data.selectedProjectId ? 'selected' : ''}>
                                 ${project.name}
                             </option>
-                        `).join('') : ''}
+                        `).join('')}
                     </select>
                 </div>
 
                 <div class="section">
                     <label for="branch-select">Branch</label>
-                    <select id="branch-select" ${!data.selectedProjectId || data.connected ? 'disabled' : ''}>
+                    <select id="branch-select" ${!data.selectedProjectId ? 'disabled' : ''}>
                         <option value="">Select Branch</option>
-                        ${Array.isArray(data.branches) ? data.branches.map((branch) => `
+                        ${branches.map((branch) => `
                             <option value="${branch.id}" ${branch.id === data.selectedBranchId ? 'selected' : ''}>
                                 ${branch.name}
                             </option>
-                        `).join('') : ''}
+                        `).join('')}
                     </select>
                 </div>
 
                 <div class="section">
                     <label for="driver-select">Driver</label>
-                    <select id="driver-select" ${!data.selectedBranchId || data.connected ? 'disabled' : ''}>
+                    <select id="driver-select" ${!data.selectedBranchId ? 'disabled' : ''}>
                         <option value="neon" ${data.selectedDriver === 'neon' ? 'selected' : ''}>Neon Serverless</option>
-                        <option value="postgres" ${data.selectedDriver === 'postgres' ? 'selected' : ''}>PostgreSQL</option>
+                        <option value="postgres" ${(!data.selectedDriver || data.selectedDriver === 'postgres') ? 'selected' : ''}>PostgreSQL</option>
                     </select>
                 </div>
             </div>
         `;
     }
 
-    private getProxyContent(data: ViewData): string {
-        return `
-            <div class="section proxy-buttons">
-                ${data.connected ? 
-                    `<button id="stop-proxy">Stop Proxy</button>` : 
-                    `<button id="start-proxy" ${!data.selectedBranch ? 'disabled' : ''}>Start Proxy</button>`
-                }
-            </div>
-
-            ${data.connectionInfo ? `
-                <div class="connection-info">
-                    <div class="connection-header">
-                        <strong>Connection Info</strong>
-                        <button class="copy-button">
-                            Copy
-                            <span class="copy-success">Copied!</span>
-                        </button>
-                    </div>
-                    <div class="connection-string">${data.connectionInfo}</div>
-                </div>
-            ` : ''}`;
-    }
-
     private getScriptContent(data: ViewData): string {
         return `
             <script>
                 const vscode = acquireVsCodeApi();
-                let currentState = ${JSON.stringify({
-                    organizations: data.orgs || [],
-                    projects: data.projects || [],
-                    branches: data.branches || [],
-                    selectedOrgId: data.selectedOrgId,
-                    selectedProjectId: data.selectedProjectId,
-                    selectedBranchId: data.selectedBranchId,
-                    selectedDriver: data.selectedDriver,
-                    connected: data.connected,
-                    connectionInfo: data.connectionInfo
-                })};
+                
+                // Initialize state from VS Code's stored state or from data
+                let currentState = vscode.getState() || {
+                    organizations: ${JSON.stringify(data.orgs || [])},
+                    projects: ${JSON.stringify(data.projects || [])},
+                    branches: ${JSON.stringify(data.branches || [])},
+                    selectedOrgId: ${JSON.stringify(data.selectedOrgId)},
+                    selectedProjectId: ${JSON.stringify(data.selectedProjectId)},
+                    selectedBranchId: ${JSON.stringify(data.selectedBranchId)},
+                    selectedDriver: ${JSON.stringify(data.selectedDriver || 'postgres')},
+                    connected: ${JSON.stringify(data.connected)},
+                    connectionInfo: ${JSON.stringify(data.connectionInfo)}
+                };
+
+                // Update state with any new data while preserving selections
+                currentState = {
+                    ...currentState,
+                    organizations: ${JSON.stringify(data.orgs || [])},
+                    projects: ${JSON.stringify(data.projects || [])},
+                    branches: ${JSON.stringify(data.branches || [])},
+                    connected: ${JSON.stringify(data.connected)},
+                    connectionInfo: ${JSON.stringify(data.connectionInfo)},
+                    // Preserve selections from either current state or new data
+                    selectedOrgId: currentState.selectedOrgId || ${JSON.stringify(data.selectedOrgId)},
+                    selectedProjectId: currentState.selectedProjectId || ${JSON.stringify(data.selectedProjectId)},
+                    selectedBranchId: currentState.selectedBranchId || ${JSON.stringify(data.selectedBranchId)},
+                    selectedDriver: currentState.selectedDriver || ${JSON.stringify(data.selectedDriver || 'postgres')}
+                };
+
+                // Save initial state
+                vscode.setState(currentState);
+                
                 console.log('Initial state:', currentState);
+
+                function saveState() {
+                    console.log('Saving state:', currentState);
+                    vscode.setState(currentState);
+                }
 
                 function updateStartProxyButton() {
                     const startButton = document.getElementById('start-proxy');
@@ -516,7 +553,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                                       branchSelect?.value && 
                                       driverSelect?.value;
 
-                    startButton.disabled = !allSelected || currentState.connected;
+                    startButton.disabled = !allSelected;
                 }
 
                 function updateProjectDropdown(projects) {
@@ -525,7 +562,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     if (!projectSelect) return;
 
                     // Store current selection
-                    const currentSelection = projectSelect.value;
+                    const currentSelection = currentState.selectedProjectId;
 
                     // Clear existing options except the first one
                     while (projectSelect.options.length > 1) {
@@ -543,7 +580,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
 
                     // Enable the dropdown if we have an organization selected
                     const orgSelect = document.getElementById('org-select');
-                    projectSelect.disabled = !orgSelect.value || currentState.connected;
+                    projectSelect.disabled = !orgSelect.value;
 
                     // Update start proxy button state
                     updateStartProxyButton();
@@ -555,7 +592,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     if (!branchSelect) return;
 
                     // Store current selection
-                    const currentSelection = branchSelect.value;
+                    const currentSelection = currentState.selectedBranchId;
 
                     // Clear existing options except the first one
                     while (branchSelect.options.length > 1) {
@@ -573,12 +610,13 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
 
                     // Enable the dropdown if we have a project selected
                     const projectSelect = document.getElementById('project-select');
-                    branchSelect.disabled = !projectSelect.value || currentState.connected;
+                    branchSelect.disabled = !projectSelect.value;
 
-                    // Update driver dropdown state
+                    // Enable driver dropdown if we have a branch selected
                     const driverSelect = document.getElementById('driver-select');
                     if (driverSelect) {
-                        driverSelect.disabled = !branchSelect.value || currentState.connected;
+                        driverSelect.disabled = !branchSelect.value;
+                        driverSelect.value = currentState.selectedDriver || 'postgres';
                     }
 
                     // Update start proxy button state
@@ -589,6 +627,11 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     // Setup organization dropdown
                     const orgSelect = document.getElementById('org-select');
                     if (orgSelect) {
+                        // Set initial value from state
+                        if (currentState.selectedOrgId) {
+                            orgSelect.value = currentState.selectedOrgId;
+                        }
+
                         orgSelect.addEventListener('change', function() {
                             console.log('Organization selected:', this.value);
                             currentState.selectedOrgId = this.value;
@@ -600,7 +643,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                             
                             if (projectSelect) {
                                 projectSelect.value = '';
-                                projectSelect.disabled = !this.value || currentState.connected;
+                                projectSelect.disabled = !this.value;
                                 currentState.selectedProjectId = '';
                             }
                             if (branchSelect) {
@@ -611,7 +654,11 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                             if (driverSelect) {
                                 driverSelect.value = 'postgres';
                                 driverSelect.disabled = true;
+                                currentState.selectedDriver = 'postgres';
                             }
+
+                            // Save state
+                            saveState();
 
                             // Update start proxy button state
                             updateStartProxyButton();
@@ -626,6 +673,12 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     // Setup project dropdown
                     const projectSelect = document.getElementById('project-select');
                     if (projectSelect) {
+                        // Set initial value from state
+                        if (currentState.selectedProjectId) {
+                            projectSelect.value = currentState.selectedProjectId;
+                            projectSelect.disabled = !currentState.selectedOrgId;
+                        }
+
                         projectSelect.addEventListener('change', function() {
                             console.log('Project selected:', this.value);
                             currentState.selectedProjectId = this.value;
@@ -636,13 +689,17 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                             
                             if (branchSelect) {
                                 branchSelect.value = '';
-                                branchSelect.disabled = !this.value || currentState.connected;
+                                branchSelect.disabled = !this.value;
                                 currentState.selectedBranchId = '';
                             }
                             if (driverSelect) {
                                 driverSelect.value = 'postgres';
                                 driverSelect.disabled = true;
+                                currentState.selectedDriver = 'postgres';
                             }
+
+                            // Save state
+                            saveState();
 
                             // Update start proxy button state
                             updateStartProxyButton();
@@ -657,14 +714,23 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     // Setup branch dropdown
                     const branchSelect = document.getElementById('branch-select');
                     if (branchSelect) {
+                        // Set initial value from state
+                        if (currentState.selectedBranchId) {
+                            branchSelect.value = currentState.selectedBranchId;
+                            branchSelect.disabled = !currentState.selectedProjectId;
+                        }
+
                         branchSelect.addEventListener('change', function() {
                             console.log('Branch selected:', this.value);
                             currentState.selectedBranchId = this.value;
                             
                             const driverSelect = document.getElementById('driver-select');
                             if (driverSelect) {
-                                driverSelect.disabled = !this.value || currentState.connected;
+                                driverSelect.disabled = !this.value;
                             }
+
+                            // Save state
+                            saveState();
 
                             // Update start proxy button state
                             updateStartProxyButton();
@@ -681,9 +747,18 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     // Setup driver dropdown
                     const driverSelect = document.getElementById('driver-select');
                     if (driverSelect) {
+                        // Set initial value from state
+                        if (currentState.selectedDriver) {
+                            driverSelect.value = currentState.selectedDriver;
+                            driverSelect.disabled = !currentState.selectedBranchId;
+                        }
+
                         driverSelect.addEventListener('change', function() {
                             console.log('Driver selected:', this.value);
                             currentState.selectedDriver = this.value;
+
+                            // Save state
+                            saveState();
 
                             // Update start proxy button state
                             updateStartProxyButton();
@@ -700,72 +775,48 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         });
                     }
 
-                    // Setup proxy buttons
-                    const startButton = document.getElementById('start-proxy');
-                    if (startButton) {
-                        startButton.addEventListener('click', handleStartProxy);
-                    }
-
-                    const stopButton = document.getElementById('stop-proxy');
-                    if (stopButton) {
-                        stopButton.addEventListener('click', handleStopProxy);
-                    }
-
-                    // Setup copy button
-                    const copyButton = document.querySelector('.copy-button');
-                    if (copyButton) {
-                        copyButton.addEventListener('click', copyConnectionString);
-                    }
-
-                    // Initialize dropdowns with current state if available
+                    // Initialize dropdowns with current state
                     if (currentState.projects && currentState.projects.length > 0) {
                         updateProjectDropdown(currentState.projects);
                     }
                     if (currentState.branches && currentState.branches.length > 0) {
                         updateBranchDropdown(currentState.branches);
                     }
-                }
 
-                function handleStartProxy() {
-                    console.log('Start proxy clicked');
+                    // Update start proxy button state
+                    updateStartProxyButton();
+
+                    // Setup proxy buttons
                     const startButton = document.getElementById('start-proxy');
-                    const driverSelect = document.getElementById('driver-select');
-                    
                     if (startButton) {
-                        startButton.disabled = true;
-                        startButton.textContent = 'Starting...';
-                    }
-                    
-                    vscode.postMessage({
-                        command: 'startProxy',
-                        driver: driverSelect?.value || 'postgres'
-                    });
-                }
-
-                function handleStopProxy() {
-                    console.log('Stop proxy clicked');
-                    const stopButton = document.getElementById('stop-proxy');
-                    
-                    if (stopButton) {
-                        stopButton.disabled = true;
-                        stopButton.textContent = 'Stopping...';
-                    }
-                    
-                    vscode.postMessage({ command: 'stopProxy' });
-                }
-
-                function copyConnectionString() {
-                    const connectionString = document.querySelector('.connection-string')?.textContent;
-                    if (connectionString) {
-                        navigator.clipboard.writeText(connectionString).then(() => {
-                            const successMessage = document.querySelector('.copy-success');
-                            if (successMessage) {
-                                successMessage.classList.add('visible');
-                                setTimeout(() => {
-                                    successMessage.classList.remove('visible');
-                                }, 2000);
-                            }
+                        startButton.addEventListener('click', function() {
+                            console.log('Start proxy clicked');
+                            this.disabled = true;
+                            this.textContent = 'Starting...';
+                            
+                            const driverSelect = document.getElementById('driver-select');
+                            vscode.postMessage({
+                                command: 'startProxy',
+                                driver: driverSelect?.value || 'postgres'
+                            });
                         });
+                    }
+
+                    const stopButton = document.getElementById('stop-proxy');
+                    if (stopButton) {
+                        stopButton.addEventListener('click', function() {
+                            console.log('Stop proxy clicked');
+                            this.disabled = true;
+                            this.textContent = 'Stopping...';
+                            
+                            vscode.postMessage({ command: 'stopProxy' });
+                        });
+                    }
+
+                    // Setup copy button
+                    const copyButton = document.querySelector('.copy-button');
+                    if (copyButton) {
+                        copyButton.addEventListener('click', copyConnectionString);
                     }
                 }
 
@@ -777,16 +828,21 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     switch (message.command) {
                         case 'updateStatus':
                             console.log('Status update received:', message);
+                            currentState.connected = message.connected;
+                            currentState.connectionInfo = message.connectionInfo;
+                            saveState();
                             updateStatus(message);
                             break;
                         case 'updateProjects':
                             console.log('Projects update received:', message.projects);
                             currentState.projects = message.projects;
+                            saveState();
                             updateProjectDropdown(message.projects);
                             break;
                         case 'updateBranches':
                             console.log('Branches update received:', message.branches);
                             currentState.branches = message.branches;
+                            saveState();
                             updateBranchDropdown(message.branches);
                             break;
                     }
@@ -801,7 +857,9 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     // Update current state first
                     const wasConnected = currentState.connected;
                     currentState.connected = status.connected || !!status.connectionInfo;
+                    currentState.connectionInfo = status.connectionInfo;
                     console.log('Connection state change:', { wasConnected, isConnected: currentState.connected });
+                    saveState();
 
                     // If connection state changed, request a full page refresh
                     if (wasConnected !== currentState.connected) {
@@ -810,55 +868,87 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         return;
                     }
 
-                    // Update proxy buttons
-                    const proxyButtonsContainer = document.querySelector('.proxy-buttons');
-                    if (proxyButtonsContainer) {
-                        proxyButtonsContainer.innerHTML = currentState.connected ?
-                            \`<button id="stop-proxy">Stop Proxy</button>\` :
-                            \`<button id="start-proxy">Start Proxy</button>\`;
-                        
-                        // Re-attach event listeners
-                        const startButton = document.getElementById('start-proxy');
-                        const stopButton = document.getElementById('stop-proxy');
-                        if (startButton) {
-                            startButton.addEventListener('click', handleStartProxy);
-                            // Update button state
-                            updateStartProxyButton();
+                    // Update the UI based on connection state
+                    const formContent = document.querySelector('.form-content');
+                    const connectionStatus = document.querySelector('.connection-status');
+                    const connectionDetails = document.querySelector('.connection-details');
+
+                    if (currentState.connected) {
+                        // Hide form content if it exists
+                        if (formContent) {
+                            formContent.style.display = 'none';
                         }
-                        if (stopButton) {
-                            stopButton.addEventListener('click', handleStopProxy);
+
+                        // Show connection status and details
+                        if (connectionStatus && connectionDetails) {
+                            connectionStatus.style.display = 'block';
+                            connectionDetails.style.display = 'block';
+                        } else {
+                            // If elements don't exist, request a full refresh
+                            vscode.postMessage({ command: 'refresh' });
+                        }
+                    } else {
+                        // Show form content
+                        if (formContent) {
+                            formContent.style.display = 'block';
+                        }
+
+                        // Hide connection status and details
+                        if (connectionStatus) {
+                            connectionStatus.style.display = 'none';
+                        }
+                        if (connectionDetails) {
+                            connectionDetails.style.display = 'none';
                         }
                     }
 
-                    // Update connection info
-                    const appDiv = document.getElementById('app');
-                    if (appDiv) {
-                        const existingInfo = appDiv.querySelector('.connection-info');
-                        if (existingInfo) {
-                            existingInfo.remove();
-                        }
-
-                        if (status.connectionInfo) {
-                            const div = document.createElement('div');
-                            div.className = 'connection-info';
-                            div.innerHTML = \`
-                                <div class="connection-header">
-                                    <strong>Connection Info</strong>
-                                    <button class="copy-button">
-                                        Copy
-                                        <span class="copy-success">Copied!</span>
-                                    </button>
-                                </div>
-                                <div class="connection-string">\${status.connectionInfo}</div>
-                            \`;
-                            appDiv.appendChild(div);
-
-                            // Re-attach copy button event listener
-                            const copyButton = div.querySelector('.copy-button');
-                            if (copyButton) {
-                                copyButton.addEventListener('click', copyConnectionString);
+                    // Update proxy button
+                    const proxyButtonsContainer = document.querySelector('.proxy-buttons');
+                    if (proxyButtonsContainer) {
+                        if (currentState.connected) {
+                            proxyButtonsContainer.innerHTML = '<button id="stop-proxy" class="stop-button">Stop Proxy</button>';
+                            const stopButton = document.getElementById('stop-proxy');
+                            if (stopButton) {
+                                stopButton.disabled = false;
+                                stopButton.addEventListener('click', function() {
+                                    console.log('Stop proxy clicked');
+                                    this.disabled = true;
+                                    this.textContent = 'Stopping...';
+                                    vscode.postMessage({ command: 'stopProxy' });
+                                });
+                            }
+                        } else {
+                            proxyButtonsContainer.innerHTML = '<button id="start-proxy">Start Proxy</button>';
+                            const startButton = document.getElementById('start-proxy');
+                            if (startButton) {
+                                startButton.addEventListener('click', function() {
+                                    console.log('Start proxy clicked');
+                                    this.disabled = true;
+                                    this.textContent = 'Starting...';
+                                    const driverSelect = document.getElementById('driver-select');
+                                    vscode.postMessage({
+                                        command: 'startProxy',
+                                        driver: driverSelect?.value || 'postgres'
+                                    });
+                                });
+                                updateStartProxyButton();
                             }
                         }
+                    }
+                }
+
+                function copyConnectionString() {
+                    const connectionString = document.querySelector('.connection-string')?.textContent;
+                    if (connectionString) {
+                        navigator.clipboard.writeText(connectionString).then(() => {
+                            const successMessage = document.querySelector('.copy-success');
+                            if (successMessage) {
+                                successMessage.classList.add('visible');
+                                setTimeout(() => {
+                                    successMessage.classList.remove('visible');
+                                }, 2000);
+                            }
+                        });
                     }
                 }
 
@@ -883,7 +973,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                 select, button {
                     width: 100%;
                     padding: 8px 12px;
-                    margin: 8px 0;
+                    margin: 4px 0 8px 0;
                     background-color: var(--vscode-dropdown-background);
                     color: var(--vscode-dropdown-foreground);
                     border: 1px solid var(--vscode-dropdown-border);
@@ -915,29 +1005,14 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     cursor: not-allowed;
                 }
                 .section {
-                    margin-bottom: 20px;
+                    margin-bottom: 8px;
                 }
                 .section label {
                     display: block;
-                    margin-bottom: 6px;
+                    margin-bottom: 0px;
                     color: var(--vscode-foreground);
                     font-size: 13px;
                     font-weight: 500;
-                }
-                .connection-info {
-                    background-color: var(--vscode-textBlockQuote-background);
-                    padding: 12px;
-                    border-radius: 4px;
-                    margin-top: 16px;
-                    white-space: pre-wrap;
-                    font-family: var(--vscode-editor-font-family);
-                    font-size: 13px;
-                    border-left: 4px solid var(--vscode-textBlockQuote-border);
-                }
-                .connection-info strong {
-                    color: var(--vscode-foreground);
-                    display: block;
-                    margin-bottom: 8px;
                 }
                 .proxy-buttons {
                     display: flex;
@@ -969,54 +1044,6 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     opacity: 0.5;
                     cursor: not-allowed;
                 }
-                .copy-button {
-                    background-color: var(--vscode-button-secondaryBackground);
-                    color: var(--vscode-button-secondaryForeground);
-                    padding: 4px 8px;
-                    margin-left: 8px;
-                    font-size: 12px;
-                    border-radius: 3px;
-                }
-                .copy-button:hover:not(:disabled) {
-                    background-color: var(--vscode-button-secondaryHoverBackground);
-                }
-                .copy-success {
-                    color: var(--vscode-notificationsSuccessIcon-foreground, #89D185);
-                    font-size: 12px;
-                    margin-left: 8px;
-                    opacity: 0;
-                    transition: opacity 0.3s;
-                }
-                .copy-success.visible {
-                    opacity: 1;
-                }
-                .connection-info-container {
-                    position: relative;
-                }
-                .connection-string {
-                    margin-top: 8px;
-                    padding: 8px;
-                    background-color: var(--vscode-input-background);
-                    border: 1px solid var(--vscode-input-border);
-                    border-radius: 3px;
-                    font-family: var(--vscode-editor-font-family);
-                    font-size: 12px;
-                }
-                .tooltip {
-                    position: absolute;
-                    background-color: var(--vscode-notifications-background);
-                    color: var(--vscode-notifications-foreground);
-                    padding: 4px 8px;
-                    border-radius: 3px;
-                    font-size: 12px;
-                    z-index: 1000;
-                    opacity: 0;
-                    transition: opacity 0.2s;
-                    pointer-events: none;
-                }
-                .tooltip.visible {
-                    opacity: 1;
-                }
                 .connection-details {
                     background-color: var(--vscode-editor-background);
                     border: 1px solid var(--vscode-panel-border);
@@ -1043,15 +1070,6 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     color: var(--vscode-foreground);
                     font-size: 13px;
                     font-weight: normal;
-                }
-                .connection-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 8px;
-                }
-                .connection-header strong {
-                    margin-bottom: 0;
                 }
                 .connection-status {
                     margin-bottom: 20px;
@@ -1082,30 +1100,47 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                 .status-indicator.disconnected .status-dot {
                     background-color: var(--vscode-testing-iconQueued, #919191);
                 }
-                .readonly-view {
-                    background-color: var(--vscode-editor-background);
-                    border: 1px solid var(--vscode-panel-border);
-                    border-radius: 4px;
-                    overflow: hidden;
-                }
-                .readonly-section {
+                .connection-string-container {
                     display: flex;
-                    padding: 10px 12px;
-                    border-bottom: 1px solid var(--vscode-panel-border);
+                    align-items: center;
+                    gap: 8px;
+                    font-family: var(--vscode-editor-font-family);
+                    width: 100%;
                 }
-                .readonly-section:last-child {
-                    border-bottom: none;
-                }
-                .readonly-label {
-                    flex: 0 0 100px;
-                    color: var(--vscode-descriptionForeground);
-                    font-size: 13px;
-                }
-                .readonly-value {
+                .connection-string {
                     flex: 1;
-                    color: var(--vscode-foreground);
                     font-size: 13px;
-                    font-weight: 500;
+                    padding: 4px 8px;
+                    background-color: var(--vscode-input-background);
+                    border: 1px solid var(--vscode-input-border);
+                    border-radius: 3px;
+                    white-space: nowrap;
+                    overflow-x: auto;
+                    color: var(--vscode-foreground);
+                }
+                .copy-button {
+                    background-color: var(--vscode-button-secondaryBackground);
+                    color: var(--vscode-button-secondaryForeground);
+                    padding: 4px 8px;
+                    font-size: 12px;
+                    border-radius: 3px;
+                    margin: 0;
+                    flex-shrink: 0;
+                    width: auto;
+                    border: none;
+                }
+                .copy-button:hover:not(:disabled) {
+                    background-color: var(--vscode-button-secondaryHoverBackground);
+                }
+                .copy-success {
+                    color: var(--vscode-notificationsSuccessIcon-foreground, #89D185);
+                    font-size: 12px;
+                    margin-left: 8px;
+                    opacity: 0;
+                    transition: opacity 0.3s;
+                }
+                .copy-success.visible {
+                    opacity: 1;
                 }
             </style>`;
     }
