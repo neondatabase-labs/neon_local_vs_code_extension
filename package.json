@@ -14,6 +14,7 @@
     "onCommand:neon-local.showPanel",
     "onCommand:neon-local.stopProxy",
     "onCommand:neon-local.createBranch",
+    "onCommand:neon-local.clearAuth",
     "onView:neonLocalView"
   ],
   "main": "./dist/extension.js",
@@ -47,6 +48,14 @@
       {
         "command": "neon-local.deleteBranch",
         "title": "Neon: Delete Branch"
+      },
+      {
+        "command": "neon-local.clearAuth",
+        "title": "Neon: Clear Authentication"
+      },
+      {
+        "command": "neonLocal.signIn",
+        "title": "Sign in to Neon"
       }
     ],
     "configuration": {
@@ -55,6 +64,10 @@
         "neonLocal.apiKey": {
           "type": "string",
           "description": "Your Neon API Key"
+        },
+        "neonLocal.refreshToken": {
+          "type": "string",
+          "description": "OAuth refresh token"
         },
         "neonLocal.projectId": {
           "type": "string",
@@ -79,19 +92,18 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "neonLocalView",
+          "id": "neon-local",
           "title": "Neon Local",
           "icon": "resources/neon_logo.svg"
         }
       ]
     },
     "views": {
-      "neonLocalView": [
+      "neon-local": [
         {
           "type": "webview",
           "id": "neonLocalView",
-          "name": "Neon Local",
-          "icon": "resources/neon_logo.svg"
+          "name": "Neon Local"
         }
       ]
     },
@@ -134,6 +146,7 @@
   "dependencies": {
     "axios": "^1.6.2",
     "docker-compose": "^0.24.2",
-    "dockerode": "^4.0.0"
+    "dockerode": "^4.0.0",
+    "open": "^10.1.1"
   }
 }

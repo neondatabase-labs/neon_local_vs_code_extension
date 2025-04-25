@@ -327,7 +327,6 @@
                     break;
                 case 'updateProjects':
                     console.log('Updating projects:', message.projects);
-                    console.log('Selected project:', message.selectedProject);
                     updateSelect('project', message.projects);
                     if (message.selectedProject) {
                         document.getElementById('project').value = message.selectedProject;
@@ -345,7 +344,6 @@
                     if (message.connected) {
                         statusDiv.innerHTML = 'Status: Connected';
                         if (message.connectionInfo) {
-                            // Create a data attribute with the connection string
                             const escapedConnectionString = message.connectionInfo.replace(/"/g, '&quot;');
                             const copyButton = `<button class="copy-button" data-connection-string="${escapedConnectionString}" onclick="copyConnectionString(this)" title="Copy connection string">
                                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -400,39 +398,34 @@
                     select.appendChild(defaultOption);
                     break;
                 case 'branch':
-                    // For branch dropdown, we'll add the default option after the divider
+                    defaultOption.textContent = 'Select a branch';
+                    select.appendChild(defaultOption);
                     break;
             }
-
-            // Add Create Branch option at the top of branch dropdown
-            if (selectId === 'branch') {
-                const createOption = document.createElement('option');
-                createOption.value = 'create';
-                createOption.textContent = '➕ Create New Branch';
-                select.appendChild(createOption);
-
-                // Add separator
-                const separator = document.createElement('option');
-                separator.disabled = true;
-                separator.textContent = '───────────────';
-                select.appendChild(separator);
-
-                // Add default option after the divider
-                defaultOption.textContent = 'Select a branch';
-                select.appendChild(defaultOption);
-            }
             
-            // Add new options
-            items.forEach(item => {
-                const option = document.createElement('option');
-                option.value = item.id;
-                option.textContent = item.name;
-                select.appendChild(option);
-            });
-
-            // Enable the select
-            select.disabled = false;
-            console.log('Select updated:', selectId, 'options:', select.options.length);
+            // Add items
+            if (items && items.length > 0) {
+                items.forEach(item => {
+                    const option = document.createElement('option');
+                    option.value = item.id;
+                    option.textContent = item.name;
+                    select.appendChild(option);
+                });
+                
+                // Enable the select
+                select.disabled = false;
+                
+                // If this is the project select, also enable branch creation
+                if (selectId === 'branch') {
+                    const createOption = document.createElement('option');
+                    createOption.value = 'create';
+                    createOption.textContent = '+ Create new branch';
+                    select.appendChild(createOption);
+                }
+            } else {
+                // If no items, disable the select
+                select.disabled = true;
+            }
         }
 
         // Add the copy function to the window object
