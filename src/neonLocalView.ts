@@ -420,7 +420,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     <div class="section proxy-buttons">
                         ${isConnected ? 
                             `<button id="stop-proxy" class="stop-button">Stop Proxy</button>` : 
-                            `<button id="start-proxy" ${!data.selectedBranch ? 'disabled' : ''}>Start Proxy</button>`
+                            `<button id="start-proxy" ${!data.selectedBranch ? 'disabled' : ''}>Create</button>`
                         }
                     </div>
                 </div>
@@ -449,6 +449,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
         
         return `
             <div class="form-content">
+                <div class="form-description">Create a Neon Local branch</div>
                 <div class="section">
                     <label for="org-select">Organization</label>
                     <select id="org-select">
@@ -474,9 +475,9 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                 </div>
 
                 <div class="section">
-                    <label for="branch-select">Branch</label>
+                    <label for="branch-select">Parent Branch</label>
                     <select id="branch-select" ${!data.selectedProjectId ? 'disabled' : ''}>
-                        <option value="">Select Branch</option>
+                        <option value="">Select Parent Branch</option>
                         ${branches.map((branch) => `
                             <option value="${branch.id}" ${branch.id === data.selectedBranchId ? 'selected' : ''}>
                                 ${branch.name}
@@ -792,7 +793,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         startButton.addEventListener('click', function() {
                             console.log('Start proxy clicked');
                             this.disabled = true;
-                            this.textContent = 'Starting...';
+                            this.textContent = 'Creating...';
                             
                             const driverSelect = document.getElementById('driver-select');
                             vscode.postMessage({
@@ -918,13 +919,13 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                                 });
                             }
                         } else {
-                            proxyButtonsContainer.innerHTML = '<button id="start-proxy">Start Proxy</button>';
+                            proxyButtonsContainer.innerHTML = '<button id="start-proxy">Create</button>';
                             const startButton = document.getElementById('start-proxy');
                             if (startButton) {
                                 startButton.addEventListener('click', function() {
                                     console.log('Start proxy clicked');
                                     this.disabled = true;
-                                    this.textContent = 'Starting...';
+                                    this.textContent = 'Creating...';
                                     const driverSelect = document.getElementById('driver-select');
                                     vscode.postMessage({
                                         command: 'startProxy',
@@ -970,9 +971,10 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     color: var(--vscode-editor-foreground);
                     line-height: 1.5;
                 }
-                select, button {
+                select {
                     width: 100%;
-                    padding: 8px 12px;
+                    padding: 8px;
+                    padding-right: 32px;
                     margin: 4px 0 8px 0;
                     background-color: var(--vscode-dropdown-background);
                     color: var(--vscode-dropdown-foreground);
@@ -980,6 +982,10 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     border-radius: 4px;
                     font-size: 13px;
                     transition: border-color 0.2s, opacity 0.2s;
+                    appearance: none;
+                    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='16' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M7.976 10.072l4.357-4.357.62.618L8.284 11h-.618L3 6.333l.619-.618 4.357 4.357z' fill='%23C5C5C5'/%3E%3C/svg%3E");
+                    background-repeat: no-repeat;
+                    background-position: right 8px center;
                 }
                 select:focus, button:focus {
                     outline: 1px solid var(--vscode-focusBorder);
@@ -989,9 +995,14 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     border-color: var(--vscode-dropdown-listBackground);
                 }
                 button {
+                    width: 100%;
+                    padding: 8px;
+                    margin: 4px 0 8px 0;
                     background-color: var(--vscode-button-background);
                     color: var(--vscode-button-foreground);
                     border: none;
+                    border-radius: 4px;
+                    font-size: 13px;
                     cursor: pointer;
                     font-weight: 500;
                     text-align: center;
@@ -1141,6 +1152,11 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                 }
                 .copy-success.visible {
                     opacity: 1;
+                }
+                .form-description {
+                    color: var(--vscode-descriptionForeground);
+                    font-size: 13px;
+                    margin-bottom: 16px;
                 }
             </style>`;
     }
