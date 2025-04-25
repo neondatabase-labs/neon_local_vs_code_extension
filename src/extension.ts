@@ -667,8 +667,19 @@ export class NeonLocalManager {
             vscode.window.showInformationMessage('Neon Local proxy stopped');
         } catch (error) {
             this.isProxyRunning = false;
-            vscode.window.showErrorMessage(`Failed to stop proxy: ${error}`);
-            await this.updateViewData();
+            
+            // Check if the error is about the container already being removed
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            if (errorMessage.includes('removal of container') && errorMessage.includes('is already in progress')) {
+                // Container is already being removed, just wait a moment and update the UI
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                await this.updateViewData();
+                vscode.window.showInformationMessage('Neon Local proxy stopped');
+            } else {
+                // For other errors, show the error message
+                vscode.window.showErrorMessage(`Failed to stop proxy: ${errorMessage}`);
+                await this.updateViewData();
+            }
         }
     }
 

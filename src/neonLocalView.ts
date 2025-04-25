@@ -58,6 +58,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
         this.updateView();
 
         webviewView.webview.onDidReceiveMessage(async (message) => {
+            console.log('Received message in webview:', message);
             try {
                 switch (message.command) {
                     case 'signIn':
@@ -73,6 +74,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         await this._neonLocal.handleBranchSelection(message.branchId, message.restartProxy, message.driver);
                         break;
                     case 'startProxy':
+                        console.log('Handling startProxy command with driver:', message.driver);
                         await this._neonLocal.handleStartProxy(message.driver);
                         break;
                     case 'stopProxy':
@@ -322,7 +324,6 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         color: var(--vscode-editor-foreground);
                     }
                     select, button {
-                        width: 100%;
                         padding: 8px;
                         margin: 8px 0;
                         background-color: var(--vscode-dropdown-background);
@@ -335,6 +336,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         color: var(--vscode-button-foreground);
                         border: none;
                         cursor: pointer;
+                        width: 100%;
                     }
                     button:hover {
                         background-color: var(--vscode-button-hoverBackground);
@@ -357,10 +359,43 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         display: flex;
                         gap: 10px;
                     }
+                    .header {
+                        display: flex;
+                        align-items: center;
+                        margin-bottom: 20px;
+                        gap: 10px;
+                    }
+                    .header h1 {
+                        margin: 0;
+                        font-size: 1.2em;
+                        color: var(--vscode-foreground);
+                    }
+                    .neon-logo {
+                        width: 24px;
+                        height: 24px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: #00E699;
+                    }
+                    select {
+                        width: 100%;
+                    }
                 </style>
             </head>
             <body>
                 <div id="app">
+                    <div class="header">
+                        <div class="neon-logo">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 24C18.6274 24 24 18.6274 24 12C24 5.37258 18.6274 0 12 0C5.37258 0 0 5.37258 0 12C0 18.6274 5.37258 24 12 24Z" fill="currentColor"/>
+                                <path d="M17.0513 17.0513H13.7436V6.94873H17.0513V17.0513Z" fill="white"/>
+                                <path d="M10.4359 17.0513H7.12821V6.94873H10.4359V17.0513Z" fill="white"/>
+                            </svg>
+                        </div>
+                        <h1>Neon Local</h1>
+                    </div>
+
                     <div class="section">
                         <label for="org-select">Organization:</label>
                         <select id="org-select">
@@ -410,7 +445,6 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                             `<button id="stop-proxy">Stop Proxy</button>` : 
                             `<button id="start-proxy" ${!data.selectedBranch ? 'disabled' : ''}>Start Proxy</button>`
                         }
-                        <button id="create-branch" ${!data.selectedProject ? 'disabled' : ''}>Create Branch</button>
                     </div>
 
                     ${data.connectionInfo ? `
@@ -425,6 +459,90 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     const vscode = acquireVsCodeApi();
                     let currentState = ${JSON.stringify(data)};
 
+                    // Track branch selection state
+                    const branchState = {
+                        selectedBranch: null,
+                        branchList: [],
+                        isProxyOperation: false,
+                        lastKnownValue: null,
+                        ignoreNextUpdate: false
+                    };
+
+                    function updateBranches(branches, selectedBranch, source = 'unknown') {
+                        console.log('updateBranches called with:', { 
+                            branches, 
+                            selectedBranch, 
+                            source,
+                            branchState,
+                            ignoreUpdate: branchState.ignoreNextUpdate 
+                        });
+
+                        const select = document.getElementById('branch-select');
+                        if (!select) return;
+
+                        // If we should ignore this update, just store the branch list
+                        if (branchState.ignoreNextUpdate) {
+                            console.log('Ignoring branch update as requested');
+                            branchState.branchList = branches;
+                            branchState.ignoreNextUpdate = false;
+                            return;
+                        }
+
+                        // During proxy operations, only store the branch list but don't update the UI
+                        if (branchState.isProxyOperation) {
+                            console.log('Proxy operation in progress, storing branch list without UI update');
+                            branchState.branchList = branches;
+                            return;
+                        }
+
+                        // If we have a selected branch during a status update, preserve it
+                        if (branchState.selectedBranch && source === 'status') {
+                            console.log('Preserving selected branch during status update:', branchState.selectedBranch);
+                            return;
+                        }
+
+                        // Store the current value before any changes
+                        const currentValue = select.value || branchState.selectedBranch;
+                        if (currentValue) {
+                            branchState.lastKnownValue = currentValue;
+                            console.log('Stored current value:', currentValue);
+                        }
+
+                        // Update branch list
+                        branchState.branchList = branches;
+
+                        // Save current options
+                        const defaultOption = select.options[0];
+                        
+                        // Clear current options
+                        select.innerHTML = '';
+                        
+                        // Restore default option
+                        select.add(defaultOption);
+                        
+                        // Add new options
+                        branches.forEach(branch => {
+                            const option = document.createElement('option');
+                            option.value = branch.id;
+                            option.text = branch.name;
+                            
+                            // Use the most appropriate value for selection
+                            const valueToUse = branchState.lastKnownValue || selectedBranch;
+                            option.selected = branch.id === valueToUse;
+                            
+                            select.add(option);
+                        });
+
+                        select.disabled = branches.length === 0;
+
+                        // Update selected branch if this is an explicit selection
+                        if (selectedBranch && source !== 'status') {
+                            branchState.selectedBranch = selectedBranch;
+                            branchState.lastKnownValue = selectedBranch;
+                            console.log('Updated selected branch to:', selectedBranch);
+                        }
+                    }
+
                     // Handle all incoming messages
                     window.addEventListener('message', event => {
                         const message = event.data;
@@ -436,83 +554,189 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                                 break;
                             case 'updateProjects':
                                 updateProjects(message.projects, message.selectedProject);
+                                // Reset branch state when project changes
+                                branchState.selectedBranch = null;
+                                branchState.lastKnownValue = null;
+                                branchState.branchList = [];
+                                branchState.isProxyOperation = false;
+                                branchState.ignoreNextUpdate = false;
                                 break;
                             case 'updateBranches':
-                                updateBranches(message.branches, message.selectedBranch);
+                                updateBranches(message.branches, message.selectedBranch, 'message');
                                 break;
                             case 'updateStatus':
+                                console.log('Status update received:', { 
+                                    branchState,
+                                    connected: message.connected,
+                                    loading: message.loading
+                                });
+                                
+                                // If we're in a proxy operation, ignore the next branch update
+                                if (branchState.isProxyOperation) {
+                                    branchState.ignoreNextUpdate = true;
+                                }
+                                
                                 updateStatus(message);
                                 break;
                         }
                     });
 
+                    // Event Listeners for buttons
+                    document.getElementById('branch-select')?.addEventListener('change', (e) => {
+                        const target = e.target;
+                        if (!target) return;
+                        
+                        console.log('Branch selected:', target.value);
+                        branchState.selectedBranch = target.value;
+                        branchState.lastKnownValue = target.value;
+                        currentState.selectedBranch = target.value;
+                        branchState.isProxyOperation = false;
+                        branchState.ignoreNextUpdate = false;
+                        
+                        vscode.postMessage({
+                            command: 'selectBranch',
+                            branchId: target.value,
+                            restartProxy: false,
+                            driver: document.getElementById('driver-select')?.value || 'postgres'
+                        });
+                    });
+
                     function updateStatus(status) {
-                        console.log('Updating status:', status);
+                        console.log('Updating status with full details:', {
+                            status,
+                            currentState,
+                            branchState
+                        });
+                        
                         const proxyButtonsContainer = document.querySelector('.proxy-buttons');
                         const connectionInfo = document.querySelector('.connection-info');
 
+                        // Update current state first
+                        currentState.connected = status.connected;
+
                         if (proxyButtonsContainer) {
-                            if (status.connected) {
-                                proxyButtonsContainer.innerHTML = \`
-                                    <button id="stop-proxy">Stop Proxy</button>
-                                    <button id="create-branch" \${!currentState.selectedProject ? 'disabled' : ''}>Create Branch</button>
-                                \`;
+                            // Clear existing content
+                            proxyButtonsContainer.innerHTML = '';
+
+                            // Determine if we're connected based on both status and connection info
+                            const isConnected = status.connected || !!status.connectionInfo;
+                            console.log('Connection state:', { 
+                                statusConnected: status.connected, 
+                                hasConnectionInfo: !!status.connectionInfo,
+                                isConnected 
+                            });
+
+                            if (isConnected) {
+                                console.log('Creating stop proxy button');
+                                const stopButton = document.createElement('button');
+                                stopButton.id = 'stop-proxy';
+                                stopButton.textContent = 'Stop Proxy';
+                                proxyButtonsContainer.appendChild(stopButton);
                                 
-                                // Add event listener to new stop button
-                                document.getElementById('stop-proxy')?.addEventListener('click', () => {
-                                    const button = document.getElementById('stop-proxy');
-                                    if (button) {
-                                        button.disabled = true;
-                                        button.textContent = 'Stopping...';
-                                    }
+                                stopButton.addEventListener('click', () => {
+                                    console.log('Stop proxy clicked');
+                                    branchState.isProxyOperation = true;
+                                    branchState.ignoreNextUpdate = true;
+                                    stopButton.disabled = true;
+                                    stopButton.textContent = 'Stopping...';
                                     vscode.postMessage({ command: 'stopProxy' });
                                 });
                             } else {
-                                proxyButtonsContainer.innerHTML = \`
-                                    <button id="start-proxy" \${!currentState.selectedBranch ? 'disabled' : ''}>Start Proxy</button>
-                                    <button id="create-branch" \${!currentState.selectedProject ? 'disabled' : ''}>Create Branch</button>
-                                \`;
+                                console.log('Creating start proxy button');
+                                const startButton = document.createElement('button');
+                                startButton.id = 'start-proxy';
+                                startButton.textContent = 'Start Proxy';
+                                startButton.disabled = !branchState.selectedBranch;
+                                proxyButtonsContainer.appendChild(startButton);
                                 
-                                // Add event listener to new start button
-                                document.getElementById('start-proxy')?.addEventListener('click', () => {
-                                    const button = document.getElementById('start-proxy');
+                                startButton.addEventListener('click', () => {
+                                    console.log('Start proxy clicked');
+                                    branchState.isProxyOperation = true;
+                                    branchState.ignoreNextUpdate = true;
+                                    startButton.disabled = true;
+                                    startButton.textContent = 'Starting...';
                                     const driverSelect = document.getElementById('driver-select');
-                                    if (button) {
-                                        button.disabled = true;
-                                        button.textContent = 'Starting...';
-                                    }
-                                    vscode.postMessage({
+                                    const message = {
                                         command: 'startProxy',
                                         driver: driverSelect?.value || 'postgres'
-                                    });
+                                    };
+                                    console.log('Sending message:', message);
+                                    vscode.postMessage(message);
                                 });
                             }
-
-                            // Add event listener to new create branch button
-                            document.getElementById('create-branch')?.addEventListener('click', () => {
-                                vscode.postMessage({ command: 'createBranch' });
-                            });
                         }
 
                         // Update connection info
-                        if (status.connectionInfo) {
-                            if (!connectionInfo) {
+                        const appDiv = document.getElementById('app');
+                        if (appDiv) {
+                            // Remove existing connection info if present
+                            const existingInfo = appDiv.querySelector('.connection-info');
+                            if (existingInfo) {
+                                existingInfo.remove();
+                            }
+
+                            // Add new connection info if available
+                            if (status.connectionInfo) {
+                                console.log('Adding connection info');
                                 const div = document.createElement('div');
                                 div.className = 'connection-info';
                                 div.innerHTML = \`<strong>Connection Info:</strong><br>\${status.connectionInfo}\`;
-                                document.getElementById('app')?.appendChild(div);
-                            } else {
-                                connectionInfo.innerHTML = \`<strong>Connection Info:</strong><br>\${status.connectionInfo}\`;
+                                appDiv.appendChild(div);
                             }
-                        } else if (connectionInfo) {
-                            connectionInfo.remove();
                         }
 
-                        // Update current state
-                        currentState.connected = status.connected;
+                        // Ensure branch selection is preserved
+                        const branchSelect = document.getElementById('branch-select');
+                        if (branchSelect && branchState.lastKnownValue) {
+                            console.log('Restoring branch selection to last known value:', branchState.lastKnownValue);
+                            branchSelect.value = branchState.lastKnownValue;
+                        }
+
+                        // If this was a proxy operation completion, reset the flags
+                        if (!status.loading) {
+                            setTimeout(() => {
+                                branchState.isProxyOperation = false;
+                                branchState.ignoreNextUpdate = false;
+                            }, 100);
+                        }
                     }
 
-                    // Update functions
+                    // Setup initial button event listeners
+                    function setupButtonListeners() {
+                        console.log('Setting up button listeners');
+                        
+                        // Setup start proxy button
+                        const startButton = document.getElementById('start-proxy');
+                        if (startButton) {
+                            startButton.addEventListener('click', () => {
+                                console.log('Start proxy clicked');
+                                startButton.disabled = true;
+                                startButton.textContent = 'Starting...';
+                                const driverSelect = document.getElementById('driver-select');
+                                const message = {
+                                    command: 'startProxy',
+                                    driver: driverSelect?.value || 'postgres'
+                                };
+                                console.log('Sending message:', message);
+                                vscode.postMessage(message);
+                            });
+                        }
+
+                        // Setup stop proxy button
+                        const stopButton = document.getElementById('stop-proxy');
+                        if (stopButton) {
+                            stopButton.addEventListener('click', () => {
+                                console.log('Stop proxy clicked');
+                                stopButton.disabled = true;
+                                stopButton.textContent = 'Stopping...';
+                                vscode.postMessage({ command: 'stopProxy' });
+                            });
+                        }
+                    }
+
+                    // Call setup immediately
+                    setupButtonListeners();
+
                     function updateOrganizations(orgs, selectedOrg) {
                         const select = document.getElementById('org-select');
                         if (!select) return;
@@ -569,38 +793,16 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         }
                     }
 
-                    function updateBranches(branches, selectedBranch) {
-                        const select = document.getElementById('branch-select');
-                        if (!select) return;
-
-                        // Save current options
-                        const defaultOption = select.options[0];
-                        
-                        // Clear current options
-                        select.innerHTML = '';
-                        
-                        // Restore default option
-                        select.add(defaultOption);
-                        
-                        // Add new options
-                        branches.forEach(branch => {
-                            const option = document.createElement('option');
-                            option.value = branch.id;
-                            option.text = branch.name;
-                            option.selected = branch.id === selectedBranch;
-                            select.add(option);
-                        });
-
-                        select.disabled = branches.length === 0;
-                    }
-
-                    // Event Listeners
+                    // Event Listeners for org and project selects
                     document.getElementById('org-select')?.addEventListener('change', (e) => {
                         const target = e.target;
                         if (!target) return;
                         
                         console.log('Organization selected:', target.value);
                         currentState.selectedOrg = target.value;
+                        currentState.selectedProject = undefined;
+                        currentState.selectedBranch = undefined;
+                        branchState.selectedBranch = null; // Reset branch state when org changes
                         
                         vscode.postMessage({
                             command: 'selectOrg',
@@ -614,81 +816,16 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         
                         console.log('Project selected:', target.value);
                         currentState.selectedProject = target.value;
+                        currentState.selectedBranch = undefined;
+                        branchState.selectedBranch = null; // Reset branch state when project changes
                         
                         vscode.postMessage({
                             command: 'selectProject',
                             projectId: target.value
                         });
                     });
-
-                    document.getElementById('branch-select')?.addEventListener('change', (e) => {
-                        const target = e.target;
-                        if (!target) return;
-                        
-                        console.log('Branch selected:', target.value);
-                        currentState.selectedBranch = target.value;
-                        
-                        const driverSelect = document.getElementById('driver-select');
-                        vscode.postMessage({
-                            command: 'selectBranch',
-                            branchId: target.value,
-                            restartProxy: false,
-                            driver: driverSelect ? driverSelect.value : 'postgres'
-                        });
-                    });
-
-                    document.getElementById('start-proxy')?.addEventListener('click', () => {
-                        console.log('Start proxy clicked');
-                        const driverSelect = document.getElementById('driver-select');
-                        const branchSelect = document.getElementById('branch-select');
-                        
-                        if (!branchSelect || !branchSelect.value) {
-                            console.error('No branch selected');
-                            return;
-                        }
-                        
-                        const driver = driverSelect ? driverSelect.value : 'postgres';
-                        console.log('Starting proxy with driver:', driver);
-                        
-                        vscode.postMessage({
-                            command: 'startProxy',
-                            driver: driver
-                        });
-                        
-                        // Disable the button while starting
-                        const startButton = document.getElementById('start-proxy');
-                        if (startButton) {
-                            startButton.disabled = true;
-                            startButton.textContent = 'Starting...';
-                        }
-                    });
-
-                    document.getElementById('stop-proxy')?.addEventListener('click', () => {
-                        console.log('Stop proxy clicked');
-                        vscode.postMessage({
-                            command: 'stopProxy'
-                        });
-                        
-                        // Disable the button while stopping
-                        const stopButton = document.getElementById('stop-proxy');
-                        if (stopButton) {
-                            stopButton.disabled = true;
-                            stopButton.textContent = 'Stopping...';
-                        }
-                    });
-
-                    document.getElementById('create-branch')?.addEventListener('click', () => {
-                        console.log('Create branch clicked');
-                        vscode.postMessage({
-                            command: 'createBranch'
-                        });
-                    });
                 </script>
             </body>
             </html>`;
     }
-
-    private renderViewData(data: ViewData): string {
-        return `<pre>${JSON.stringify(data, null, 2)}</pre>`;
-    }
-} 
+}
