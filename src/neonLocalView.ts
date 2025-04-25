@@ -404,13 +404,18 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         </div>
                         ${data.connectionInfo ? `
                         <div class="detail-row">
-                            <div class="detail-label">Connection Info</div>
-                            <div class="detail-value connection-string-container">
-                                <div class="connection-string">${data.connectionInfo}</div>
-                                <button class="copy-button">
-                                    Copy
+                            <div class="detail-label-container">
+                                <div class="detail-label">Connection Info</div>
+                                <button class="copy-button" title="Copy connection string">
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M10.75 1.75H4.25C3.97386 1.75 3.75 1.97386 3.75 2.25V11.25C3.75 11.5261 3.97386 11.75 4.25 11.75H10.75C11.0261 11.75 11.25 11.5261 11.25 11.25V2.25C11.25 1.97386 11.0261 1.75 10.75 1.75Z" stroke="currentColor" stroke-width="1.5"/>
+                                        <path d="M12.25 4.25H13.75V13.75H5.75V12.25" stroke="currentColor" stroke-width="1.5"/>
+                                    </svg>
                                     <span class="copy-success">Copied!</span>
                                 </button>
+                            </div>
+                            <div class="detail-value connection-string-container">
+                                <div class="connection-string">${data.connectionInfo}</div>
                             </div>
                         </div>
                         ` : ''}
@@ -1028,6 +1033,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                 .proxy-buttons {
                     display: flex;
                     gap: 12px;
+                    margin-top: 20px;
                 }
                 .header {
                     display: flex;
@@ -1120,34 +1126,42 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                 .connection-string {
                     flex: 1;
                     font-size: 13px;
-                    padding: 4px 8px;
-                    background-color: var(--vscode-input-background);
-                    border: 1px solid var(--vscode-input-border);
-                    border-radius: 3px;
-                    white-space: nowrap;
-                    overflow-x: auto;
+                    word-break: break-all;
                     color: var(--vscode-foreground);
                 }
                 .copy-button {
-                    background-color: var(--vscode-button-secondaryBackground);
-                    color: var(--vscode-button-secondaryForeground);
-                    padding: 4px 8px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background-color: transparent;
+                    color: var(--vscode-icon-foreground);
+                    padding: 4px;
                     font-size: 12px;
                     border-radius: 3px;
                     margin: 0;
                     flex-shrink: 0;
-                    width: auto;
+                    width: 20px;
+                    height: 20px;
                     border: none;
+                    cursor: pointer;
+                    opacity: 0.5;
+                    position: relative;
                 }
-                .copy-button:hover:not(:disabled) {
-                    background-color: var(--vscode-button-secondaryHoverBackground);
+                .copy-button:hover {
+                    background-color: var(--vscode-toolbar-hoverBackground);
+                    opacity: 1;
                 }
                 .copy-success {
+                    position: absolute;
                     color: var(--vscode-notificationsSuccessIcon-foreground, #89D185);
-                    font-size: 12px;
-                    margin-left: 8px;
+                    font-size: 10px;
+                    left: calc(100% + 4px);
+                    top: 50%;
+                    transform: translateY(-50%);
+                    white-space: nowrap;
                     opacity: 0;
                     transition: opacity 0.3s;
+                    pointer-events: none;
                 }
                 .copy-success.visible {
                     opacity: 1;
@@ -1156,6 +1170,11 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     color: var(--vscode-descriptionForeground);
                     font-size: 13px;
                     margin-bottom: 16px;
+                }
+                .detail-label-container {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
                 }
             </style>`;
     }
