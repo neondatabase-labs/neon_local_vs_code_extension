@@ -381,8 +381,8 @@ export class NeonLocalManager {
         }
     }
 
-    public async startContainer(branchId: string, driver: string) {
-        console.log('Starting container for branch:', branchId, 'with driver:', driver);
+    public async startContainer(branchId: string, driver: string, isExisting: boolean) {
+        console.log('Starting container for branch:', branchId, 'with driver:', driver, 'isExisting:', isExisting);
         
         try {
             const apiKey = await this.ensureAuthenticated();
@@ -421,7 +421,8 @@ export class NeonLocalManager {
             console.log('Configuring container with:', {
                 project: this.currentProject,
                 branch: branchId,
-                driver: driver
+                driver: driver,
+                isExisting: isExisting
             });
 
             const containerConfig = {
@@ -430,7 +431,7 @@ export class NeonLocalManager {
                 Env: [
                     `NEON_API_KEY=${apiKey}`,
                     `NEON_PROJECT_ID=${this.currentProject}`,
-                    `PARENT_BRANCH_ID=${branchId}`,
+                    ...(isExisting ? [`BRANCH_ID=${branchId}`] : [`PARENT_BRANCH_ID=${branchId}`]),
                     `DRIVER=${driver}`
                 ],
                 HostConfig: {
@@ -446,6 +447,8 @@ export class NeonLocalManager {
                 OpenStdin: false,
                 StdinOnce: false
             };
+
+            console.log('Container config:', JSON.stringify(containerConfig, null, 2));
 
             console.log('Removing any existing container...');
             try {
@@ -801,7 +804,7 @@ export class NeonLocalManager {
         await this.saveState();
         await this.checkContainerStatus();
         if (restartProxy) {
-            await this.startContainer(branchId, driver);
+            await this.startContainer(branchId, driver, false);
         }
     }
 
@@ -813,7 +816,11 @@ export class NeonLocalManager {
         }
 
         try {
-            await this.startContainer(this.currentBranch, driver);
+            const config = vscode.workspace.getConfiguration('neonLocal');
+            const connectionType = config.get<string>('connectionType') || 'existing';
+            const isExisting = connectionType === 'existing';
+            console.log('Starting proxy with connection type:', connectionType, 'isExisting:', isExisting);
+            await this.startContainer(this.currentBranch, driver, isExisting);
         } catch (error) {
             console.error('Error in handleStartProxy:', error);
             vscode.window.showErrorMessage(`Failed to start proxy: ${error instanceof Error ? error.message : String(error)}`);
