@@ -18,6 +18,7 @@ interface ViewData {
     selectedBranchName?: string;
     selectedBranch?: any;
     loading?: boolean;
+    connectionType?: 'existing' | 'new';
 }
 
 export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
@@ -437,6 +438,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
             selectedProjectId: data.selectedProjectId,
             selectedBranchId: data.selectedBranchId,
             selectedDriver: data.selectedDriver,
+            connectionType: data.connectionType,
             organizations: data.orgs,
             projects: data.projects,
             branches: data.branches,
@@ -451,6 +453,14 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
         return `
             <div class="form-content">
                 <div class="form-description">Create a Neon Local branch</div>
+                <div class="section">
+                    <label for="connection-type-select">Connection Type</label>
+                    <select id="connection-type-select">
+                        <option value="existing" ${data.connectionType === 'existing' ? 'selected' : ''}>Connect to existing branch</option>
+                        <option value="new" ${data.connectionType === 'new' ? 'selected' : ''}>Connect to new branch</option>
+                    </select>
+                </div>
+
                 <div class="section">
                     <label for="org-select">Organization</label>
                     <select id="org-select">
@@ -476,9 +486,9 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                 </div>
 
                 <div class="section">
-                    <label for="branch-select">Parent Branch</label>
+                    <label for="branch-select">${data.connectionType === 'existing' ? 'Branch' : 'Parent Branch'}</label>
                     <select id="branch-select" ${!data.selectedProjectId ? 'disabled' : ''}>
-                        <option value="">Select Parent Branch</option>
+                        <option value="">Select ${data.connectionType === 'existing' ? 'Branch' : 'Parent Branch'}</option>
                         ${branches.map((branch) => `
                             <option value="${branch.id}" ${branch.id === data.selectedBranchId ? 'selected' : ''}>
                                 ${branch.name}
@@ -513,7 +523,8 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     selectedBranchId: ${JSON.stringify(data.selectedBranchId)},
                     selectedDriver: ${JSON.stringify(data.selectedDriver || 'postgres')},
                     connected: ${JSON.stringify(data.connected)},
-                    connectionInfo: ${JSON.stringify(data.connectionInfo)}
+                    connectionInfo: ${JSON.stringify(data.connectionInfo)},
+                    connectionType: ${JSON.stringify(data.connectionType || 'existing')}
                 };
 
                 // Update state with any new data while preserving selections
@@ -528,7 +539,8 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     selectedOrgId: currentState.selectedOrgId || ${JSON.stringify(data.selectedOrgId)},
                     selectedProjectId: currentState.selectedProjectId || ${JSON.stringify(data.selectedProjectId)},
                     selectedBranchId: currentState.selectedBranchId || ${JSON.stringify(data.selectedBranchId)},
-                    selectedDriver: currentState.selectedDriver || ${JSON.stringify(data.selectedDriver || 'postgres')}
+                    selectedDriver: currentState.selectedDriver || ${JSON.stringify(data.selectedDriver || 'postgres')},
+                    connectionType: currentState.connectionType || ${JSON.stringify(data.connectionType || 'existing')}
                 };
 
                 // Save initial state
@@ -549,13 +561,31 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     const projectSelect = document.getElementById('project-select');
                     const branchSelect = document.getElementById('branch-select');
                     const driverSelect = document.getElementById('driver-select');
+                    const connectionTypeSelect = document.getElementById('connection-type-select');
 
                     const allSelected = orgSelect?.value && 
                                       projectSelect?.value && 
                                       branchSelect?.value && 
-                                      driverSelect?.value;
+                                      driverSelect?.value &&
+                                      connectionTypeSelect?.value;
 
                     startButton.disabled = !allSelected;
+                }
+
+                function updateBranchLabel() {
+                    const branchLabel = document.querySelector('label[for="branch-select"]');
+                    const branchSelect = document.getElementById('branch-select');
+                    if (!branchLabel || !branchSelect) return;
+
+                    const connectionTypeSelect = document.getElementById('connection-type-select');
+                    if (!connectionTypeSelect) return;
+
+                    const isExisting = connectionTypeSelect.value === 'existing';
+                    branchLabel.textContent = isExisting ? 'Branch' : 'Parent Branch';
+                    const firstOption = branchSelect.querySelector('option');
+                    if (firstOption) {
+                        firstOption.textContent = \`Select \${isExisting ? 'Branch' : 'Parent Branch'}\`;
+                    }
                 }
 
                 function updateProjectDropdown(projects) {
@@ -626,6 +656,23 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                 }
 
                 function initializeDropdowns() {
+                    // Setup connection type dropdown
+                    const connectionTypeSelect = document.getElementById('connection-type-select');
+                    if (connectionTypeSelect) {
+                        // Set initial value from state
+                        if (currentState.connectionType) {
+                            connectionTypeSelect.value = currentState.connectionType;
+                        }
+
+                        connectionTypeSelect.addEventListener('change', function() {
+                            console.log('Connection type selected:', this.value);
+                            currentState.connectionType = this.value;
+                            saveState();
+                            updateBranchLabel();
+                            updateStartProxyButton();
+                        });
+                    }
+
                     // Setup organization dropdown
                     const orgSelect = document.getElementById('org-select');
                     if (orgSelect) {
@@ -796,11 +843,19 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                             this.disabled = true;
                             this.textContent = 'Creating...';
                             
+                            const connectionTypeSelect = document.getElementById('connection-type-select');
                             const driverSelect = document.getElementById('driver-select');
-                            vscode.postMessage({
-                                command: 'startProxy',
-                                driver: driverSelect?.value || 'postgres'
-                            });
+                            
+                            if (connectionTypeSelect.value === 'existing') {
+                                vscode.postMessage({
+                                    command: 'startProxy',
+                                    driver: driverSelect?.value || 'postgres'
+                                });
+                            } else {
+                                vscode.postMessage({
+                                    command: 'createBranch'
+                                });
+                            }
                         });
                     }
 
@@ -893,11 +948,19 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                                     console.log('Start proxy clicked');
                                     this.disabled = true;
                                     this.textContent = 'Creating...';
+                                    const connectionTypeSelect = document.getElementById('connection-type-select');
                                     const driverSelect = document.getElementById('driver-select');
-                                    vscode.postMessage({
-                                        command: 'startProxy',
-                                        driver: driverSelect?.value || 'postgres'
-                                    });
+                                    
+                                    if (connectionTypeSelect.value === 'existing') {
+                                        vscode.postMessage({
+                                            command: 'startProxy',
+                                            driver: driverSelect?.value || 'postgres'
+                                        });
+                                    } else {
+                                        vscode.postMessage({
+                                            command: 'createBranch'
+                                        });
+                                    }
                                 });
                                 updateStartProxyButton();
                             }
