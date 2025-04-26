@@ -452,7 +452,6 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
         
         return `
             <div class="form-content">
-                <div class="form-description">Create a Neon Local branch</div>
                 <div class="section">
                     <label for="connection-type-select">Connection Type</label>
                     <select id="connection-type-select">
