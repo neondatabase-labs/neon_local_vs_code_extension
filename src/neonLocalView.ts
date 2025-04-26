@@ -679,6 +679,11 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                             connectionTypeSelect.value = currentState.connectionType;
                         }
 
+                        // Set initial visibility of branch dropdowns
+                        const isExisting = connectionTypeSelect.value === 'existing';
+                        document.querySelector('.branch-dropdown.existing-branch').style.display = isExisting ? 'block' : 'none';
+                        document.querySelector('.branch-dropdown.new-branch').style.display = isExisting ? 'none' : 'block';
+
                         connectionTypeSelect.addEventListener('change', function() {
                             console.log('Connection type selected:', this.value);
                             currentState.connectionType = this.value;
@@ -686,8 +691,19 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
 
                             // Show/hide appropriate branch dropdowns
                             const isExisting = this.value === 'existing';
-                            document.querySelector('.branch-dropdown.existing-branch').style.display = isExisting ? 'block' : 'none';
-                            document.querySelector('.branch-dropdown.new-branch').style.display = isExisting ? 'none' : 'block';
+                            const existingBranchDropdown = document.querySelector('.branch-dropdown.existing-branch');
+                            const newBranchDropdown = document.querySelector('.branch-dropdown.new-branch');
+                            
+                            if (existingBranchDropdown && newBranchDropdown) {
+                                existingBranchDropdown.style.display = isExisting ? 'block' : 'none';
+                                newBranchDropdown.style.display = isExisting ? 'none' : 'block';
+                            }
+
+                            // Update button text
+                            const startButton = document.getElementById('start-proxy');
+                            if (startButton) {
+                                startButton.textContent = isExisting ? 'Connect' : 'Create';
+                            }
 
                             // Update start proxy button state
                             updateStartProxyButton();
@@ -888,25 +904,11 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                             console.log('Start proxy clicked');
                             this.disabled = true;
                             this.textContent = 'Creating...';
-                            
-                            const connectionTypeSelect = document.getElementById('connection-type-select');
                             const driverSelect = document.getElementById('driver-select');
-                            const isExisting = connectionTypeSelect.value === 'existing';
-                            const activeBranchSelect = isExisting ? 
-                                document.getElementById('branch-select') : 
-                                document.getElementById('parent-branch-select');
-                            
-                            if (isExisting) {
-                                vscode.postMessage({
-                                    command: 'startProxy',
-                                    driver: driverSelect?.value || 'postgres'
-                                });
-                            } else {
-                                vscode.postMessage({
-                                    command: 'createBranch',
-                                    parentBranchId: activeBranchSelect?.value
-                                });
-                            }
+                            vscode.postMessage({
+                                command: 'startProxy',
+                                driver: driverSelect?.value || 'postgres'
+                            });
                         });
                     }
 
@@ -916,7 +918,6 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                             console.log('Stop proxy clicked');
                             this.disabled = true;
                             this.textContent = 'Stopping...';
-                            
                             vscode.postMessage({ command: 'stopProxy' });
                         });
                     }
@@ -992,26 +993,20 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                                 });
                             }
                         } else {
-                            proxyButtonsContainer.innerHTML = '<button id="start-proxy">Create</button>';
+                            const connectionTypeSelect = document.getElementById('connection-type-select');
+                            const buttonText = connectionTypeSelect.value === 'existing' ? 'Connect' : 'Create';
+                            proxyButtonsContainer.innerHTML = \`<button id="start-proxy">\${buttonText}</button>\`;
                             const startButton = document.getElementById('start-proxy');
                             if (startButton) {
                                 startButton.addEventListener('click', function() {
                                     console.log('Start proxy clicked');
                                     this.disabled = true;
                                     this.textContent = 'Creating...';
-                                    const connectionTypeSelect = document.getElementById('connection-type-select');
                                     const driverSelect = document.getElementById('driver-select');
-                                    
-                                    if (connectionTypeSelect.value === 'existing') {
-                                        vscode.postMessage({
-                                            command: 'startProxy',
-                                            driver: driverSelect?.value || 'postgres'
-                                        });
-                                    } else {
-                                        vscode.postMessage({
-                                            command: 'createBranch'
-                                        });
-                                    }
+                                    vscode.postMessage({
+                                        command: 'startProxy',
+                                        driver: driverSelect?.value || 'postgres'
+                                    });
                                 });
                                 updateStartProxyButton();
                             }
