@@ -535,7 +535,7 @@ export class NeonLocalManager {
                             await this.handleBranchSelection(message.branchId, message.restartProxy, message.driver);
                             break;
                         case 'startProxy':
-                            await this.handleStartProxy(message.driver);
+                            await this.handleStartProxy(message.driver, message.isExisting, message.branchId, message.parentBranchId);
                             break;
                         case 'stopProxy':
                             await this.handleStopProxy();
@@ -808,19 +808,28 @@ export class NeonLocalManager {
         }
     }
 
-    public async handleStartProxy(driver: string) {
-        console.log('Handling start proxy request with driver:', driver);
-        if (!this.currentBranch) {
-            vscode.window.showErrorMessage('Please select a branch before starting the proxy');
-            return;
+    public async handleStartProxy(driver: string, isExisting: boolean, branchId?: string, parentBranchId?: string) {
+        console.log('Handling start proxy request with driver:', driver, 'isExisting:', isExisting, 'branchId:', branchId, 'parentBranchId:', parentBranchId);
+        
+        let selectedBranch: string | undefined;
+        
+        if (isExisting) {
+            if (!branchId) {
+                vscode.window.showErrorMessage('Please select a branch before starting the proxy');
+                return;
+            }
+            selectedBranch = branchId;
+        } else {
+            if (!parentBranchId) {
+                vscode.window.showErrorMessage('Please select a parent branch before starting the proxy');
+                return;
+            }
+            selectedBranch = parentBranchId;
         }
 
         try {
-            const config = vscode.workspace.getConfiguration('neonLocal');
-            const connectionType = config.get<string>('connectionType') || 'existing';
-            const isExisting = connectionType === 'existing';
-            console.log('Starting proxy with connection type:', connectionType, 'isExisting:', isExisting);
-            await this.startContainer(this.currentBranch, driver, isExisting);
+            console.log('Starting proxy with connection type:', isExisting ? 'existing' : 'new', 'branch:', selectedBranch);
+            await this.startContainer(selectedBranch, driver, isExisting);
         } catch (error) {
             console.error('Error in handleStartProxy:', error);
             vscode.window.showErrorMessage(`Failed to start proxy: ${error instanceof Error ? error.message : String(error)}`);

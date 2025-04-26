@@ -173,6 +173,14 @@
         <h1>Neon Local</h1>
         
         <div class="form-group">
+            <label for="connection-type">Connection Type</label>
+            <select id="connection-type">
+                <option value="existing">Connect to Existing Branch</option>
+                <option value="new">Create New Branch</option>
+            </select>
+        </div>
+
+        <div class="form-group">
             <label for="org">Organization</label>
             <select id="org" disabled></select>
         </div>
@@ -218,8 +226,20 @@
         const startButton = document.getElementById('startProxy');
         const stopButton = document.getElementById('stopProxy');
         const statusDiv = document.getElementById('status');
+        const connectionTypeSelect = document.getElementById('connection-type');
 
         // Event Listeners
+        connectionTypeSelect.addEventListener('change', () => {
+            const isExisting = connectionTypeSelect.value === 'existing';
+            startButton.textContent = isExisting ? 'Connect' : 'Create';
+            
+            // Update branch dropdown label
+            const branchLabel = document.querySelector('label[for="branch"]');
+            if (branchLabel) {
+                branchLabel.textContent = isExisting ? 'Branch' : 'Parent Branch';
+            }
+        });
+
         orgSelect.addEventListener('change', (event) => {
             const select = event.target;
             if (select.value) {
@@ -302,10 +322,46 @@
         });
 
         startButton.addEventListener('click', () => {
-            vscode.postMessage({ 
-                command: 'startProxy',
-                driver: driverSelect.value
-            });
+            const connectionType = document.getElementById('connection-type');
+            const isExisting = connectionType && connectionType.value === 'existing';
+            
+            if (isExisting) {
+                // For existing branch, use the selected branch
+                const branchSelect = document.getElementById('branch');
+                if (!branchSelect || !branchSelect.value) {
+                    vscode.postMessage({
+                        command: 'showError',
+                        text: 'Please select a branch'
+                    });
+                    return;
+                }
+                
+                vscode.postMessage({ 
+                    command: 'startProxy',
+                    driver: driverSelect.value,
+                    isExisting: true,
+                    branchId: branchSelect.value,
+                    parentBranchId: undefined
+                });
+            } else {
+                // For new branch, use the selected branch as parent
+                const parentBranchSelect = document.getElementById('parent-branch-select');
+                if (!parentBranchSelect || !parentBranchSelect.value) {
+                    vscode.postMessage({
+                        command: 'showError',
+                        text: 'Please select a parent branch'
+                    });
+                    return;
+                }
+                
+                vscode.postMessage({ 
+                    command: 'startProxy',
+                    driver: driverSelect.value,
+                    isExisting: false,
+                    branchId: undefined,
+                    parentBranchId: parentBranchSelect.value
+                });
+            }
         });
 
         stopButton.addEventListener('click', () => {
@@ -367,6 +423,18 @@
                     // Show/hide start/stop buttons based on connection status
                     document.getElementById('startProxy').style.display = message.connected ? 'none' : 'block';
                     document.getElementById('stopProxy').style.display = message.connected ? 'block' : 'none';
+                    break;
+                case 'updateData':
+                    updateViewData(message.data);
+                    break;
+                case 'getSelectedParentBranch':
+                    const parentBranchSelect = document.getElementById('parent-branch-select');
+                    if (parentBranchSelect && parentBranchSelect.value) {
+                        vscode.postMessage({
+                            command: 'selectedParentBranch',
+                            branchId: parentBranchSelect.value
+                        });
+                    }
                     break;
             }
         });

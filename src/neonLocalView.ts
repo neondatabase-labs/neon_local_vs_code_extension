@@ -88,7 +88,12 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         break;
                     case 'startProxy':
                         console.log('Handling startProxy command with driver:', message.driver);
-                        await this._neonLocal.handleStartProxy(message.driver);
+                        await this._neonLocal.handleStartProxy(
+                            message.driver,
+                            message.isExisting,
+                            message.branchId,
+                            message.parentBranchId
+                        );
                         // Force a view refresh after starting the proxy
                         await this.updateView();
                         break;
