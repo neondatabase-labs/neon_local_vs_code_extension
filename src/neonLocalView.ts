@@ -422,8 +422,8 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
 
                     <div class="section proxy-buttons">
                         ${isConnected ? 
-                            `<button id="stop-proxy" class="stop-button">Stop Proxy</button>` : 
-                            `<button id="start-proxy" ${!data.selectedBranch ? 'disabled' : ''}>Create</button>`
+                            `<button id="stopProxy" class="stop-button">Stop Proxy</button>` : 
+                            `<button id="startProxy" ${!data.selectedBranch ? 'disabled' : ''}>${!data.connectionType || data.connectionType === 'existing' ? 'Connect' : 'Create'}</button>`
                         }
                     </div>
                 </div>
@@ -566,7 +566,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                 }
 
                 function updateStartProxyButton() {
-                    const startButton = document.getElementById('start-proxy');
+                    const startButton = document.getElementById('startProxy');
                     if (!startButton) return;
 
                     const orgSelect = document.getElementById('org-select');
@@ -700,7 +700,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                             }
 
                             // Update button text
-                            const startButton = document.getElementById('start-proxy');
+                            const startButton = document.getElementById('startProxy');
                             if (startButton) {
                                 startButton.textContent = isExisting ? 'Connect' : 'Create';
                             }
@@ -849,6 +849,12 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
 
                             // Update start proxy button state
                             updateStartProxyButton();
+
+                            // Send message to backend about parent branch selection
+                            vscode.postMessage({
+                                command: 'selectParentBranch',
+                                parentBranchId: this.value
+                            });
                         });
                     }
 
@@ -898,7 +904,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     updateStartProxyButton();
 
                     // Setup proxy buttons
-                    const startButton = document.getElementById('start-proxy');
+                    const startButton = document.getElementById('startProxy');
                     if (startButton) {
                         startButton.addEventListener('click', function() {
                             console.log('Start proxy clicked');
@@ -910,22 +916,30 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                             const isExisting = connectionTypeSelect.value === 'existing';
                             
                             // Get the appropriate branch ID based on connection type
-                            const activeBranchSelect = isExisting ? 
-                                document.getElementById('branch-select') : 
-                                document.getElementById('parent-branch-select');
+                            const branchSelect = document.getElementById('branch-select');
+                            const parentBranchSelect = document.getElementById('parent-branch-select');
                             
-                            const branchId = activeBranchSelect?.value;
+                            const branchId = isExisting ? branchSelect?.value : undefined;
+                            const parentBranchId = !isExisting ? parentBranchSelect?.value : undefined;
+                            
+                            console.log('Starting proxy with:', {
+                                isExisting,
+                                branchId,
+                                parentBranchId,
+                                driver: driverSelect?.value || 'postgres'
+                            });
                             
                             vscode.postMessage({
                                 command: 'startProxy',
                                 driver: driverSelect?.value || 'postgres',
-                                branchId: isExisting ? branchId : undefined,
-                                parentBranchId: !isExisting ? branchId : undefined
+                                isExisting,
+                                branchId,
+                                parentBranchId
                             });
                         });
                     }
 
-                    const stopButton = document.getElementById('stop-proxy');
+                    const stopButton = document.getElementById('stopProxy');
                     if (stopButton) {
                         stopButton.addEventListener('click', function() {
                             console.log('Stop proxy clicked');
@@ -994,8 +1008,8 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     const proxyButtonsContainer = document.querySelector('.proxy-buttons');
                     if (proxyButtonsContainer) {
                         if (currentState.connected) {
-                            proxyButtonsContainer.innerHTML = '<button id="stop-proxy" class="stop-button">Stop Proxy</button>';
-                            const stopButton = document.getElementById('stop-proxy');
+                            proxyButtonsContainer.innerHTML = '<button id="stopProxy" class="stop-button">Stop Proxy</button>';
+                            const stopButton = document.getElementById('stopProxy');
                             if (stopButton) {
                                 stopButton.disabled = false;
                                 stopButton.addEventListener('click', function() {
@@ -1008,8 +1022,8 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         } else {
                             const connectionTypeSelect = document.getElementById('connection-type-select');
                             const buttonText = connectionTypeSelect.value === 'existing' ? 'Connect' : 'Create';
-                            proxyButtonsContainer.innerHTML = \`<button id="start-proxy">\${buttonText}</button>\`;
-                            const startButton = document.getElementById('start-proxy');
+                            proxyButtonsContainer.innerHTML = \`<button id="startProxy">\${buttonText}</button>\`;
+                            const startButton = document.getElementById('startProxy');
                             if (startButton) {
                                 startButton.addEventListener('click', function() {
                                     console.log('Start proxy clicked');

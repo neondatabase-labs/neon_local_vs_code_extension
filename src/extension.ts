@@ -52,6 +52,9 @@ export class NeonLocalManager {
     private state: vscode.Memento;
     private isProxyRunning: boolean = false;
     private statusCheckInterval: NodeJS.Timeout | undefined;
+    private _parentBranchId?: string;
+    private branches: NeonBranch[] = [];
+    private _isStarting: boolean = false;
 
     constructor(context: vscode.ExtensionContext) {
         this.docker = new Dockerode();
@@ -77,8 +80,8 @@ export class NeonLocalManager {
             const wasRunning = this.isProxyRunning;
             this.isProxyRunning = containerInfo.State.Running;
             
-            // Only update UI if status changed
-            if (wasRunning !== this.isProxyRunning) {
+            // Only update UI if status changed and we're not in the process of starting
+            if (wasRunning !== this.isProxyRunning && !this._isStarting) {
                 console.log('Container status changed:', { wasRunning, isRunning: this.isProxyRunning });
                 await this.updateViewData();
             }
@@ -87,8 +90,8 @@ export class NeonLocalManager {
             const wasRunning = this.isProxyRunning;
             this.isProxyRunning = false;
             
-            // Only update UI if status changed
-            if (wasRunning !== this.isProxyRunning) {
+            // Only update UI if status changed and we're not in the process of starting
+            if (wasRunning !== this.isProxyRunning && !this._isStarting) {
                 console.log('Container not found or error:', error);
                 console.log('Container status changed:', { wasRunning, isRunning: this.isProxyRunning });
                 await this.updateViewData();
@@ -257,6 +260,7 @@ export class NeonLocalManager {
             }));
             
             console.log('Mapped branches:', JSON.stringify(branches, null, 2));
+            this.branches = branches;
             return branches;
         } catch (error: any) {
             console.error('Error fetching branches:', error);
@@ -284,7 +288,35 @@ export class NeonLocalManager {
 
     public setWebviewView(webviewView: vscode.WebviewView) {
         this.webviewView = webviewView;
-        this.updateViewData();
+        this.webviewView.webview.onDidReceiveMessage(async (message) => {
+            console.log('Received message:', message);
+            switch (message.command) {
+                case 'selectOrg':
+                    await this.handleOrgSelection(message.orgId);
+                    break;
+                case 'selectProject':
+                    await this.handleProjectSelection(message.projectId);
+                    break;
+                case 'selectBranch':
+                    await this.handleBranchSelection(message.branchId, message.restartProxy, message.driver);
+                    break;
+                case 'startProxy':
+                    await this.handleStartProxy(message.driver, message.isExisting, message.branchId, message.parentBranchId);
+                    break;
+                case 'stopProxy':
+                    await this.handleStopProxy();
+                    break;
+                case 'createBranch':
+                    await this.handleCreateBranch(message.driver, message.parentBranchId);
+                    break;
+                case 'showError':
+                    vscode.window.showErrorMessage(message.text);
+                    break;
+                case 'showInfo':
+                    vscode.window.showInformationMessage(message.text);
+                    break;
+            }
+        });
     }
 
     public async updateViewData() {
@@ -381,10 +413,11 @@ export class NeonLocalManager {
         }
     }
 
-    public async startContainer(branchId: string, driver: string, isExisting: boolean) {
+    public async startContainer(branchId: string, driver: string, isExisting: boolean): Promise<void> {
         console.log('Starting container for branch:', branchId, 'with driver:', driver, 'isExisting:', isExisting);
         
         try {
+            this._isStarting = true;
             const apiKey = await this.ensureAuthenticated();
             console.log('Authentication successful');
 
@@ -418,20 +451,35 @@ export class NeonLocalManager {
                 throw new Error('Failed to check port availability');
             }
 
-            console.log('Configuring container with:', {
-                project: this.currentProject,
-                branch: branchId,
-                driver: driver,
-                isExisting: isExisting
-            });
+            // Ensure any existing container is stopped and removed
+            try {
+                const existingContainer = await this.docker.getContainer('neon_local_vscode');
+                try {
+                    await existingContainer.stop();
+                    console.log('Stopped existing container');
+                } catch (error) {
+                    console.log('Container was not running');
+                }
+                await existingContainer.remove({ force: true });
+                console.log('Removed existing container');
+                // Wait a moment to ensure cleanup is complete
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            } catch (error) {
+                if (!(error instanceof Error && error.message.includes('No such container'))) {
+                    console.error('Error during container cleanup:', error);
+                    throw error;
+                }
+                console.log('No existing container to remove');
+            }
 
+            console.log("isExisting", isExisting);
             const containerConfig = {
                 Image: 'neondatabase/neon_local:latest',
                 name: 'neon_local_vscode',
                 Env: [
                     `NEON_API_KEY=${apiKey}`,
                     `NEON_PROJECT_ID=${this.currentProject}`,
-                    ...(isExisting ? [`BRANCH_ID=${branchId}`] : [`PARENT_BRANCH_ID=${branchId}`]),
+                    isExisting ? `BRANCH_ID=${branchId}` : `PARENT_BRANCH_ID=${branchId}`,
                     `DRIVER=${driver}`
                 ],
                 HostConfig: {
@@ -450,15 +498,6 @@ export class NeonLocalManager {
 
             console.log('Container config:', JSON.stringify(containerConfig, null, 2));
 
-            console.log('Removing any existing container...');
-            try {
-                const existingContainer = await this.docker.getContainer('neon_local_vscode');
-                await existingContainer.remove({ force: true });
-                console.log('Existing container removed');
-            } catch (error) {
-                console.log('No existing container to remove');
-            }
-
             console.log('Creating new container...');
             const container = await this.docker.createContainer(containerConfig);
             console.log('Container created, starting...');
@@ -476,20 +515,65 @@ export class NeonLocalManager {
                 console.log('Container log:', chunk.toString('utf8'));
             });
 
+            // Update state and UI in a single operation
             this.currentBranch = branchId;
             this.isProxyRunning = true;
             this.updateStatusBar();
-            await this.updateViewData();
+            
+            // Update the webview with all necessary data at once
+            const webview = this.getActiveWebview();
+            if (webview) {
+                const config = vscode.workspace.getConfiguration('neonLocal');
+                const connectionInfo = config.get<string>('driver') === 'postgres' 
+                    ? 'postgres://neon:npg@localhost:5432/<database_name>?sslmode=require'
+                    : 'postgres://neon:npg@localhost:5432/<database_name>?sslmode=no-verify\n\n' +
+                      'For serverless driver, also set:\n' +
+                      'neonConfig.fetchEndpoint = \'http://localhost:5432/sql\'';
+
+                webview.postMessage({
+                    command: 'updateStatus',
+                    connected: true,
+                    branch: this.currentBranch,
+                    loading: false,
+                    connectionInfo: connectionInfo
+                });
+            }
             
             vscode.window.showInformationMessage('Neon Local proxy started successfully');
         } catch (error) {
             console.error('Failed to start container:', error);
             this.isProxyRunning = false;
             this.updateStatusBar();
-            await this.updateViewData();
+            
+            // Update the webview with error state
+            const webview = this.getActiveWebview();
+            if (webview) {
+                webview.postMessage({
+                    command: 'updateStatus',
+                    connected: false,
+                    branch: undefined,
+                    loading: false
+                });
+            }
             
             const errorMessage = error instanceof Error ? error.message : String(error);
-            vscode.window.showErrorMessage(`Failed to start Neon Local proxy: ${errorMessage}`);
+            if (errorMessage.includes('container name "/neon_local_vscode" is already in use')) {
+                // If we get this error, try one more time after a delay
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                try {
+                    const existingContainer = await this.docker.getContainer('neon_local_vscode');
+                    await existingContainer.remove({ force: true });
+                    console.log('Removed conflicting container');
+                    // Retry the operation
+                    return this.startContainer(branchId, driver, isExisting);
+                } catch (retryError) {
+                    console.error('Failed to remove conflicting container:', retryError);
+                    throw new Error('Failed to start proxy: Container name conflict could not be resolved');
+                }
+            }
+            throw new Error(`Failed to start proxy: ${errorMessage}`);
+        } finally {
+            this._isStarting = false;
         }
     }
 
@@ -541,13 +625,17 @@ export class NeonLocalManager {
                             await this.handleStopProxy();
                             break;
                         case 'createBranch':
-                            await this.handleCreateBranch();
+                            await this.handleCreateBranch(message.driver, message.parentBranchId);
                             break;
                         case 'showInfo':
                             vscode.window.showInformationMessage(message.text);
                             break;
                         case 'showError':
                             vscode.window.showErrorMessage(message.text);
+                            break;
+                        case 'selectParentBranch':
+                            console.log('Parent branch selected:', message.parentBranchId);
+                            this.setParentBranchId(message.parentBranchId);
                             break;
                     }
                 } catch (error) {
@@ -809,27 +897,33 @@ export class NeonLocalManager {
     }
 
     public async handleStartProxy(driver: string, isExisting: boolean, branchId?: string, parentBranchId?: string) {
-        console.log('Handling start proxy request with driver:', driver, 'isExisting:', isExisting, 'branchId:', branchId, 'parentBranchId:', parentBranchId);
-        
-        let selectedBranch: string | undefined;
-        
-        if (isExisting) {
-            if (!branchId) {
-                vscode.window.showErrorMessage('Please select a branch before starting the proxy');
+        try {
+            if (!this.currentProject) {
+                vscode.window.showErrorMessage('Please select a project first');
                 return;
             }
-            selectedBranch = branchId;
-        } else {
-            if (!parentBranchId) {
+
+            if (!isExisting && !parentBranchId) {
                 vscode.window.showErrorMessage('Please select a parent branch before starting the proxy');
                 return;
             }
-            selectedBranch = parentBranchId;
-        }
 
-        try {
-            console.log('Starting proxy with connection type:', isExisting ? 'existing' : 'new', 'branch:', selectedBranch);
-            await this.startContainer(selectedBranch, driver, isExisting);
+            if (isExisting && !branchId) {
+                vscode.window.showErrorMessage('Please select a branch');
+                return;
+            }
+
+            // For existing branches, use the branchId directly
+            // For new branches, use the parentBranchId
+            const selectedBranchId = isExisting ? branchId : parentBranchId;
+
+            if (!selectedBranchId) {
+                vscode.window.showErrorMessage('No branch selected');
+                return;
+            }
+
+            console.log('Starting proxy with connection type:', isExisting ? 'existing' : 'new', 'branch:', selectedBranchId);
+            await this.startContainer(selectedBranchId, driver, isExisting);
         } catch (error) {
             console.error('Error in handleStartProxy:', error);
             vscode.window.showErrorMessage(`Failed to start proxy: ${error instanceof Error ? error.message : String(error)}`);
@@ -840,8 +934,65 @@ export class NeonLocalManager {
         await this.stopProxy();
     }
 
-    public async handleCreateBranch() {
-        await this.createBranch();
+    public async handleCreateBranch(driver: string, parentBranchId: string) {
+        try {
+            if (!this.currentProject) {
+                vscode.window.showErrorMessage('Please select a project first');
+                return;
+            }
+
+            if (!parentBranchId) {
+                vscode.window.showErrorMessage('Please select a parent branch');
+                return;
+            }
+
+            // Prompt for new branch name
+            const branchName = await vscode.window.showInputBox({
+                prompt: 'Enter a name for the new branch',
+                placeHolder: 'e.g., feature/new-feature',
+                validateInput: (value) => {
+                    if (!value) {
+                        return 'Branch name is required';
+                    }
+                    if (!/^[a-zA-Z0-9_-]+$/.test(value)) {
+                        return 'Branch name can only contain letters, numbers, underscores, and hyphens';
+                    }
+                    return null;
+                }
+            });
+
+            if (!branchName) {
+                return;
+            }
+
+            // Create the branch
+            const client = await this.getNeonApiClient();
+            const response = await client.post(`/projects/${this.currentProject}/branches`, {
+                branch: {
+                    name: branchName,
+                    parent_id: parentBranchId
+                }
+            });
+
+            if (!response.data || !response.data.branch) {
+                throw new Error('Failed to create branch: No branch data in response');
+            }
+
+            const newBranch = response.data.branch;
+            this.currentBranch = newBranch.id;
+            await this.saveState();
+
+            // Start the proxy with the new branch
+            await this.startContainer(newBranch.id, driver, true);
+
+            // Update the webview with the new branch
+            await this.updateViewData();
+
+            vscode.window.showInformationMessage(`Branch "${branchName}" created successfully`);
+        } catch (error) {
+            console.error('Error in handleCreateBranch:', error);
+            vscode.window.showErrorMessage(`Failed to create branch: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
     public async getMainViewHtml() {
@@ -923,9 +1074,29 @@ export class NeonLocalManager {
             throw new Error(`Failed to get view data: ${error}`);
         }
     }
+
+    public setParentBranchId(parentBranchId: string | undefined) {
+        this._parentBranchId = parentBranchId;
+    }
+
+    public getParentBranchId(): string | undefined {
+        return this._parentBranchId;
+    }
 }
 
 export async function activate(context: vscode.ExtensionContext) {
+    // If running in test mode, run the test suite and return
+    if (process.env.VSCODE_TEST_MODE) {
+        // Dynamically import the test runner and run it
+        try {
+            const testRunner = await import('./test/suite/index');
+            await testRunner.run();
+        } catch (err) {
+            console.error('Failed to run test suite:', err);
+        }
+        return;
+    }
+
     const neonLocal = new NeonLocalManager(context);
 
     // Register commands

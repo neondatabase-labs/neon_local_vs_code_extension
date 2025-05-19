@@ -195,6 +195,11 @@
             <select id="branch" disabled></select>
         </div>
 
+        <div class="form-group" id="parent-branch-group" style="display: none;">
+            <label for="parent-branch">Parent Branch</label>
+            <select id="parent-branch" disabled></select>
+        </div>
+
         <div class="form-group">
             <label for="driver">Driver</label>
             <select id="driver">
@@ -233,10 +238,16 @@
             const isExisting = connectionTypeSelect.value === 'existing';
             startButton.textContent = isExisting ? 'Connect' : 'Create';
             
-            // Update branch dropdown label
-            const branchLabel = document.querySelector('label[for="branch"]');
-            if (branchLabel) {
-                branchLabel.textContent = isExisting ? 'Branch' : 'Parent Branch';
+            // Show/hide appropriate branch selectors
+            const branchGroup = document.querySelector('.form-group:has(#branch)');
+            const parentBranchGroup = document.getElementById('parent-branch-group');
+            
+            if (isExisting) {
+                branchGroup.style.display = 'block';
+                parentBranchGroup.style.display = 'none';
+            } else {
+                branchGroup.style.display = 'none';
+                parentBranchGroup.style.display = 'block';
             }
         });
 
@@ -340,12 +351,11 @@
                     command: 'startProxy',
                     driver: driverSelect.value,
                     isExisting: true,
-                    branchId: branchSelect.value,
-                    parentBranchId: undefined
+                    branchId: branchSelect.value
                 });
             } else {
-                // For new branch, use the selected branch as parent
-                const parentBranchSelect = document.getElementById('parent-branch-select');
+                // For new branch, use the selected parent branch
+                const parentBranchSelect = document.getElementById('parent-branch');
                 if (!parentBranchSelect || !parentBranchSelect.value) {
                     vscode.postMessage({
                         command: 'showError',
@@ -358,7 +368,6 @@
                     command: 'startProxy',
                     driver: driverSelect.value,
                     isExisting: false,
-                    branchId: undefined,
                     parentBranchId: parentBranchSelect.value
                 });
             }
@@ -390,9 +399,12 @@
                     break;
                 case 'updateBranches':
                     console.log('Updating branches:', message.branches);
+                    // Update both branch selects with the same data
                     updateSelect('branch', message.branches);
+                    updateSelect('parent-branch', message.branches);
                     if (message.selectedBranch) {
                         document.getElementById('branch').value = message.selectedBranch;
+                        document.getElementById('parent-branch').value = message.selectedBranch;
                     }
                     break;
                 case 'updateStatus':
@@ -427,14 +439,17 @@
                 case 'updateData':
                     updateViewData(message.data);
                     break;
-                case 'getSelectedParentBranch':
-                    const parentBranchSelect = document.getElementById('parent-branch-select');
-                    if (parentBranchSelect && parentBranchSelect.value) {
-                        vscode.postMessage({
-                            command: 'selectedParentBranch',
-                            branchId: parentBranchSelect.value
-                        });
-                    }
+                case 'showError':
+                    vscode.postMessage({
+                        command: 'showError',
+                        text: message.text
+                    });
+                    break;
+                case 'showInfo':
+                    vscode.postMessage({
+                        command: 'showInfo',
+                        text: message.text
+                    });
                     break;
             }
         });
