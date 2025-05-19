@@ -293,11 +293,7 @@
 
         branchSelect.addEventListener('change', (event) => {
             const select = event.target;
-            if (select.value === 'create') {
-                vscode.postMessage({ command: 'createBranch' });
-                // Reset to default option
-                select.value = '';
-            } else if (select.value) {
+            if (select.value) {
                 const isProxyRunning = document.getElementById('stopProxy').style.display === 'block';
                 if (isProxyRunning) {
                     // Stop proxy first, then select new branch and restart
@@ -354,7 +350,7 @@
                     branchId: branchSelect.value
                 });
             } else {
-                // For new branch, use the selected parent branch
+                // For new branch, just send startProxy command
                 const parentBranchSelect = document.getElementById('parent-branch');
                 if (!parentBranchSelect || !parentBranchSelect.value) {
                     vscode.postMessage({
@@ -497,14 +493,6 @@
                 
                 // Enable the select
                 select.disabled = false;
-                
-                // If this is the project select, also enable branch creation
-                if (selectId === 'branch') {
-                    const createOption = document.createElement('option');
-                    createOption.value = 'create';
-                    createOption.textContent = '+ Create new branch';
-                    select.appendChild(createOption);
-                }
             } else {
                 // If no items, disable the select
                 select.disabled = true;

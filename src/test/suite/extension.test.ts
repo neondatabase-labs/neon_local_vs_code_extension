@@ -438,15 +438,15 @@ describe('Extension Test Suite', () => {
                 return Promise.resolve(undefined);
             };
 
-            // Call handleCreateBranch (simulate creating a new branch)
-            await testManager.handleCreateBranch('postgres', 'parent-branch-id');
+            // Call handleStartProxy with isExisting=false to simulate creating a new branch
+            await testManager.handleStartProxy('postgres', false, undefined, 'parent-branch-id');
 
             // Restore mocks
             vscode.window.showInputBox = originalShowInputBox;
             vscode.window.showInformationMessage = originalShowInformationMessage;
 
-            // Assert that the branch was created and notification shown
-            assert.ok(infoMessages.some(msg => msg.includes('created successfully')), 'Should show branch created notification');
+            // Assert that the proxy was started
+            assert.ok(infoMessages.some(msg => msg.includes('started successfully')), 'Should show proxy started notification');
             // Optionally, check that the proxy was started (could check webviewMessages or other side effects)
         });
     });

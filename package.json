@@ -10,10 +10,10 @@
     "Other"
   ],
   "activationEvents": [
+    "onStartupFinished",
     "onCommand:neon-local.configure",
     "onCommand:neon-local.showPanel",
     "onCommand:neon-local.stopProxy",
-    "onCommand:neon-local.createBranch",
     "onCommand:neon-local.clearAuth",
     "onView:neonLocalView"
   ],
@@ -23,35 +23,19 @@
     "commands": [
       {
         "command": "neon-local.configure",
-        "title": "Neon: Configure"
+        "title": "Neon Local: Configure"
       },
       {
         "command": "neon-local.showPanel",
-        "title": "Neon: Show Panel"
-      },
-      {
-        "command": "neon-local.startProxy",
-        "title": "Neon: Start Local Proxy"
+        "title": "Neon Local: Show Panel"
       },
       {
         "command": "neon-local.stopProxy",
-        "title": "Neon: Stop Proxy"
-      },
-      {
-        "command": "neon-local.createBranch",
-        "title": "Neon: Create Branch"
-      },
-      {
-        "command": "neon-local.switchBranch",
-        "title": "Neon: Switch Branch"
-      },
-      {
-        "command": "neon-local.deleteBranch",
-        "title": "Neon: Delete Branch"
+        "title": "Neon Local: Stop Proxy"
       },
       {
         "command": "neon-local.clearAuth",
-        "title": "Neon: Clear Authentication"
+        "title": "Neon Local: Clear Authentication"
       },
       {
         "command": "neonLocal.signIn",
@@ -111,11 +95,6 @@
       "view/title": [
         {
           "command": "neon-local.configure",
-          "when": "view == neonLocalView",
-          "group": "navigation"
-        },
-        {
-          "command": "neon-local.createBranch",
           "when": "view == neonLocalView",
           "group": "navigation"
         }

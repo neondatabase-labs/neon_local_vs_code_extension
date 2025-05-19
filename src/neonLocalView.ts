@@ -94,7 +94,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                             message.branchId,
                             message.parentBranchId
                         );
-                        // Force a view refresh after starting the proxy
+                        // Update view after starting proxy
                         await this.updateView();
                         break;
                     case 'stopProxy':

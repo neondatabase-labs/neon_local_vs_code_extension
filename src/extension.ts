@@ -300,14 +300,8 @@ export class NeonLocalManager {
                 case 'selectBranch':
                     await this.handleBranchSelection(message.branchId, message.restartProxy, message.driver);
                     break;
-                case 'startProxy':
-                    await this.handleStartProxy(message.driver, message.isExisting, message.branchId, message.parentBranchId);
-                    break;
                 case 'stopProxy':
                     await this.handleStopProxy();
-                    break;
-                case 'createBranch':
-                    await this.handleCreateBranch(message.driver, message.parentBranchId);
                     break;
                 case 'showError':
                     vscode.window.showErrorMessage(message.text);
@@ -418,6 +412,9 @@ export class NeonLocalManager {
         
         try {
             this._isStarting = true;
+            // Stop status check while starting
+            this.stopStatusCheck();
+            
             const apiKey = await this.ensureAuthenticated();
             console.log('Authentication successful');
 
@@ -540,6 +537,9 @@ export class NeonLocalManager {
             }
             
             vscode.window.showInformationMessage('Neon Local proxy started successfully');
+            
+            // Restart status check after container is started
+            this.startStatusCheck();
         } catch (error) {
             console.error('Failed to start container:', error);
             this.isProxyRunning = false;
@@ -618,14 +618,8 @@ export class NeonLocalManager {
                         case 'selectBranch':
                             await this.handleBranchSelection(message.branchId, message.restartProxy, message.driver);
                             break;
-                        case 'startProxy':
-                            await this.handleStartProxy(message.driver, message.isExisting, message.branchId, message.parentBranchId);
-                            break;
                         case 'stopProxy':
                             await this.handleStopProxy();
-                            break;
-                        case 'createBranch':
-                            await this.handleCreateBranch(message.driver, message.parentBranchId);
                             break;
                         case 'showInfo':
                             vscode.window.showInformationMessage(message.text);
@@ -677,74 +671,6 @@ export class NeonLocalManager {
             await this.showPanel();
         } catch (error) {
             vscode.window.showErrorMessage(`Authentication failed: ${error}`);
-        }
-    }
-
-    async createBranch() {
-        if (!this.currentProject) {
-            vscode.window.showErrorMessage('Please select a project first');
-            return;
-        }
-
-        try {
-            const client = await this.getNeonApiClient();
-            
-            // Get available branches for parent selection
-            const branches = await this.getBranches(this.currentProject);
-            const branchOptions = [
-                { label: 'No parent branch (create from main)', value: undefined },
-                ...branches.map(branch => ({ label: branch.name, value: branch.id }))
-            ];
-
-            // Let user select parent branch
-            const parentBranch = await vscode.window.showQuickPick(branchOptions, {
-                placeHolder: 'Select parent branch (optional)',
-                ignoreFocusOut: true
-            });
-
-            if (parentBranch === undefined) return; // User cancelled
-
-            const branchName = await vscode.window.showInputBox({
-                prompt: 'Enter new branch name',
-                ignoreFocusOut: true
-            });
-
-            if (!branchName) return;
-
-            const payload: any = {
-                branch: { name: branchName },
-                endpoints: [{ type: "read_write" }]
-            };
-
-            // Add parent_id if a parent branch was selected
-            if (parentBranch.value) {
-                payload.branch.parent_id = parentBranch.value;
-            }
-
-            const response = await client.post(`/projects/${this.currentProject}/branches`, payload);
-
-            const newBranch = response.data.branch;
-            vscode.window.showInformationMessage(`Created branch: ${newBranch.name}`);
-            
-            // Set the current branch to the newly created one
-            this.currentBranch = newBranch.id;
-            
-            // Update the webview to show the new branch and select it
-            await this.updateViewData();
-            
-            // Post a message to select the new branch in the dropdown
-            if (this.webviewPanel) {
-                this.webviewPanel.webview.postMessage({
-                    command: 'updateBranches',
-                    branches: (await this.getBranches(this.currentProject)).map(branch => ({ 
-                        id: branch.id, 
-                        name: branch.name 
-                    })),
-                    selectedBranch: this.currentBranch
-                });
-            }
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to create branch: ${error}`);
         }
     }
 
@@ -892,7 +818,7 @@ export class NeonLocalManager {
         await this.saveState();
         await this.checkContainerStatus();
         if (restartProxy) {
-            await this.startContainer(branchId, driver, false);
+            await this.startContainer(branchId, driver, true);
         }
     }
 
@@ -932,67 +858,6 @@ export class NeonLocalManager {
 
     public async handleStopProxy() {
         await this.stopProxy();
-    }
-
-    public async handleCreateBranch(driver: string, parentBranchId: string) {
-        try {
-            if (!this.currentProject) {
-                vscode.window.showErrorMessage('Please select a project first');
-                return;
-            }
-
-            if (!parentBranchId) {
-                vscode.window.showErrorMessage('Please select a parent branch');
-                return;
-            }
-
-            // Prompt for new branch name
-            const branchName = await vscode.window.showInputBox({
-                prompt: 'Enter a name for the new branch',
-                placeHolder: 'e.g., feature/new-feature',
-                validateInput: (value) => {
-                    if (!value) {
-                        return 'Branch name is required';
-                    }
-                    if (!/^[a-zA-Z0-9_-]+$/.test(value)) {
-                        return 'Branch name can only contain letters, numbers, underscores, and hyphens';
-                    }
-                    return null;
-                }
-            });
-
-            if (!branchName) {
-                return;
-            }
-
-            // Create the branch
-            const client = await this.getNeonApiClient();
-            const response = await client.post(`/projects/${this.currentProject}/branches`, {
-                branch: {
-                    name: branchName,
-                    parent_id: parentBranchId
-                }
-            });
-
-            if (!response.data || !response.data.branch) {
-                throw new Error('Failed to create branch: No branch data in response');
-            }
-
-            const newBranch = response.data.branch;
-            this.currentBranch = newBranch.id;
-            await this.saveState();
-
-            // Start the proxy with the new branch
-            await this.startContainer(newBranch.id, driver, true);
-
-            // Update the webview with the new branch
-            await this.updateViewData();
-
-            vscode.window.showInformationMessage(`Branch "${branchName}" created successfully`);
-        } catch (error) {
-            console.error('Error in handleCreateBranch:', error);
-            vscode.window.showErrorMessage(`Failed to create branch: ${error instanceof Error ? error.message : String(error)}`);
-        }
     }
 
     public async getMainViewHtml() {
@@ -1112,11 +977,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
     disposable = vscode.commands.registerCommand('neon-local.stopProxy', () => {
         neonLocal.stopProxy();
-    });
-    context.subscriptions.push(disposable);
-
-    disposable = vscode.commands.registerCommand('neon-local.createBranch', () => {
-        neonLocal.createBranch();
     });
     context.subscriptions.push(disposable);
 
