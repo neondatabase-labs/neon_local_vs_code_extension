@@ -2,8 +2,8 @@ import * as vscode from 'vscode';
 import axios from 'axios';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { AddressInfo } from 'net';
-import open from 'open';
 import * as crypto from 'crypto';
+import opener from 'opener';
 
 // Using the same client ID as neonctl
 const CLIENT_ID = 'neonctl';
@@ -202,11 +202,13 @@ export async function authenticate(): Promise<string> {
 
         // Open browser for authentication
         vscode.window.showInformationMessage('Please authenticate in your browser to continue.');
-        open(authUrl.toString()).catch((err: Error) => {
+        try {
+            opener(authUrl.toString());
+        } catch (err) {
             const msg = `Failed to open web browser. Please copy & paste this URL to authenticate: ${authUrl.toString()}`;
             vscode.window.showErrorMessage(msg);
             console.error(err);
-        });
+        }
     });
 }
 

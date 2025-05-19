@@ -138,6 +138,7 @@
     "@types/glob": "^8.1.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.10.0",
+    "@types/opener": "^1.4.3",
     "@types/sinon": "^17.0.4",
     "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^6.13.1",
@@ -156,6 +157,7 @@
     "axios": "^1.6.2",
     "docker-compose": "^0.24.2",
     "dockerode": "^4.0.0",
-    "open": "^10.1.1"
+    "open": "^10.1.1",
+    "opener": "^1.5.2"
   }
 }
