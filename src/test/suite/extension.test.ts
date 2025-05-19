@@ -70,7 +70,6 @@ describe('Extension Test Suite', () => {
             'neon-local.configure',
             'neon-local.showPanel',
             'neon-local.stopProxy',
-            'neon-local.createBranch',
             'neon-local.clearAuth'
         ];
         
@@ -198,8 +197,8 @@ describe('Extension Test Suite', () => {
                 currentBranch: (testManager as any).currentBranch
             });
 
-            // Start the proxy
-            await testManager.startContainer('test-branch', 'postgres', true);
+            // Start the proxy using handleStartProxy (existing branch)
+            await testManager.handleStartProxy('postgres', true, 'test-branch', undefined);
 
             // Verify that the notification was shown exactly once
             assert.strictEqual(notifications.length, 1, 'Should show exactly one notification');
@@ -301,8 +300,8 @@ describe('Extension Test Suite', () => {
             (testManager as any).docker = mockDocker;
             (testManager as any).getActiveWebview = () => mockWebview;
 
-            // Start the proxy
-            await testManager.startContainer('test-branch', 'postgres', true);
+            // Start the proxy using handleStartProxy (existing branch)
+            await testManager.handleStartProxy('postgres', true, 'test-branch', undefined);
 
             // Verify that the UI was updated correctly
             const statusUpdate = webviewMessages.find(msg => msg.command === 'updateStatus');

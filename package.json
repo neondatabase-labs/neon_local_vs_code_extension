@@ -92,13 +92,7 @@
       ]
     },
     "menus": {
-      "view/title": [
-        {
-          "command": "neon-local.configure",
-          "when": "view == neonLocalView",
-          "group": "navigation"
-        }
-      ]
+      
     }
   },
   "scripts": {

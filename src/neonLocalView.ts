@@ -364,17 +364,6 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
             </head>
             <body>
                 <div id="app">
-                    <div class="header">
-                        <div class="neon-logo">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M12 24C18.6274 24 24 18.6274 24 12C24 5.37258 18.6274 0 12 0C5.37258 0 0 5.37258 0 12C0 18.6274 5.37258 24 12 24Z" fill="currentColor"/>
-                                <path d="M17.0513 17.0513H13.7436V6.94873H17.0513V17.0513Z" fill="white"/>
-                                <path d="M10.4359 17.0513H7.12821V6.94873H10.4359V17.0513Z" fill="white"/>
-                            </svg>
-                        </div>
-                        <h1>Neon Local</h1>
-                    </div>
-
                     ${isConnected ? `
                     <div class="connection-status">
                         <div class="status-indicator connected">
@@ -1074,6 +1063,19 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     color: var(--vscode-editor-foreground);
                     line-height: 1.5;
                 }
+                .header {
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 20px;
+                }
+                .neon-logo {
+                    margin-right: 10px;
+                }
+                h1 {
+                    margin: 0;
+                    font-size: 20px;
+                    font-weight: 600;
+                }
                 select {
                     width: 100%;
                     padding: 8px;
@@ -1132,32 +1134,6 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     display: flex;
                     gap: 12px;
                     margin-top: 20px;
-                }
-                .header {
-                    display: flex;
-                    align-items: center;
-                    margin-bottom: 24px;
-                    gap: 12px;
-                    padding-bottom: 12px;
-                    border-bottom: 1px solid var(--vscode-panel-border);
-                }
-                .header h1 {
-                    margin: 0;
-                    font-size: 16px;
-                    font-weight: 600;
-                    color: var(--vscode-foreground);
-                }
-                .neon-logo {
-                    width: 24px;
-                    height: 24px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    color: #00E699;
-                }
-                select:disabled {
-                    opacity: 0.5;
-                    cursor: not-allowed;
                 }
                 .connection-details {
                     background-color: var(--vscode-editor-background);
