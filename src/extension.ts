@@ -325,6 +325,9 @@ export class NeonLocalManager {
                 case 'openSqlEditor':
                     await this.handleOpenSqlEditor();
                     break;
+                case 'launchPsql':
+                    await this.handleLaunchPsql();
+                    break;
             }
         });
     }
@@ -1085,6 +1088,77 @@ export class NeonLocalManager {
             opener(url);
         } catch (err) {
             let msg = 'Failed to open SQL editor.';
+            if (err && typeof err === 'object' && 'message' in err) {
+                msg += ' ' + (err as any).message;
+            } else if (typeof err === 'string') {
+                msg += ' ' + err;
+            }
+            vscode.window.showErrorMessage(msg);
+        }
+    }
+
+    private async handleLaunchPsql() {
+        if (!this.currentProject) {
+            vscode.window.showErrorMessage('No project selected.');
+            return;
+        }
+        let branchId: string | undefined = this.currentBranch;
+        try {
+            const neonLocalDir = path.join(this.context.globalStorageUri.fsPath, '.neon_local');
+            const branchesFile = path.join(neonLocalDir, '.branches');
+            if (fs.existsSync(branchesFile)) {
+                const fileContent = fs.readFileSync(branchesFile, 'utf-8').trim();
+                if (fileContent) {
+                    try {
+                        const branchesJson = JSON.parse(fileContent);
+                        const branchIds = Object.values(branchesJson)
+                            .map((v: any) => v && typeof v === 'object' ? v.branch_id : undefined)
+                            .filter((id: any) => typeof id === 'string');
+                        if (branchIds.length > 0) {
+                            branchId = branchIds[0];
+                        }
+                    } catch (err) {
+                        console.error('Failed to parse .branches JSON:', err);
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Error reading .branches file:', err);
+        }
+        if (!branchId) {
+            vscode.window.showErrorMessage('No branch ID found to launch psql.');
+            return;
+        }
+        // Query Neon API for databases and roles
+        try {
+            const client = await this.getNeonApiClient();
+            // Get databases
+            const dbResp = await client.get(`/projects/${this.currentProject}/branches/${branchId}/databases`);
+            const databases = dbResp.data?.databases?.map((db: any) => db.name) || [];
+            if (databases.length === 0) {
+                vscode.window.showErrorMessage('No databases found on this branch.');
+                return;
+            }
+            // Get roles
+            const rolesResp = await client.get(`/projects/${this.currentProject}/branches/${branchId}/roles`);
+            const roles = rolesResp.data?.roles?.map((role: any) => role.name) || [];
+            if (roles.length === 0) {
+                vscode.window.showErrorMessage('No roles found on this branch.');
+                return;
+            }
+            // Show quick pick for database
+            const selectedDb = await vscode.window.showQuickPick(databases, { placeHolder: 'Select Database', title: 'Launch psql terminal' });
+            if (!selectedDb) return;
+            // Show quick pick for role
+            const selectedRole = await vscode.window.showQuickPick(roles, { placeHolder: 'Select Role', title: 'Launch psql terminal' });
+            if (!selectedRole) return;
+            // Launch psql in integrated terminal
+            const connStr = `postgresql://neon:npg@localhost:5432/${selectedDb}_${selectedRole}?sslmode=require`;
+            const terminal = vscode.window.createTerminal({ name: 'psql' });
+            terminal.show();
+            terminal.sendText(`psql '${connStr}'`, true);
+        } catch (err) {
+            let msg = 'Failed to launch psql.';
             if (err && typeof err === 'object' && 'message' in err) {
                 msg += ' ' + (err as any).message;
             } else if (typeof err === 'string') {

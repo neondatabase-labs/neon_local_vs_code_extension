@@ -413,7 +413,8 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         ${isConnected ? 
                             `<button id="stopProxy" class="stop-button">Stop Proxy</button>
                              <button id="resetFromParent" class="reset-button">Reset from parent</button>
-                             <button id="openSqlEditor" class="sql-editor-button">Sql editor</button>` : 
+                             <button id="openSqlEditor" class="sql-editor-button">Sql editor</button>
+                             ${data.selectedDriver === 'postgres' ? '<button id="launchPsql" class="psql-button">psql</button>' : ''}` : 
                             `<button id="startProxy" ${!data.selectedBranch ? 'disabled' : ''}>${!data.connectionType || data.connectionType === 'existing' ? 'Connect' : 'Create'}</button>`
                         }
                     </div>
@@ -959,6 +960,14 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     if (sqlEditorButton) {
                         sqlEditorButton.addEventListener('click', function() {
                             vscode.postMessage({ command: 'openSqlEditor' });
+                        });
+                    }
+
+                    // Add event listener for launchPsql button
+                    const launchPsqlButton = document.getElementById('launchPsql');
+                    if (launchPsqlButton) {
+                        launchPsqlButton.addEventListener('click', function() {
+                            vscode.postMessage({ command: 'launchPsql' });
                         });
                     }
                 }
