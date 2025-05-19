@@ -411,7 +411,8 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
 
                     <div class="section proxy-buttons">
                         ${isConnected ? 
-                            `<button id="stopProxy" class="stop-button">Stop Proxy</button>` : 
+                            `<button id="stopProxy" class="stop-button">Stop Proxy</button>
+                             <button id="resetFromParent" class="reset-button">Reset from parent</button>` : 
                             `<button id="startProxy" ${!data.selectedBranch ? 'disabled' : ''}>${!data.connectionType || data.connectionType === 'existing' ? 'Connect' : 'Create'}</button>`
                         }
                     </div>
@@ -942,6 +943,14 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     const copyButton = document.querySelector('.copy-button');
                     if (copyButton) {
                         copyButton.addEventListener('click', copyConnectionString);
+                    }
+
+                    // Add event listener for resetFromParent button
+                    const resetButton = document.getElementById('resetFromParent');
+                    if (resetButton) {
+                        resetButton.addEventListener('click', function() {
+                            vscode.postMessage({ command: 'resetFromParent' });
+                        });
                     }
                 }
 

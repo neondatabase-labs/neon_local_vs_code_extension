@@ -96,6 +96,16 @@ export class NeonLocalManager {
                 console.log('Container status changed:', { wasRunning, isRunning: this.isProxyRunning });
                 await this.updateViewData();
             }
+            // Delete .branches file if it exists (not connected state)
+            try {
+                const neonLocalDir = path.join(this.context.globalStorageUri.fsPath, '.neon_local');
+                const branchesFile = path.join(neonLocalDir, '.branches');
+                if (fs.existsSync(branchesFile)) {
+                    fs.unlinkSync(branchesFile);
+                }
+            } catch (err) {
+                console.error('Failed to delete .branches file on not connected state:', err);
+            }
         }
     }
 
@@ -309,6 +319,9 @@ export class NeonLocalManager {
                 case 'showInfo':
                     vscode.window.showInformationMessage(message.text);
                     break;
+                case 'resetFromParent':
+                    await this.handleResetFromParent();
+                    break;
             }
         });
     }
@@ -412,12 +425,9 @@ export class NeonLocalManager {
         
         try {
             this._isStarting = true;
-            // Stop status check while starting
             this.stopStatusCheck();
-            
             const apiKey = await this.ensureAuthenticated();
             console.log('Authentication successful');
-
             if (!this.currentProject) {
                 throw new Error('No project selected');
             }
@@ -469,6 +479,13 @@ export class NeonLocalManager {
                 console.log('No existing container to remove');
             }
 
+            // Prepare volume mount for branch metadata
+            const neonLocalDir = path.join(this.context.globalStorageUri.fsPath, '.neon_local');
+            if (!fs.existsSync(neonLocalDir)) {
+                fs.mkdirSync(neonLocalDir, { recursive: true });
+            }
+            const volumeArg = `${neonLocalDir}:/tmp/.neon_local`;
+
             console.log("isExisting", isExisting);
             const containerConfig = {
                 Image: 'neondatabase/neon_local:latest',
@@ -483,7 +500,8 @@ export class NeonLocalManager {
                     PortBindings: {
                         '5432/tcp': [{ HostPort: '5432' }]
                     },
-                    AutoRemove: true
+                    AutoRemove: true,
+                    Binds: [volumeArg]
                 },
                 AttachStdin: false,
                 AttachStdout: true,
@@ -675,30 +693,54 @@ export class NeonLocalManager {
     }
 
     public async stopProxy() {
+        let stoppedSuccessfully = false;
         try {
             const container = await this.docker.getContainer('neon_local_vscode');
             await container.stop();
             await container.remove();
-            
+            stoppedSuccessfully = true;
             this.isProxyRunning = false;
             this.updateStatusBar();
             await this.updateViewData();
-            
+            // Delete .branches file only if stop was successful
+            try {
+                if (stoppedSuccessfully) {
+                    const neonLocalDir = path.join(this.context.globalStorageUri.fsPath, '.neon_local');
+                    const branchesFile = path.join(neonLocalDir, '.branches');
+                    if (fs.existsSync(branchesFile)) {
+                        fs.unlinkSync(branchesFile);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to delete .branches file on stopProxy:', err);
+            }
             vscode.window.showInformationMessage('Neon Local proxy stopped');
         } catch (error) {
             this.isProxyRunning = false;
-            
             // Check if the error is about the container already being removed
             const errorMessage = error instanceof Error ? error.message : String(error);
             if (errorMessage.includes('removal of container') && errorMessage.includes('is already in progress')) {
                 // Container is already being removed, just wait a moment and update the UI
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 await this.updateViewData();
+                // Delete .branches file only if stop was successful
+                try {
+                    if (stoppedSuccessfully) {
+                        const neonLocalDir = path.join(this.context.globalStorageUri.fsPath, '.neon_local');
+                        const branchesFile = path.join(neonLocalDir, '.branches');
+                        if (fs.existsSync(branchesFile)) {
+                            fs.unlinkSync(branchesFile);
+                        }
+                    }
+                } catch (err) {
+                    console.error('Failed to delete .branches file on stopProxy:', err);
+                }
                 vscode.window.showInformationMessage('Neon Local proxy stopped');
             } else {
                 // For other errors, show the error message
                 vscode.window.showErrorMessage(`Failed to stop proxy: ${errorMessage}`);
                 await this.updateViewData();
+                // Do not delete .branches file if stop failed
             }
         }
     }
@@ -946,6 +988,58 @@ export class NeonLocalManager {
 
     public getParentBranchId(): string | undefined {
         return this._parentBranchId;
+    }
+
+    private async handleResetFromParent() {
+        if (!this.currentProject) {
+            vscode.window.showErrorMessage('No project selected.');
+            return;
+        }
+        // Confirmation dialog
+        const confirm = await vscode.window.showWarningMessage(
+            'Are you sure you want to reset this branch from its parent? This operation cannot be undone.',
+            { modal: true },
+            'Reset'
+        );
+        if (confirm !== 'Reset') {
+            return;
+        }
+        let branchIdToReset: string | undefined = this.currentBranch;
+        try {
+            // Check if the proxy was started with PARENT_BRANCH_ID by looking for a .branches file
+            const neonLocalDir = path.join(this.context.globalStorageUri.fsPath, '.neon_local');
+            const branchesFile = path.join(neonLocalDir, '.branches');
+            if (fs.existsSync(branchesFile)) {
+                const fileContent = fs.readFileSync(branchesFile, 'utf-8').trim();
+                if (fileContent) {
+                    try {
+                        const branchesJson = JSON.parse(fileContent);
+                        // Use the first branch_id found in the object
+                        const first = Object.values(branchesJson)[0] as { branch_id?: string };
+                        if (first && typeof first === 'object' && first.branch_id) {
+                            branchIdToReset = first.branch_id;
+                        }
+                    } catch (err) {
+                        console.error('Failed to parse .branches JSON:', err);
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Error reading .branches file:', err);
+        }
+        if (!branchIdToReset) {
+            vscode.window.showErrorMessage('No branch ID found to reset.');
+            return;
+        }
+        try {
+            const client = await this.getNeonApiClient();
+            const url = `/projects/${this.currentProject}/branches/${branchIdToReset}/reset_to_parent`;
+            await client.post(url);
+            vscode.window.showInformationMessage('Branch reset successfully.');
+        } catch (error: any) {
+            console.error('Failed to reset branch to parent:', error);
+            vscode.window.showErrorMessage('Failed to reset branch to parent: ' + (error?.response?.data?.message || error.message || error.toString()));
+        }
     }
 }
 
