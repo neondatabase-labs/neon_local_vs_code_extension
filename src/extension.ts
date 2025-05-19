@@ -322,6 +322,9 @@ export class NeonLocalManager {
                 case 'resetFromParent':
                     await this.handleResetFromParent();
                     break;
+                case 'openSqlEditor':
+                    await this.handleOpenSqlEditor();
+                    break;
             }
         });
     }
@@ -1039,6 +1042,55 @@ export class NeonLocalManager {
         } catch (error: any) {
             console.error('Failed to reset branch to parent:', error);
             vscode.window.showErrorMessage('Failed to reset branch to parent: ' + (error?.response?.data?.message || error.message || error.toString()));
+        }
+    }
+
+    private async handleOpenSqlEditor() {
+        if (!this.currentProject) {
+            vscode.window.showErrorMessage('No project selected.');
+            return;
+        }
+        let branchIdToOpen: string | undefined = this.currentBranch;
+        try {
+            const neonLocalDir = path.join(this.context.globalStorageUri.fsPath, '.neon_local');
+            const branchesFile = path.join(neonLocalDir, '.branches');
+            if (fs.existsSync(branchesFile)) {
+                const fileContent = fs.readFileSync(branchesFile, 'utf-8').trim();
+                if (fileContent) {
+                    try {
+                        const branchesJson = JSON.parse(fileContent);
+                        // Use the first branch_id found in the object
+                        const branchIds = Object.values(branchesJson)
+                            .map((v: any) => v && typeof v === 'object' ? v.branch_id : undefined)
+                            .filter((id: any) => typeof id === 'string');
+                        if (branchIds.length > 0) {
+                            branchIdToOpen = branchIds[0];
+                        }
+                    } catch (err) {
+                        console.error('Failed to parse .branches JSON:', err);
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Error reading .branches file:', err);
+        }
+        if (!branchIdToOpen) {
+            vscode.window.showErrorMessage('No branch ID found to open SQL editor.');
+            return;
+        }
+        const url = `https://console.neon.tech/app/projects/${this.currentProject}/branches/${branchIdToOpen}/sql-editor`;
+        try {
+            // Use opener to open the URL in the user's default browser
+            const opener = require('opener');
+            opener(url);
+        } catch (err) {
+            let msg = 'Failed to open SQL editor.';
+            if (err && typeof err === 'object' && 'message' in err) {
+                msg += ' ' + (err as any).message;
+            } else if (typeof err === 'string') {
+                msg += ' ' + err;
+            }
+            vscode.window.showErrorMessage(msg);
         }
     }
 }
