@@ -36,10 +36,6 @@
       {
         "command": "neon-local.clearAuth",
         "title": "Neon Local: Clear Authentication"
-      },
-      {
-        "command": "neonLocal.signIn",
-        "title": "Sign in to Neon"
       }
     ],
     "configuration": {
@@ -47,15 +43,18 @@
       "properties": {
         "neonLocal.apiKey": {
           "type": "string",
-          "description": "Your Neon API Key"
+          "description": "API key for Neon authentication",
+          "scope": "application"
         },
         "neonLocal.refreshToken": {
           "type": "string",
-          "description": "OAuth refresh token"
+          "description": "Refresh token for Neon authentication",
+          "scope": "application"
         },
         "neonLocal.projectId": {
           "type": "string",
-          "description": "Your Neon Project ID"
+          "description": "Selected Neon project ID",
+          "scope": "application"
         },
         "neonLocal.driver": {
           "type": "string",
@@ -64,12 +63,24 @@
             "serverless"
           ],
           "default": "postgres",
-          "description": "Driver to use for connecting to Neon"
+          "description": "Database driver to use",
+          "scope": "application"
         },
         "neonLocal.deleteOnStop": {
           "type": "boolean",
-          "default": true,
-          "description": "Delete branch when stopping the proxy"
+          "default": false,
+          "description": "Whether to delete the container when stopping the proxy",
+          "scope": "application"
+        },
+        "neonLocal.connectionType": {
+          "type": "string",
+          "enum": [
+            "existing",
+            "new"
+          ],
+          "default": "existing",
+          "description": "Type of connection to create",
+          "scope": "application"
         }
       }
     },
@@ -101,10 +112,10 @@
     "watch": "webpack --watch",
     "package": "webpack --mode production --devtool hidden-source-map",
     "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . --outDir out --watch",
-    "pretest": "npm run compile-tests",
-    "test": "node ./out/test/runTest.js",
-    "lint": "eslint src --ext ts"
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
     "@types/dockerode": "^3.3.38",

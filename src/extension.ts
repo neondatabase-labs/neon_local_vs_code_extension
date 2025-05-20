@@ -171,14 +171,34 @@ export class NeonLocalManager {
         const apiKey = await this.ensureAuthenticated();
         console.log('Creating API client with key available:', !!apiKey);
         
-        return axios.create({
+        // Create axios instance with DNS resolution retry
+        const instance = axios.create({
             baseURL: 'https://console.neon.tech/api/v2',
             headers: {
                 'Authorization': `Bearer ${apiKey}`,
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
-            }
+            },
+            timeout: 10000, // 10 second timeout
+            validateStatus: status => status >= 200 && status < 300,
+            maxRedirects: 5,
+            proxy: false // Disable proxy to prevent DNS issues
         });
+
+        // Add retry interceptor
+        instance.interceptors.response.use(undefined, async (error) => {
+            if (error.code === 'ENOTFOUND') {
+                console.error('DNS resolution failed. Please check your internet connection.');
+                throw new Error('Cannot connect to Neon API. Please check your internet connection and try again.');
+            }
+            if (error.code === 'ECONNREFUSED') {
+                console.error('Connection refused. The Neon API might be temporarily unavailable.');
+                throw new Error('Cannot connect to Neon API. The service might be temporarily unavailable.');
+            }
+            throw error;
+        });
+
+        return instance;
     }
 
     private async getOrgs(): Promise<NeonOrg[]> {
@@ -220,6 +240,16 @@ export class NeonLocalManager {
                     status: error.response.status,
                     data: error.response.data
                 });
+            }
+            // Provide more user-friendly error messages
+            if (error.code === 'ENOTFOUND') {
+                throw new Error('Cannot connect to Neon API. Please check your internet connection and try again.');
+            }
+            if (error.code === 'ECONNREFUSED') {
+                throw new Error('Cannot connect to Neon API. The service might be temporarily unavailable.');
+            }
+            if (error.response?.status === 401) {
+                throw new Error('Authentication failed. Please sign in again.');
             }
             throw error;
         }
