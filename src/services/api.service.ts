@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import * as vscode from 'vscode';
 import { NeonBranch, NeonOrg, NeonProject } from '../types';
+import { refreshToken } from '../auth';
 
 export class NeonApiService {
     private apiClient: AxiosInstance | null = null;
@@ -19,13 +20,49 @@ export class NeonApiService {
             proxy: false
         });
 
-        // Add retry interceptor for DNS issues
+        // Add retry interceptor for DNS issues and token refresh
         instance.interceptors.response.use(undefined, async (error) => {
             if (error.code === 'ENOTFOUND') {
                 throw new Error('Cannot connect to Neon API. Please check your internet connection.');
             }
             if (error.code === 'ECONNREFUSED') {
                 throw new Error('Cannot connect to Neon API. The service might be temporarily unavailable.');
+            }
+
+            // Handle token expiration
+            if (error.response?.status === 401) {
+                const config = vscode.workspace.getConfiguration('neonLocal');
+                const refreshTokenStr = config.get<string>('refreshToken');
+                
+                if (refreshTokenStr) {
+                    try {
+                        // Get new access token
+                        const newAccessToken = await refreshToken(refreshTokenStr);
+                        
+                        // Update the failed request's authorization header
+                        error.config.headers['Authorization'] = `Bearer ${newAccessToken}`;
+                        
+                        // Update the API client's default authorization header
+                        instance.defaults.headers['Authorization'] = `Bearer ${newAccessToken}`;
+                        
+                        // Update stored API key
+                        await config.update('apiKey', newAccessToken, true);
+                        
+                        // Retry the failed request with the new token
+                        return instance(error.config);
+                    } catch (refreshError) {
+                        // If refresh fails, clear tokens and require re-authentication
+                        await config.update('apiKey', undefined, true);
+                        await config.update('refreshToken', undefined, true);
+                        this.clearApiClient();
+                        throw new Error('Session expired. Please sign in again.');
+                    }
+                } else {
+                    // No refresh token available
+                    await config.update('apiKey', undefined, true);
+                    this.clearApiClient();
+                    throw new Error('Session expired. Please sign in again.');
+                }
             }
             throw error;
         });
