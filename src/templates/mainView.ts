@@ -84,16 +84,16 @@ const getFormView = (
 ): string => `
     <div class="form-content">
         <div class="section">
-            <label for="connection-type-select">Connection Type</label>
-            <select id="connection-type-select">
+            <label for="connection-type">Connection Type</label>
+            <select id="connection-type">
                 <option value="existing" ${data.connectionType === 'existing' ? 'selected' : ''}>Connect to existing branch</option>
                 <option value="new" ${data.connectionType === 'new' ? 'selected' : ''}>Connect to new branch</option>
             </select>
         </div>
 
         <div class="section">
-            <label for="org-select">Organization</label>
-            <select id="org-select">
+            <label for="org">Organization</label>
+            <select id="org">
                 <option value="">Select Organization</option>
                 ${organizations.map((org) => `
                     <option value="${org.id}" ${org.id === data.selectedOrgId ? 'selected' : ''}>
@@ -104,8 +104,8 @@ const getFormView = (
         </div>
 
         <div class="section">
-            <label for="project-select">Project</label>
-            <select id="project-select" ${!data.selectedOrgId ? 'disabled' : ''}>
+            <label for="project">Project</label>
+            <select id="project" ${!data.selectedOrgId ? 'disabled' : ''}>
                 <option value="">Select Project</option>
                 ${projects.map((project) => `
                     <option value="${project.id}" ${project.id === data.selectedProjectId ? 'selected' : ''}>
@@ -116,8 +116,8 @@ const getFormView = (
         </div>
 
         <div class="section branch-dropdown existing-branch" style="display: ${data.connectionType === 'existing' ? 'block' : 'none'}">
-            <label for="branch-select">Branch</label>
-            <select id="branch-select" ${!data.selectedProjectId ? 'disabled' : ''}>
+            <label for="branch">Branch</label>
+            <select id="branch" ${!data.selectedProjectId ? 'disabled' : ''}>
                 <option value="">Select Branch</option>
                 ${branches.map((branch) => `
                     <option value="${branch.id}" ${branch.id === data.selectedBranchId ? 'selected' : ''}>
@@ -128,8 +128,8 @@ const getFormView = (
         </div>
 
         <div class="section branch-dropdown new-branch" style="display: ${data.connectionType === 'new' ? 'block' : 'none'}">
-            <label for="parent-branch-select">Parent Branch</label>
-            <select id="parent-branch-select" ${!data.selectedProjectId ? 'disabled' : ''}>
+            <label for="parent-branch">Parent Branch</label>
+            <select id="parent-branch" ${!data.selectedProjectId ? 'disabled' : ''}>
                 <option value="">Select Parent Branch</option>
                 ${branches.map((branch) => `
                     <option value="${branch.id}" ${branch.id === data.selectedBranchId ? 'selected' : ''}>
@@ -140,8 +140,8 @@ const getFormView = (
         </div>
 
         <div class="section">
-            <label for="driver-select">Driver</label>
-            <select id="driver-select" ${!data.selectedBranchId ? 'disabled' : ''}>
+            <label for="driver">Driver</label>
+            <select id="driver" ${!data.selectedBranchId ? 'disabled' : ''}>
                 <option value="neon" ${data.selectedDriver === 'neon' ? 'selected' : ''}>Neon Serverless</option>
                 <option value="postgres" ${(!data.selectedDriver || data.selectedDriver === 'postgres') ? 'selected' : ''}>PostgreSQL</option>
             </select>
@@ -159,7 +159,7 @@ const getProxyButtons = (data: ViewData, isConnected: boolean): string => {
         `;
     }
     return `
-        <button id="startProxy" ${!data.selectedBranch ? 'disabled' : ''}>
+        <button id="startProxy" ${!data.selectedBranchId ? 'disabled' : ''}>
             ${!data.connectionType || data.connectionType === 'existing' ? 'Connect' : 'Create'}
         </button>
     `;
@@ -210,12 +210,12 @@ const getClientScript = (data: ViewData): string => `
             const startButton = document.getElementById('startProxy');
             if (!startButton) return;
 
-            const orgSelect = document.getElementById('org-select');
-            const projectSelect = document.getElementById('project-select');
-            const branchSelect = document.getElementById('branch-select');
-            const parentBranchSelect = document.getElementById('parent-branch-select');
-            const driverSelect = document.getElementById('driver-select');
-            const connectionTypeSelect = document.getElementById('connection-type-select');
+            const orgSelect = document.getElementById('org');
+            const projectSelect = document.getElementById('project');
+            const branchSelect = document.getElementById('branch');
+            const parentBranchSelect = document.getElementById('parent-branch');
+            const driverSelect = document.getElementById('driver');
+            const connectionTypeSelect = document.getElementById('connection-type');
 
             const isExisting = connectionTypeSelect.value === 'existing';
             const branchValue = isExisting ? branchSelect?.value : parentBranchSelect?.value;
@@ -231,7 +231,7 @@ const getClientScript = (data: ViewData): string => `
 
         function initializeDropdowns() {
             // Setup connection type dropdown
-            const connectionTypeSelect = document.getElementById('connection-type-select');
+            const connectionTypeSelect = document.getElementById('connection-type');
             if (connectionTypeSelect) {
                 connectionTypeSelect.value = currentState.connectionType || 'existing';
                 connectionTypeSelect.addEventListener('change', function() {
@@ -257,17 +257,17 @@ const getClientScript = (data: ViewData): string => `
             }
 
             // Setup organization dropdown
-            const orgSelect = document.getElementById('org-select');
+            const orgSelect = document.getElementById('org');
             if (orgSelect) {
                 orgSelect.value = currentState.selectedOrgId || '';
                 orgSelect.addEventListener('change', function() {
                     currentState.selectedOrgId = this.value;
                     saveState();
                     
-                    const projectSelect = document.getElementById('project-select');
-                    const branchSelect = document.getElementById('branch-select');
-                    const parentBranchSelect = document.getElementById('parent-branch-select');
-                    const driverSelect = document.getElementById('driver-select');
+                    const projectSelect = document.getElementById('project');
+                    const branchSelect = document.getElementById('branch');
+                    const parentBranchSelect = document.getElementById('parent-branch');
+                    const driverSelect = document.getElementById('driver');
                     
                     if (projectSelect) {
                         projectSelect.value = '';
@@ -299,7 +299,7 @@ const getClientScript = (data: ViewData): string => `
             }
 
             // Setup project dropdown
-            const projectSelect = document.getElementById('project-select');
+            const projectSelect = document.getElementById('project');
             if (projectSelect) {
                 projectSelect.value = currentState.selectedProjectId || '';
                 projectSelect.disabled = !currentState.selectedOrgId;
@@ -307,9 +307,9 @@ const getClientScript = (data: ViewData): string => `
                     currentState.selectedProjectId = this.value;
                     saveState();
                     
-                    const branchSelect = document.getElementById('branch-select');
-                    const parentBranchSelect = document.getElementById('parent-branch-select');
-                    const driverSelect = document.getElementById('driver-select');
+                    const branchSelect = document.getElementById('branch');
+                    const parentBranchSelect = document.getElementById('parent-branch');
+                    const driverSelect = document.getElementById('driver');
                     
                     if (branchSelect) {
                         branchSelect.value = '';
@@ -336,8 +336,8 @@ const getClientScript = (data: ViewData): string => `
             }
 
             // Setup branch dropdowns
-            const branchSelect = document.getElementById('branch-select');
-            const parentBranchSelect = document.getElementById('parent-branch-select');
+            const branchSelect = document.getElementById('branch');
+            const parentBranchSelect = document.getElementById('parent-branch');
             
             if (branchSelect) {
                 branchSelect.value = currentState.selectedBranchId || '';
@@ -350,7 +350,7 @@ const getClientScript = (data: ViewData): string => `
                         parentBranchSelect.value = this.value;
                     }
                     
-                    const driverSelect = document.getElementById('driver-select');
+                    const driverSelect = document.getElementById('driver');
                     if (driverSelect) {
                         driverSelect.disabled = !this.value;
                     }
@@ -377,7 +377,7 @@ const getClientScript = (data: ViewData): string => `
                         branchSelect.value = this.value;
                     }
                     
-                    const driverSelect = document.getElementById('driver-select');
+                    const driverSelect = document.getElementById('driver');
                     if (driverSelect) {
                         driverSelect.disabled = !this.value;
                     }
@@ -392,7 +392,7 @@ const getClientScript = (data: ViewData): string => `
             }
 
             // Setup driver dropdown
-            const driverSelect = document.getElementById('driver-select');
+            const driverSelect = document.getElementById('driver');
             if (driverSelect) {
                 driverSelect.value = currentState.selectedDriver || 'postgres';
                 driverSelect.disabled = !currentState.selectedBranchId;
@@ -410,12 +410,12 @@ const getClientScript = (data: ViewData): string => `
                     this.disabled = true;
                     this.textContent = 'Creating...';
                     
-                    const connectionTypeSelect = document.getElementById('connection-type-select');
-                    const driverSelect = document.getElementById('driver-select');
+                    const connectionTypeSelect = document.getElementById('connection-type');
+                    const driverSelect = document.getElementById('driver');
                     const isExisting = connectionTypeSelect.value === 'existing';
                     
-                    const branchSelect = document.getElementById('branch-select');
-                    const parentBranchSelect = document.getElementById('parent-branch-select');
+                    const branchSelect = document.getElementById('branch');
+                    const parentBranchSelect = document.getElementById('parent-branch');
                     
                     const branchId = isExisting ? branchSelect?.value : undefined;
                     const parentBranchId = !isExisting ? parentBranchSelect?.value : undefined;
@@ -486,47 +486,70 @@ const getClientScript = (data: ViewData): string => `
         // Handle all incoming messages
         window.addEventListener('message', event => {
             const message = event.data;
+            console.log('Webview received message:', message);
             
             switch (message.command) {
-                case 'updateStatus':
-                    currentState.connected = message.connected;
-                    currentState.connectionInfo = message.connectionInfo;
+                case 'updateViewData':
+                    console.log('Updating view data with:', message.data);
+                    currentState = {
+                        ...currentState,
+                        organizations: message.data.orgs || [],
+                        projects: message.data.projects || [],
+                        branches: message.data.branches || [],
+                        connected: message.data.connected,
+                        connectionInfo: message.data.connectionInfo,
+                        selectedOrgId: message.data.selectedOrgId,
+                        selectedProjectId: message.data.selectedProjectId,
+                        selectedBranchId: message.data.selectedBranchId,
+                        selectedDriver: message.data.selectedDriver || 'postgres',
+                        connectionType: message.data.connectionType || 'existing'
+                    };
                     saveState();
-                    if (currentState.connected !== message.connected) {
-                        vscode.postMessage({ command: 'refresh' });
-                    }
-                    break;
                     
-                case 'updateProjects':
-                    currentState.projects = message.projects;
-                    saveState();
-                    const projectSelect = document.getElementById('project-select');
+                    // Update dropdowns with new data
+                    const orgSelect = document.getElementById('org');
+                    const projectSelect = document.getElementById('project');
+                    const branchSelect = document.getElementById('branch');
+                    const parentBranchSelect = document.getElementById('parent-branch');
+                    
+                    if (orgSelect) {
+                        console.log('Updating org select with:', message.data.orgs);
+                        while (orgSelect.options.length > 1) {
+                            orgSelect.remove(1);
+                        }
+                        message.data.orgs.forEach(org => {
+                            const option = document.createElement('option');
+                            option.value = org.id;
+                            option.text = org.name;
+                            option.selected = org.id === currentState.selectedOrgId;
+                            orgSelect.add(option);
+                        });
+                    }
+                    
                     if (projectSelect) {
+                        console.log('Updating project select with:', message.data.projects);
                         while (projectSelect.options.length > 1) {
                             projectSelect.remove(1);
                         }
-                        message.projects.forEach(project => {
+                        message.data.projects.forEach(project => {
                             const option = document.createElement('option');
                             option.value = project.id;
                             option.text = project.name;
                             option.selected = project.id === currentState.selectedProjectId;
-                            projectSelect.add(option);
+                            projectSelect.appendChild(option);
                         });
-                        projectSelect.disabled = !currentState.selectedOrgId;
+                        // Enable project select if we have projects, regardless of org selection
+                        projectSelect.disabled = message.data.projects.length === 0;
+                        console.log('Project select updated, disabled:', projectSelect.disabled);
                     }
-                    break;
                     
-                case 'updateBranches':
-                    currentState.branches = message.branches;
-                    saveState();
-                    const branchSelect = document.getElementById('branch-select');
-                    const parentBranchSelect = document.getElementById('parent-branch-select');
                     if (branchSelect && parentBranchSelect) {
+                        console.log('Updating branch selects with:', message.data.branches);
                         [branchSelect, parentBranchSelect].forEach(select => {
                             while (select.options.length > 1) {
                                 select.remove(1);
                             }
-                            message.branches.forEach(branch => {
+                            message.data.branches.forEach(branch => {
                                 const option = document.createElement('option');
                                 option.value = branch.id;
                                 option.text = branch.name;
@@ -535,6 +558,16 @@ const getClientScript = (data: ViewData): string => `
                             });
                             select.disabled = !currentState.selectedProjectId;
                         });
+                    }
+                    break;
+                    
+                case 'updateStatus':
+                    console.log('Updating status:', message);
+                    currentState.connected = message.connected;
+                    currentState.connectionInfo = message.connectionInfo;
+                    saveState();
+                    if (currentState.connected !== message.connected) {
+                        vscode.postMessage({ command: 'refresh' });
                     }
                     break;
             }

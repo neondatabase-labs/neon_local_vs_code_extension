@@ -1,21 +1,38 @@
 import * as vscode from 'vscode';
 
+export interface NeonBranch {
+    id: string;
+    name: string;
+    project_id: string;
+    parent_id: string | null;
+}
+
+export interface NeonProject {
+    id: string;
+    name: string;
+    org_id: string;
+}
+
+export interface NeonOrg {
+    id: string;
+    name: string;
+}
+
 export interface ViewData {
-    connected?: boolean;
-    connectionInfo?: string;
-    orgs?: Array<{ id: string; name: string }>;
-    projects?: Array<{ id: string; name: string }>;
-    branches?: Array<{ id: string; name: string }>;
+    orgs: NeonOrg[];
+    projects: NeonProject[];
+    branches: NeonBranch[];
     selectedOrgId?: string;
-    selectedProjectId?: string;
-    selectedBranchId?: string;
-    selectedDriver?: string;
     selectedOrgName?: string;
+    selectedProjectId?: string;
     selectedProjectName?: string;
+    selectedBranchId?: string;
     selectedBranchName?: string;
-    selectedBranch?: any;
-    loading?: boolean;
+    selectedDriver?: string;
+    connected: boolean;
+    isStarting: boolean;
     connectionType?: 'existing' | 'new';
+    connectionInfo?: string;
 }
 
 export interface WebviewMessage {

@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { NeonLocalManager } from '../../extension';
+import { NeonLocalManager } from '../../types';
+import { NeonLocalExtension } from '../../extension';
 
 console.log('Loading test file...');
 
@@ -186,7 +187,7 @@ describe('Extension Test Suite', () => {
             };
 
             // Create a test instance with mocked dependencies
-            const testManager = new NeonLocalManager(mockContext);
+            const testManager = new NeonLocalExtension(mockContext);
             (testManager as any).docker = mockDocker;
             (testManager as any).getActiveWebview = () => mockWebview;
             
@@ -296,7 +297,7 @@ describe('Extension Test Suite', () => {
             };
 
             // Create a test instance with mocked dependencies
-            const testManager = new NeonLocalManager(mockContext);
+            const testManager = new NeonLocalExtension(mockContext);
             (testManager as any).docker = mockDocker;
             (testManager as any).getActiveWebview = () => mockWebview;
 
@@ -418,7 +419,7 @@ describe('Extension Test Suite', () => {
             };
 
             // Create a test instance with mocked dependencies
-            const testManager = new NeonLocalManager(mockContext);
+            const testManager = new NeonLocalExtension(mockContext);
             (testManager as any).docker = mockDocker;
             (testManager as any).getActiveWebview = () => mockWebview;
             (testManager as any).getNeonApiClient = async () => mockApiClient;
