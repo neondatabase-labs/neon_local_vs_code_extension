@@ -413,7 +413,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
 
                     <div class="section proxy-buttons">
                         ${isConnected ? 
-                            `<button id="stopProxy" class="stop-button">Stop Proxy</button>
+                            `<button id="stopProxy" class="stop-button">Disconnect</button>
                              <button id="resetFromParent" class="reset-button">Reset from parent</button>
                              <button id="openSqlEditor" class="sql-editor-button">Sql editor</button>
                              ${data.selectedDriver === 'postgres' ? '<button id="launchPsql" class="psql-button">psql</button>' : ''}` : 
@@ -580,6 +580,36 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                                       connectionTypeSelect?.value;
 
                     startButton.disabled = !allSelected;
+                }
+
+                function handleContainerDeleted() {
+                    // Reset connection state
+                    currentState.connected = false;
+                    currentState.connectionInfo = undefined;
+                    saveState();
+
+                    // Show disconnected state
+                    const app = document.getElementById('app');
+                    if (app) {
+                        // Re-render the form content
+                        app.innerHTML = \`
+                            \${${JSON.stringify(this.getFormContent(data))}}
+                            <div class="section proxy-buttons">
+                                <button id="startProxy" \${!currentState.selectedBranchId ? 'disabled' : ''}>
+                                    \${!currentState.connectionType || currentState.connectionType === 'existing' ? 'Connect' : 'Create'}
+                                </button>
+                            </div>
+                        \`;
+
+                        // Re-initialize all event listeners
+                        initializeDropdowns();
+                    }
+
+                    // Show notification
+                    vscode.postMessage({
+                        command: 'showError',
+                        text: 'Connection lost. The proxy container was stopped or removed.'
+                    });
                 }
 
                 function updateBranchDropdowns(branches) {
@@ -949,7 +979,7 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                         stopButton.addEventListener('click', function() {
                             console.log('Stop proxy clicked');
                             this.disabled = true;
-                            this.textContent = 'Stopping...';
+                            this.textContent = 'Disconnecting...';
                             vscode.postMessage({ command: 'stopProxy' });
                         });
                     }
@@ -993,10 +1023,15 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     switch (message.command) {
                         case 'updateStatus':
                             console.log('Status update received:', message);
-                            currentState.connected = message.connected;
-                            currentState.connectionInfo = message.connectionInfo;
-                            saveState();
-                            updateStatus(message);
+                            if (currentState.connected && !message.connected) {
+                                // Container was deleted or stopped unexpectedly
+                                handleContainerDeleted();
+                            } else {
+                                currentState.connected = message.connected;
+                                currentState.connectionInfo = message.connectionInfo;
+                                saveState();
+                                updateStatus(message);
+                            }
                             break;
                         case 'updateProjects':
                             console.log('Projects update received:', message.projects);
@@ -1037,14 +1072,14 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     const proxyButtonsContainer = document.querySelector('.proxy-buttons');
                     if (proxyButtonsContainer) {
                         if (currentState.connected) {
-                            proxyButtonsContainer.innerHTML = '<button id="stopProxy" class="stop-button">Stop Proxy</button>';
+                            proxyButtonsContainer.innerHTML = '<button id="stopProxy" class="stop-button">Disconnect</button>';
                             const stopButton = document.getElementById('stopProxy');
                             if (stopButton) {
                                 stopButton.disabled = false;
                                 stopButton.addEventListener('click', function() {
                                     console.log('Stop proxy clicked');
                                     this.disabled = true;
-                                    this.textContent = 'Stopping...';
+                                    this.textContent = 'Disconnecting...';
                                     vscode.postMessage({ command: 'stopProxy' });
                                 });
                             }
@@ -1099,7 +1134,6 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                 body {
                     padding: 20px;
                     font-family: var(--vscode-font-family);
-                    background-color: var(--vscode-editor-background);
                     color: var(--vscode-editor-foreground);
                     line-height: 1.5;
                 }
@@ -1176,7 +1210,6 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     margin-top: 20px;
                 }
                 .connection-details {
-                    background-color: var(--vscode-editor-background);
                     padding: 0;
                     margin-top: 8px;
                 }

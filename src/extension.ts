@@ -45,7 +45,6 @@ interface ViewData {
 export class NeonLocalManager {
     private docker: Dockerode;
     private context: vscode.ExtensionContext;
-    private statusBarItem: vscode.StatusBarItem;
     public currentBranch: string | undefined;
     private webviewPanel: vscode.WebviewPanel | undefined;
     public currentOrg: string | undefined;
@@ -62,9 +61,6 @@ export class NeonLocalManager {
         this.docker = new Dockerode();
         this.context = context;
         this.state = context.globalState;
-        this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
-        this.statusBarItem.show();
-        this.updateStatusBar();
 
         // Restore state from memento
         this.currentOrg = this.state.get('neonLocal.currentOrg');
@@ -85,6 +81,21 @@ export class NeonLocalManager {
             // Only update UI if status changed and we're not in the process of starting
             if (wasRunning !== this.isProxyRunning && !this._isStarting) {
                 console.log('Container status changed:', { wasRunning, isRunning: this.isProxyRunning });
+                
+                // If container stopped unexpectedly, clean up state
+                if (!this.isProxyRunning) {
+                    // Delete .branches file if it exists (not connected state)
+                    try {
+                        const neonLocalDir = path.join(this.context.globalStorageUri.fsPath, '.neon_local');
+                        const branchesFile = path.join(neonLocalDir, '.branches');
+                        if (fs.existsSync(branchesFile)) {
+                            fs.unlinkSync(branchesFile);
+                        }
+                    } catch (err) {
+                        console.error('Failed to delete .branches file on container stop:', err);
+                    }
+                }
+                
                 await this.updateViewData();
             }
         } catch (error) {
@@ -96,17 +107,28 @@ export class NeonLocalManager {
             if (wasRunning !== this.isProxyRunning && !this._isStarting) {
                 console.log('Container not found or error:', error);
                 console.log('Container status changed:', { wasRunning, isRunning: this.isProxyRunning });
-                await this.updateViewData();
-            }
-            // Delete .branches file if it exists (not connected state)
-            try {
-                const neonLocalDir = path.join(this.context.globalStorageUri.fsPath, '.neon_local');
-                const branchesFile = path.join(neonLocalDir, '.branches');
-                if (fs.existsSync(branchesFile)) {
-                    fs.unlinkSync(branchesFile);
+                
+                // Delete .branches file if it exists (not connected state)
+                try {
+                    const neonLocalDir = path.join(this.context.globalStorageUri.fsPath, '.neon_local');
+                    const branchesFile = path.join(neonLocalDir, '.branches');
+                    if (fs.existsSync(branchesFile)) {
+                        fs.unlinkSync(branchesFile);
+                    }
+                } catch (err) {
+                    console.error('Failed to delete .branches file on container not found:', err);
                 }
-            } catch (err) {
-                console.error('Failed to delete .branches file on not connected state:', err);
+                
+                // Update the webview with disconnected state
+                const webview = this.getActiveWebview();
+                if (webview) {
+                    webview.postMessage({
+                        command: 'updateStatus',
+                        connected: false,
+                        branch: undefined,
+                        loading: false
+                    });
+                }
             }
         }
     }
@@ -283,14 +305,6 @@ export class NeonLocalManager {
                 });
             }
             throw error;
-        }
-    }
-
-    private updateStatusBar() {
-        if (this.currentBranch) {
-            this.statusBarItem.text = `$(database) Neon: ${this.currentBranch}`;
-        } else {
-            this.statusBarItem.text = '$(database) Neon: Not Connected';
         }
     }
 
@@ -544,7 +558,6 @@ export class NeonLocalManager {
             // Update state and UI in a single operation
             this.currentBranch = branchId;
             this.isProxyRunning = true;
-            this.updateStatusBar();
             
             // Update the webview with all necessary data at once
             const webview = this.getActiveWebview();
@@ -572,7 +585,6 @@ export class NeonLocalManager {
         } catch (error) {
             console.error('Failed to start container:', error);
             this.isProxyRunning = false;
-            this.updateStatusBar();
             
             // Update the webview with error state
             const webview = this.getActiveWebview();
@@ -711,7 +723,6 @@ export class NeonLocalManager {
             await container.remove();
             stoppedSuccessfully = true;
             this.isProxyRunning = false;
-            this.updateStatusBar();
             
             // Store the current branch selection before updating view
             const selectedBranchId = this.currentBranch;
