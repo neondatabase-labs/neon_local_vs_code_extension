@@ -29,15 +29,17 @@ interface ViewData {
     orgs: { id: string; name: string }[];
     projects: { id: string; name: string }[];
     branches: { id: string; name: string }[];
-    selectedOrg: string | undefined;
-    selectedProject: string | undefined;
-    selectedBranch: string | undefined;
+    selectedOrgId: string | undefined;
+    selectedProjectId: string | undefined;
+    selectedBranchId: string | undefined;
+    selectedParentBranchId: string | undefined;
     selectedOrgName: string | undefined;
     selectedProjectName: string | undefined;
     selectedBranchName: string | undefined;
     connected: boolean;
     loading: boolean;
     connectionInfo: string | undefined;
+    connectionType: 'existing' | 'new' | undefined;
 }
 
 export class NeonLocalManager {
@@ -492,6 +494,9 @@ export class NeonLocalManager {
             }
             const volumeArg = `${neonLocalDir}:/tmp/.neon_local`;
 
+            // Convert 'neon' driver value to 'serverless' for the container
+            const containerDriver = driver === 'neon' ? 'serverless' : driver;
+
             console.log("isExisting", isExisting);
             const containerConfig = {
                 Image: 'neondatabase/neon_local:latest',
@@ -500,7 +505,7 @@ export class NeonLocalManager {
                     `NEON_API_KEY=${apiKey}`,
                     `NEON_PROJECT_ID=${this.currentProject}`,
                     isExisting ? `BRANCH_ID=${branchId}` : `PARENT_BRANCH_ID=${branchId}`,
-                    `DRIVER=${driver}`
+                    `DRIVER=${containerDriver}`
                 ],
                 HostConfig: {
                     PortBindings: {
@@ -707,7 +712,16 @@ export class NeonLocalManager {
             stoppedSuccessfully = true;
             this.isProxyRunning = false;
             this.updateStatusBar();
+            
+            // Store the current branch selection before updating view
+            const selectedBranchId = this.currentBranch;
+            
             await this.updateViewData();
+            
+            // Restore the branch selection after view update
+            this.currentBranch = selectedBranchId;
+            await this.saveState();
+            
             // Delete .branches file only if stop was successful
             try {
                 if (stoppedSuccessfully) {
@@ -728,7 +742,16 @@ export class NeonLocalManager {
             if (errorMessage.includes('removal of container') && errorMessage.includes('is already in progress')) {
                 // Container is already being removed, just wait a moment and update the UI
                 await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Store the current branch selection before updating view
+                const selectedBranchId = this.currentBranch;
+                
                 await this.updateViewData();
+                
+                // Restore the branch selection after view update
+                this.currentBranch = selectedBranchId;
+                await this.saveState();
+                
                 // Delete .branches file only if stop was successful
                 try {
                     if (stoppedSuccessfully) {
@@ -917,19 +940,24 @@ export class NeonLocalManager {
             // Ensure we're authenticated before proceeding
             await this.ensureAuthenticated();
 
+            const config = vscode.workspace.getConfiguration('neonLocal');
+            const connectionType = config.get<'existing' | 'new'>('connectionType');
+
             const data: ViewData = {
                 orgs: [],
                 projects: [],
                 branches: [],
-                selectedOrg: this.currentOrg,
-                selectedProject: this.currentProject,
-                selectedBranch: this.currentBranch,
+                selectedOrgId: this.currentOrg,
+                selectedProjectId: this.currentProject,
+                selectedBranchId: connectionType === 'existing' ? this.currentBranch : undefined,
+                selectedParentBranchId: connectionType === 'new' ? this.currentBranch : undefined,
                 selectedOrgName: undefined,
                 selectedProjectName: undefined,
                 selectedBranchName: undefined,
                 connected: this.isProxyRunning,
                 loading: false,
-                connectionInfo: undefined
+                connectionInfo: undefined,
+                connectionType: connectionType
             };
 
             // Get organizations

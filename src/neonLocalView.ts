@@ -348,6 +348,8 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
             organizations: data.orgs,
             selectedOrgId: data.selectedOrgId,
             connected: isConnected,
+            connectionInfo: data.connectionInfo,
+            connectionType: data.connectionType,
             selectedOrgName: data.selectedOrgName,
             selectedProjectName: data.selectedProjectName,
             selectedBranchName: data.selectedBranchName,
@@ -600,15 +602,18 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
 
                     // Add new options to both dropdowns
                     branches.forEach(branch => {
+                        // Create option for branch dropdown
                         const option = document.createElement('option');
                         option.value = branch.id;
                         option.text = branch.name;
                         option.selected = branch.id === currentSelection;
-                        
-                        // Clone the option for the parent branch dropdown
-                        const parentOption = option.cloneNode(true);
-                        
                         branchSelect.add(option);
+                        
+                        // Create option for parent branch dropdown
+                        const parentOption = document.createElement('option');
+                        parentOption.value = branch.id;
+                        parentOption.text = branch.name;
+                        parentOption.selected = branch.id === currentSelection;
                         parentBranchSelect.add(parentOption);
                     });
 
@@ -802,9 +807,20 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     const parentBranchSelect = document.getElementById('parent-branch-select');
                     
                     if (branchSelect) {
+                        // Set initial value from state
+                        if (currentState.selectedBranchId) {
+                            branchSelect.value = currentState.selectedBranchId;
+                            branchSelect.disabled = !currentState.selectedProjectId;
+                        }
+
                         branchSelect.addEventListener('change', function() {
                             console.log('Branch selected:', this.value);
                             currentState.selectedBranchId = this.value;
+                            
+                            // Also update parent branch select to maintain sync
+                            if (parentBranchSelect) {
+                                parentBranchSelect.value = this.value;
+                            }
                             
                             const driverSelect = document.getElementById('driver-select');
                             if (driverSelect) {
@@ -827,9 +843,20 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                     }
 
                     if (parentBranchSelect) {
+                        // Set initial value from state
+                        if (currentState.selectedBranchId) {
+                            parentBranchSelect.value = currentState.selectedBranchId;
+                            parentBranchSelect.disabled = !currentState.selectedProjectId;
+                        }
+
                         parentBranchSelect.addEventListener('change', function() {
                             console.log('Parent branch selected:', this.value);
                             currentState.selectedBranchId = this.value;
+                            
+                            // Also update branch select to maintain sync
+                            if (branchSelect) {
+                                branchSelect.value = this.value;
+                            }
                             
                             const driverSelect = document.getElementById('driver-select');
                             if (driverSelect) {
@@ -842,7 +869,6 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
                             // Update start proxy button state
                             updateStartProxyButton();
 
-                            // Send message to backend about parent branch selection
                             vscode.postMessage({
                                 command: 'selectParentBranch',
                                 parentBranchId: this.value
@@ -868,19 +894,6 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
 
                             // Update start proxy button state
                             updateStartProxyButton();
-                            
-                            const connectionTypeSelect = document.getElementById('connection-type-select');
-                            const isExisting = connectionTypeSelect.value === 'existing';
-                            const activeBranchSelect = isExisting ? branchSelect : parentBranchSelect;
-                            
-                            if (activeBranchSelect && activeBranchSelect.value) {
-                                vscode.postMessage({
-                                    command: 'selectBranch',
-                                    branchId: activeBranchSelect.value,
-                                    restartProxy: true,
-                                    driver: this.value
-                                });
-                            }
                         });
                     }
 
