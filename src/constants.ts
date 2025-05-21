@@ -19,6 +19,7 @@ export const DOCKER = {
 } as const;
 
 export const VIEW_TYPES = {
-    NEON_LOCAL: 'neonLocalView',
+    CONNECT: 'neonLocalConnect',
+    DATABASE: 'neonLocalDatabase',
     SIGN_IN: 'neonLocal.signIn'
 } as const; 

@@ -4,8 +4,9 @@ import { NeonApiService } from './services/api.service';
 import { StateService } from './services/state.service';
 import { WebViewService } from './services/webview.service';
 import { SignInWebviewProvider } from './signInView';
-import { NeonLocalViewProvider } from './neonLocalView';
 import { NeonLocalManager, ViewData } from './types';
+import { ConnectViewProvider } from './connectView';
+import { DatabaseViewProvider } from './databaseView';
 
 export class NeonLocalExtension implements NeonLocalManager {
     private dockerService: DockerService;
@@ -55,10 +56,12 @@ export class NeonLocalExtension implements NeonLocalManager {
 
     private registerViews() {
         const signInProvider = new SignInWebviewProvider(this.context.extensionUri);
-        const neonLocalProvider = new NeonLocalViewProvider(this.context.extensionUri, this);
+        const connectProvider = new ConnectViewProvider(this.context.extensionUri, this);
+        const databaseProvider = new DatabaseViewProvider(this.context.extensionUri, this);
 
         this.context.subscriptions.push(
-            vscode.window.registerWebviewViewProvider('neonLocalView', neonLocalProvider)
+            vscode.window.registerWebviewViewProvider('neonLocalConnect', connectProvider),
+            vscode.window.registerWebviewViewProvider('neonLocalDatabase', databaseProvider)
         );
     }
 

@@ -1,13 +1,13 @@
 import * as vscode from 'vscode';
 import { authenticate } from './auth';
 import { ConfigurationManager, Logger, debounce } from './utils';
-import { DEBOUNCE_DELAY, SUCCESS_MESSAGE_DELAY, VIEW_RETRY_DELAY, VIEW_TYPES } from './constants';
+import { DEBOUNCE_DELAY, VIEW_TYPES } from './constants';
 import { ViewData, WebviewMessage, NeonLocalManager } from './types';
 import { getMainHtml } from './templates/mainView';
 import { getSignInHtml } from './templates/signIn';
 
-export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = VIEW_TYPES.NEON_LOCAL;
+export class ConnectViewProvider implements vscode.WebviewViewProvider {
+    public static readonly viewType = VIEW_TYPES.CONNECT;
     private _view?: vscode.WebviewView;
     private _configurationChangeListener: vscode.Disposable;
     private _updateViewTimeout?: NodeJS.Timeout;
@@ -155,4 +155,4 @@ export class NeonLocalViewProvider implements vscode.WebviewViewProvider {
             this._isUpdating = false;
         }
     }
-}
+} 

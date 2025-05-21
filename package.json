@@ -97,8 +97,13 @@
       "neon-local": [
         {
           "type": "webview",
-          "id": "neonLocalView",
-          "name": "Neon Local"
+          "id": "neonLocalConnect",
+          "name": "Connect"
+        },
+        {
+          "type": "webview",
+          "id": "neonLocalDatabase",
+          "name": "Database"
         }
       ]
     },
