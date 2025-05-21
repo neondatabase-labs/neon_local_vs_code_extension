@@ -38,13 +38,14 @@ export interface ViewData {
     branches: NeonBranch[];
     databases: NeonDatabase[];
     roles: NeonRole[];
-    selectedOrgId?: string;
-    selectedOrgName?: string;
+    selectedOrgId: string;
+    selectedOrgName: string;
     selectedProjectId?: string;
     selectedProjectName?: string;
-    selectedBranchId?: string;
+    selectedBranchId: string;
     selectedBranchName?: string;
-    selectedDriver?: string;
+    parentBranchName?: string;
+    selectedDriver: string;
     selectedDatabase?: string;
     selectedRole?: string;
     connected: boolean;

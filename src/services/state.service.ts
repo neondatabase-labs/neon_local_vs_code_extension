@@ -238,12 +238,27 @@ export class StateService {
             
         // For branch selection, use currentlyConnectedBranch logic
         const activeBranchId = this._isProxyRunning ? this.currentlyConnectedBranch : this._currentBranch;
-        const selectedBranch = activeBranchId ? 
+        let selectedBranch = activeBranchId ? 
             branches.find(branch => branch.id === activeBranchId) : null;
+
+        // Find the parent branch
+        const parentBranch = this._parentBranchId ? 
+            branches.find(branch => branch.id === this._parentBranchId) : null;
+
+        // If we're connected and using a new branch, but couldn't find the branch in the list,
+        // use the parent branch name with " (New)" appended
+        if (this._isProxyRunning && this._connectionType === 'new' && !selectedBranch) {
+            selectedBranch = {
+                ...parentBranch!,
+                id: activeBranchId || '',
+                name: `${parentBranch?.name || ''} (New)`
+            };
+        }
 
         console.log('Selected org:', selectedOrg);
         console.log('Selected project:', selectedProject);
         console.log('Selected branch:', selectedBranch);
+        console.log('Parent branch:', parentBranch);
         console.log('Active branch ID:', activeBranchId);
         console.log('Projects to display:', projects);
 
@@ -264,6 +279,7 @@ export class StateService {
             selectedProjectName: selectedProject?.name,
             selectedBranchId: activeBranchId || '',
             selectedBranchName: selectedBranch?.name,
+            parentBranchName: parentBranch?.name,
             selectedDriver: this._selectedDriver,
             selectedDatabase: this._selectedDatabase,
             selectedRole: this._selectedRole,

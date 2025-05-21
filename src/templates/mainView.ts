@@ -33,7 +33,7 @@ const getConnectedView = (data: ViewData): string => `
     <div class="connection-status">
         <div class="status-indicator connected">
             <span class="status-dot"></span>
-            Connected
+            Connected to ${data.selectedBranchName || 'branch'}
         </div>
     </div>
 
@@ -47,9 +47,15 @@ const getConnectedView = (data: ViewData): string => `
             <div class="detail-value">${data.selectedProjectName || 'Not selected'}</div>
         </div>
         <div class="detail-row">
-            <div class="detail-label">Parent Branch</div>
+            <div class="detail-label">Branch</div>
             <div class="detail-value">${data.selectedBranchName || 'Not selected'}</div>
         </div>
+        ${data.connectionType === 'new' ? `
+        <div class="detail-row">
+            <div class="detail-label">Parent Branch</div>
+            <div class="detail-value">${data.parentBranchName || 'Not selected'}</div>
+        </div>
+        ` : ''}
         <div class="detail-row">
             <div class="detail-label">Driver</div>
             <div class="detail-value">${data.selectedDriver === 'serverless' ? 'Neon Serverless' : 'PostgreSQL'}</div>

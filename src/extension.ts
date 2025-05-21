@@ -462,6 +462,13 @@ export class NeonLocalExtension implements NeonLocalManager {
             console.log(`Container started with driver: ${containerDriver}`);
             this.stateService.selectedDriver = containerDriver;
             this.stateService.isStarting = false;
+
+            // For new branches, refresh the branch list to get the new branch
+            if (!isExisting && this.stateService.currentProject) {
+                const branches = await this.apiService.getBranches(this.stateService.currentProject);
+                this.stateService.branches = branches;
+            }
+
             await this.updateViewData();
         } catch (error) {
             this.stateService.isStarting = false;

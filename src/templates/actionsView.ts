@@ -8,7 +8,7 @@ export const getActionsHtml = (data: ViewData): string => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Actions</title>
+        <title>DatabaseActions</title>
         ${getStyles()}
     </head>
     <body>

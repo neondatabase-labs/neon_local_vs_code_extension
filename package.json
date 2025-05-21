@@ -119,12 +119,12 @@
         {
           "type": "webview",
           "id": "neonLocalDatabase",
-          "name": "Database"
+          "name": "Local Connection String"
         },
         {
           "type": "webview",
           "id": "neonLocalActions",
-          "name": "Actions"
+          "name": "Database Actions"
         }
       ]
     },
