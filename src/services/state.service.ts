@@ -158,6 +158,11 @@ export class StateService {
         console.log('Selected branch:', selectedBranch);
         console.log('Projects to display:', projects);
 
+        // Generate connection info based on driver
+        const connectionInfo = isProxyRunning ? 
+            'postgres://neon:npg@localhost:5432/neondb?sslmode=require' :
+            undefined;
+
         const viewData = {
             orgs,
             projects,
@@ -171,7 +176,8 @@ export class StateService {
             selectedDriver: this._selectedDriver,
             connected: isProxyRunning,
             isStarting,
-            connectionType: this._connectionType
+            connectionType: this._connectionType,
+            connectionInfo
         };
 
         console.log('Returning view data:', viewData);

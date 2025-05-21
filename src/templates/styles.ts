@@ -75,8 +75,12 @@ export const getStyles = (): string => `
     }
     .proxy-buttons {
         display: flex;
-        gap: 12px;
+        flex-direction: column;
+        gap: 8px;
         margin-top: 20px;
+    }
+    .proxy-buttons button {
+        margin: 0;
     }
     .connection-details {
         padding: 0;
@@ -205,6 +209,13 @@ export const getStyles = (): string => `
     @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
+    }
+    .stop-button, .reset-button, .sql-editor-button, .psql-button {
+        background-color: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+    }
+    .stop-button:hover, .reset-button:hover, .sql-editor-button:hover, .psql-button:hover {
+        background-color: var(--vscode-button-hoverBackground);
     }
 </style>
 `; 

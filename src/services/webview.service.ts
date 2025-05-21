@@ -50,14 +50,15 @@ export class WebViewService {
         }
     }
 
-    public updateConnectionStatus(connected: boolean, branch?: string) {
+    public updateConnectionStatus(connected: boolean, branch?: string, connectionInfo?: string) {
         const webview = this.getActiveWebview();
         if (webview) {
             webview.postMessage({
                 command: 'updateStatus',
                 connected,
                 branch,
-                loading: false
+                loading: false,
+                connectionInfo
             });
         }
     }
