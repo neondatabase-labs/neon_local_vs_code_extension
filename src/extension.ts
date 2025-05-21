@@ -97,6 +97,50 @@ export class NeonLocalExtension implements NeonLocalManager {
                 // Open SQL Editor URL
                 const url = `https://console.neon.tech/app/projects/${this.stateService.currentProject}/branches/${branchId}/sql-editor?database=${selectedDatabase}`;
                 vscode.env.openExternal(vscode.Uri.parse(url));
+            }),
+            vscode.commands.registerCommand('neon-local.openTableView', async () => {
+                if (!this.stateService.currentProject || !this.stateService.isProxyRunning) {
+                    vscode.window.showErrorMessage('No active project or proxy connection.');
+                    return;
+                }
+
+                // Determine which branch ID to use
+                let branchId: string;
+                if (this.stateService.connectionType === 'new') {
+                    // For new branches, read from the file
+                    branchId = await this.stateService.currentlyConnectedBranch;
+                    if (!branchId) {
+                        vscode.window.showErrorMessage('Could not determine branch ID. Please wait for the connection to be established.');
+                        return;
+                    }
+                } else {
+                    // For existing branches, use the selected branch
+                    branchId = this.stateService.currentBranch || '';
+                    if (!branchId) {
+                        vscode.window.showErrorMessage('No branch selected.');
+                        return;
+                    }
+                }
+
+                // Get list of databases
+                const databases = this._databases.map(db => db.name);
+                if (databases.length === 0) {
+                    vscode.window.showErrorMessage('No databases available.');
+                    return;
+                }
+
+                // Ask user to select a database
+                const selectedDatabase = await vscode.window.showQuickPick(databases, {
+                    placeHolder: 'Select a database to view tables'
+                });
+
+                if (!selectedDatabase) {
+                    return; // User cancelled
+                }
+
+                // Open Table View URL with database parameter
+                const url = `https://console.neon.tech/app/projects/${this.stateService.currentProject}/branches/${branchId}/tables?database=${selectedDatabase}`;
+                vscode.env.openExternal(vscode.Uri.parse(url));
             })
         );
     }

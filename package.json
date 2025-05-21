@@ -40,6 +40,10 @@
       {
         "command": "neon-local.openSqlEditor",
         "title": "Neon Local: Open SQL Editor"
+      },
+      {
+        "command": "neon-local.openTableView",
+        "title": "Neon Local: Open Table View"
       }
     ],
     "configuration": {

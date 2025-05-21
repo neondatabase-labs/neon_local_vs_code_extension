@@ -45,6 +45,9 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
                 case 'openSqlEditor':
                     await vscode.commands.executeCommand('neon-local.openSqlEditor');
                     break;
+                case 'openTableView':
+                    await vscode.commands.executeCommand('neon-local.openTableView');
+                    break;
                 case 'launchPsql':
                     await vscode.commands.executeCommand('neon-local.launchPsql');
                     break;

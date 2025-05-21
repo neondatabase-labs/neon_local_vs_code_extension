@@ -235,15 +235,19 @@ export class StateService {
         // Find the selected project and branch
         const selectedProject = this._currentProject ? 
             projects.find(project => project.id === this._currentProject) : null;
-        const selectedBranch = this._currentBranch ? 
-            branches.find(branch => branch.id === this._currentBranch) : null;
+            
+        // For branch selection, use currentlyConnectedBranch logic
+        const activeBranchId = this._isProxyRunning ? this.currentlyConnectedBranch : this._currentBranch;
+        const selectedBranch = activeBranchId ? 
+            branches.find(branch => branch.id === activeBranchId) : null;
 
         console.log('Selected org:', selectedOrg);
         console.log('Selected project:', selectedProject);
         console.log('Selected branch:', selectedBranch);
+        console.log('Active branch ID:', activeBranchId);
         console.log('Projects to display:', projects);
 
-        // Generate connection info based on driver
+        // Generate connection info based on driver and active branch
         const connectionInfo = isProxyRunning ? 
             `postgres://neon:npg@localhost:5432/${this._selectedDatabase || 'neondb'}${this._selectedRole ? `_${this._selectedRole}` : ''}?sslmode=require` :
             undefined;
@@ -258,7 +262,7 @@ export class StateService {
             selectedOrgName,
             selectedProjectId: this._currentProject,
             selectedProjectName: selectedProject?.name,
-            selectedBranchId: this._currentBranch,
+            selectedBranchId: activeBranchId || '',
             selectedBranchName: selectedBranch?.name,
             selectedDriver: this._selectedDriver,
             selectedDatabase: this._selectedDatabase,

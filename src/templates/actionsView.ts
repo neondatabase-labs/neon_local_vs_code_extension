@@ -27,6 +27,9 @@ const getActionsContent = (data: ViewData): string => `
             <button id="resetFromParent" class="action-button" ${!data.selectedBranchId ? 'disabled' : ''}>
                 Reset from Parent
             </button>
+            <button id="openTableView" class="action-button">
+                Open Table View
+            </button>
             <button id="openSqlEditor" class="action-button">
                 Open SQL Editor
             </button>
@@ -67,6 +70,8 @@ const getClientScript = (): string => `
                     vscode.postMessage({ command: 'resetFromParent' });
                 } else if (e.target.id === 'openSqlEditor') {
                     vscode.postMessage({ command: 'openSqlEditor' });
+                } else if (e.target.id === 'openTableView') {
+                    vscode.postMessage({ command: 'openTableView' });
                 } else if (e.target.id === 'launchPsql') {
                     vscode.postMessage({ command: 'launchPsql' });
                 }
