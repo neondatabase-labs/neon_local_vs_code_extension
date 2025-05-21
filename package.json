@@ -44,6 +44,10 @@
       {
         "command": "neon-local.openTableView",
         "title": "Neon Local: Open Table View"
+      },
+      {
+        "command": "neon-local.launchPsql",
+        "title": "Neon Local: Launch PSQL"
       }
     ],
     "configuration": {

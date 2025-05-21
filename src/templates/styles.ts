@@ -223,7 +223,7 @@ export const getStyles = (): string => `
     .action-group {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 0px;
     }
     .action-button {
         width: 100%;

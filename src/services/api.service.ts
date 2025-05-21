@@ -175,6 +175,31 @@ export class NeonApiService {
         }
     }
 
+    public async getBranchEndpoint(projectId: string, branchId: string): Promise<string> {
+        try {
+            const client = await this.ensureApiClient();
+            const response = await client.get(`/projects/${projectId}/branches/${branchId}/endpoints`);
+            const endpoints = response.data.endpoints || [];
+            const readWriteEndpoint = endpoints.find((endpoint: any) => endpoint.type === 'read_write');
+            if (!readWriteEndpoint) {
+                throw new Error('No read_write endpoint found for branch');
+            }
+            return readWriteEndpoint.host;
+        } catch (error) {
+            throw new Error(`Failed to fetch branch endpoint: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    public async getRolePassword(projectId: string, branchId: string, roleName: string): Promise<string> {
+        try {
+            const client = await this.ensureApiClient();
+            const response = await client.get(`/projects/${projectId}/branches/${branchId}/roles/${roleName}/reveal_password`);
+            return response.data.password;
+        } catch (error) {
+            throw new Error(`Failed to get role password: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
     public async resetBranchToParent(projectId: string, branchId: string): Promise<void> {
         try {
             const client = await this.ensureApiClient();

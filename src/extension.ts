@@ -182,6 +182,80 @@ export class NeonLocalExtension implements NeonLocalManager {
                 // Open Table View URL with database parameter
                 const url = `https://console.neon.tech/app/projects/${this.stateService.currentProject}/branches/${branchId}/tables?database=${selectedDatabase}`;
                 vscode.env.openExternal(vscode.Uri.parse(url));
+            }),
+            vscode.commands.registerCommand('neon-local.launchPsql', async () => {
+                if (!this.stateService.currentProject || !this.stateService.isProxyRunning) {
+                    vscode.window.showErrorMessage('No active project or proxy connection.');
+                    return;
+                }
+
+                // Determine which branch ID to use
+                let branchId: string;
+                if (this.stateService.connectionType === 'new') {
+                    // For new branches, read from the file
+                    branchId = await this.stateService.currentlyConnectedBranch;
+                    if (!branchId) {
+                        vscode.window.showErrorMessage('Could not determine branch ID. Please wait for the connection to be established.');
+                        return;
+                    }
+                } else {
+                    // For existing branches, use the selected branch
+                    branchId = this.stateService.currentBranch || '';
+                    if (!branchId) {
+                        vscode.window.showErrorMessage('No branch selected.');
+                        return;
+                    }
+                }
+
+                // Get list of databases
+                const databases = this._databases.map(db => db.name);
+                if (databases.length === 0) {
+                    vscode.window.showErrorMessage('No databases available.');
+                    return;
+                }
+
+                // Ask user to select a database
+                const selectedDatabase = await vscode.window.showQuickPick(databases, {
+                    placeHolder: 'Select a database'
+                });
+
+                if (!selectedDatabase) {
+                    return; // User cancelled
+                }
+
+                // Get list of roles
+                const roles = this._roles.map(role => role.name);
+                if (roles.length === 0) {
+                    vscode.window.showErrorMessage('No roles available.');
+                    return;
+                }
+
+                // Ask user to select a role
+                const selectedRole = await vscode.window.showQuickPick(roles, {
+                    placeHolder: 'Select a role'
+                });
+
+                if (!selectedRole) {
+                    return; // User cancelled
+                }
+
+                try {
+                    // Get the branch endpoint and role password
+                    const [endpoint, password] = await Promise.all([
+                        this.apiService.getBranchEndpoint(this.stateService.currentProject, branchId),
+                        this.apiService.getRolePassword(this.stateService.currentProject, branchId, selectedRole)
+                    ]);
+
+                    // Create the psql connection string
+                    const connectionString = `postgresql://${selectedRole}:${password}@${endpoint}/${selectedDatabase}?sslmode=require`;
+
+                    // Create a new terminal and run the psql command
+                    const terminal = vscode.window.createTerminal('Neon PSQL');
+                    terminal.show();
+                    terminal.sendText(`psql '${connectionString}'`);
+                } catch (error) {
+                    this.handleError(error);
+                }
             })
         );
     }
