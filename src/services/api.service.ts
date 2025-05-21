@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import * as vscode from 'vscode';
-import { NeonBranch, NeonOrg, NeonProject } from '../types';
+import { NeonBranch, NeonOrg, NeonProject, NeonDatabase, NeonRole } from '../types';
 import { refreshToken } from '../auth';
 
 export class NeonApiService {
@@ -150,6 +150,28 @@ export class NeonApiService {
             return response.data;
         } catch (error) {
             throw new Error(`Failed to create branch: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    public async getDatabases(projectId: string, branchId: string): Promise<NeonDatabase[]> {
+        try {
+            const client = await this.ensureApiClient();
+            const response = await client.get(`/projects/${projectId}/branches/${branchId}/databases`);
+            // Ensure we return an array of databases
+            return Array.isArray(response.data) ? response.data : response.data.databases || [];
+        } catch (error) {
+            throw new Error(`Failed to fetch databases: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    public async getRoles(projectId: string, branchId: string): Promise<NeonRole[]> {
+        try {
+            const client = await this.ensureApiClient();
+            const response = await client.get(`/projects/${projectId}/branches/${branchId}/roles`);
+            // Ensure we return an array of roles
+            return Array.isArray(response.data) ? response.data : response.data.roles || [];
+        } catch (error) {
+            throw new Error(`Failed to fetch roles: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
 } 

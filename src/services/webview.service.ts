@@ -3,14 +3,21 @@ import { ViewData } from '../types';
 
 export class WebViewService {
     private webviewPanel?: vscode.WebviewPanel;
-    private webviewView?: vscode.WebviewView;
+    private webviews: Map<string, vscode.WebviewView> = new Map();
 
     public setWebviewView(webviewView: vscode.WebviewView) {
-        this.webviewView = webviewView;
+        this.webviews.set(webviewView.viewType, webviewView);
     }
 
-    public getActiveWebview(): vscode.Webview | undefined {
-        return this.webviewPanel?.webview || this.webviewView?.webview;
+    public getActiveWebviews(): vscode.Webview[] {
+        const webviews: vscode.Webview[] = [];
+        if (this.webviewPanel?.webview) {
+            webviews.push(this.webviewPanel.webview);
+        }
+        for (const view of this.webviews.values()) {
+            webviews.push(view.webview);
+        }
+        return webviews;
     }
 
     public showPanel(context: vscode.ExtensionContext) {
@@ -38,21 +45,19 @@ export class WebViewService {
 
     public updateViewData(viewData: ViewData) {
         console.log('WebViewService: Updating view data:', viewData);
-        const webview = this.getActiveWebview();
-        if (webview) {
-            console.log('WebViewService: Sending updateViewData message to webview');
+        const webviews = this.getActiveWebviews();
+        console.log(`WebViewService: Updating ${webviews.length} registered views`);
+        for (const webview of webviews) {
             webview.postMessage({
                 command: 'updateViewData',
                 data: viewData
             });
-        } else {
-            console.log('WebViewService: No active webview found');
         }
     }
 
     public updateConnectionStatus(connected: boolean, branch?: string, connectionInfo?: string) {
-        const webview = this.getActiveWebview();
-        if (webview) {
+        const webviews = this.getActiveWebviews();
+        for (const webview of webviews) {
             webview.postMessage({
                 command: 'updateStatus',
                 connected,
@@ -64,8 +69,8 @@ export class WebViewService {
     }
 
     public showError(message: string) {
-        const webview = this.getActiveWebview();
-        if (webview) {
+        const webviews = this.getActiveWebviews();
+        for (const webview of webviews) {
             webview.postMessage({
                 command: 'showError',
                 message

@@ -18,10 +18,26 @@ export interface NeonOrg {
     name: string;
 }
 
+export interface NeonDatabase {
+    name: string;
+    owner_name: string;
+    created_at: string;
+    size_bytes?: number;
+}
+
+export interface NeonRole {
+    name: string;
+    protected: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
 export interface ViewData {
     orgs: NeonOrg[];
     projects: NeonProject[];
     branches: NeonBranch[];
+    databases: NeonDatabase[];
+    roles: NeonRole[];
     selectedOrgId?: string;
     selectedOrgName?: string;
     selectedProjectId?: string;
@@ -29,6 +45,8 @@ export interface ViewData {
     selectedBranchId?: string;
     selectedBranchName?: string;
     selectedDriver?: string;
+    selectedDatabase?: string;
+    selectedRole?: string;
     connected: boolean;
     isStarting: boolean;
     connectionType?: 'existing' | 'new';
@@ -45,6 +63,8 @@ export type WebviewCommand =
     | 'selectOrg'
     | 'selectProject'
     | 'selectBranch'
+    | 'selectDatabase'
+    | 'selectRole'
     | 'startProxy'
     | 'stopProxy'
     | 'updateConnectionType'
@@ -61,6 +81,8 @@ export interface NeonLocalManager {
     handleOrgSelection(orgId: string): Promise<void>;
     handleProjectSelection(projectId: string): Promise<void>;
     handleBranchSelection(branchId: string, restartProxy: boolean, driver: string): Promise<void>;
+    handleDatabaseSelection(database: string): Promise<void>;
+    handleRoleSelection(role: string): Promise<void>;
     handleStartProxy(driver: string, isExisting: boolean, branchId?: string, parentBranchId?: string): Promise<void>;
     handleStopProxy(): Promise<void>;
     getViewData(): Promise<ViewData>;

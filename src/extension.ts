@@ -4,7 +4,7 @@ import { NeonApiService } from './services/api.service';
 import { StateService } from './services/state.service';
 import { WebViewService } from './services/webview.service';
 import { SignInWebviewProvider } from './signInView';
-import { NeonLocalManager, ViewData } from './types';
+import { NeonLocalManager, ViewData, NeonDatabase, NeonRole } from './types';
 import { ConnectViewProvider } from './connectView';
 import { DatabaseViewProvider } from './databaseView';
 
@@ -14,6 +14,8 @@ export class NeonLocalExtension implements NeonLocalManager {
     private stateService: StateService;
     private webviewService: WebViewService;
     private statusCheckInterval?: NodeJS.Timeout;
+    private _databases: NeonDatabase[] = [];
+    private _roles: NeonRole[] = [];
 
     constructor(private context: vscode.ExtensionContext) {
         this.dockerService = new DockerService();
@@ -76,45 +78,59 @@ export class NeonLocalExtension implements NeonLocalManager {
         
         if (this.stateService.isProxyRunning !== isRunning && !this.stateService.isStarting) {
             this.stateService.isProxyRunning = isRunning;
+            if (!isRunning) {
+                // Clear databases and roles when disconnected
+                this._databases = [];
+                this._roles = [];
+                this.stateService.setSelectedDatabase('');
+                this.stateService.setSelectedRole('');
+            }
             await this.updateViewData();
         }
     }
 
     private async updateViewData() {
         try {
-            console.log('Fetching organizations...');
             const orgs = await this.apiService.getOrgs();
-            console.log('Organizations:', orgs);
-
-            console.log('Current org:', this.stateService.currentOrg);
-            // Always fetch projects if we're updating the view
-            const projects = await this.apiService.getProjects(this.stateService.currentOrg);
-            console.log('Projects:', projects);
-
+            const projects = this.stateService.currentProject ? 
+                await this.apiService.getProjects(this.stateService.currentOrg) : [];
             const branches = this.stateService.currentProject ? 
                 await this.apiService.getBranches(this.stateService.currentProject) : [];
-            console.log('Branches:', branches);
 
-            // Get the current driver from the container if it's running
-            if (this.stateService.isProxyRunning) {
+            // Check container status and update driver if running
+            const isProxyRunning = await this.dockerService.checkContainerStatus();
+            if (isProxyRunning) {
                 const containerDriver = await this.dockerService.getCurrentDriver();
-                // Only update if different to avoid race conditions
                 if (containerDriver !== this.stateService.selectedDriver) {
-                    console.log(`Driver mismatch - container: ${containerDriver}, selected: ${this.stateService.selectedDriver}`);
+                    console.log(`Updating driver from ${this.stateService.selectedDriver} to ${containerDriver}`);
                     this.stateService.selectedDriver = containerDriver;
                 }
+            } else {
+                // Clear databases and roles when disconnected
+                this._databases = [];
+                this._roles = [];
+                this.stateService.setSelectedDatabase('');
+                this.stateService.setSelectedRole('');
+            }
+
+            // If we're connected, fetch databases and roles
+            if (isProxyRunning) {
+                await this.fetchDatabasesAndRoles();
             }
 
             const viewData = await this.stateService.getViewData(
                 orgs,
                 projects,
                 branches,
-                this.stateService.isProxyRunning,
+                isProxyRunning,
                 this.stateService.isStarting,
-                this.stateService.selectedDriver
+                this.stateService.selectedDriver,
+                this._databases,
+                this._roles
             );
             console.log('View data:', viewData);
 
+            // Update all views with the same data
             this.webviewService.updateViewData(viewData);
         } catch (error) {
             this.handleError(error);
@@ -142,6 +158,11 @@ export class NeonLocalExtension implements NeonLocalManager {
             
             await this.dockerService.stopContainer(deleteOnStop);
             this.stateService.isProxyRunning = false;
+            // Clear databases and roles when stopping
+            this._databases = [];
+            this._roles = [];
+            this.stateService.setSelectedDatabase('');
+            this.stateService.setSelectedRole('');
             await this.updateViewData();
         } catch (error) {
             this.handleError(error);
@@ -209,6 +230,12 @@ export class NeonLocalExtension implements NeonLocalManager {
 
         try {
             this.stateService.isStarting = true;
+            // Clear any existing selections when starting
+            this._databases = [];
+            this._roles = [];
+            this.stateService.setSelectedDatabase('');
+            this.stateService.setSelectedRole('');
+            
             // Set the driver in state service before starting the container
             console.log(`Setting initial driver to: ${driver}`);
             this.stateService.selectedDriver = driver;
@@ -235,20 +262,62 @@ export class NeonLocalExtension implements NeonLocalManager {
         }
     }
 
+    public async handleDatabaseSelection(database: string): Promise<void> {
+        this.stateService.setSelectedDatabase(database);
+    }
+
+    public async handleRoleSelection(role: string): Promise<void> {
+        this.stateService.setSelectedRole(role);
+    }
+
+    private async fetchDatabasesAndRoles(): Promise<void> {
+        const projectId = this.stateService.currentProject;
+        const branchId = this.stateService.currentBranch;
+        
+        if (projectId && branchId) {
+            try {
+                // Fetch databases and roles in parallel
+                const [databases, roles] = await Promise.all([
+                    this.apiService.getDatabases(projectId, branchId),
+                    this.apiService.getRoles(projectId, branchId)
+                ]);
+                
+                this._databases = databases;
+                this._roles = roles;
+            } catch (error) {
+                console.error('Error fetching databases and roles:', error);
+                this._databases = [];
+                this._roles = [];
+            }
+        } else {
+            this._databases = [];
+            this._roles = [];
+        }
+    }
+
     public async getViewData(): Promise<ViewData> {
         const orgs = await this.apiService.getOrgs();
-        const projects = this.stateService.currentOrg ? 
-            await this.apiService.getProjects(this.stateService.currentOrg) : [];
-        const branches = this.stateService.currentProject ? 
-            await this.apiService.getBranches(this.stateService.currentProject) : [];
+        const projectId = this.stateService.currentProject;
+        const orgId = this.stateService.currentOrg;
+        
+        const projects = projectId ? await this.apiService.getProjects(orgId) : [];
+        const branches = projectId ? await this.apiService.getBranches(projectId) : [];
+        
+        // If we're connected, fetch databases and roles
+        const isProxyRunning = await this.dockerService.checkContainerStatus();
+        if (isProxyRunning) {
+            await this.fetchDatabasesAndRoles();
+        }
 
         return this.stateService.getViewData(
             orgs,
             projects,
             branches,
-            this.stateService.isProxyRunning,
-            this.stateService.isStarting,
-            this.stateService.selectedDriver
+            isProxyRunning,
+            false, // isStarting is not implemented in DockerService
+            undefined,
+            this._databases,
+            this._roles
         );
     }
 

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ViewData, NeonBranch, NeonOrg, NeonProject } from '../types';
+import { ViewData, NeonBranch, NeonOrg, NeonProject, NeonDatabase, NeonRole } from '../types';
 
 export class StateService {
     private context: vscode.ExtensionContext;
@@ -13,6 +13,8 @@ export class StateService {
     private _branches: NeonBranch[] = [];
     private _connectionType: 'existing' | 'new' = 'existing';
     private _selectedDriver = 'postgres';
+    private _selectedDatabase: string = '';
+    private _selectedRole: string = '';
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
@@ -29,6 +31,8 @@ export class StateService {
         this._connectionType = this.state.get('neonLocal.connectionType') || 'existing';
         this._isProxyRunning = this.state.get('neonLocal.isProxyRunning') || false;
         this._selectedDriver = this.state.get('neonLocal.selectedDriver') || 'postgres';
+        this._selectedDatabase = this.state.get('neonLocal.selectedDatabase') || '';
+        this._selectedRole = this.state.get('neonLocal.selectedRole') || '';
     }
 
     public async saveState() {
@@ -39,6 +43,8 @@ export class StateService {
         await this.state.update('neonLocal.connectionType', this._connectionType);
         await this.state.update('neonLocal.isProxyRunning', this._isProxyRunning);
         await this.state.update('neonLocal.selectedDriver', this._selectedDriver);
+        await this.state.update('neonLocal.selectedDatabase', this._selectedDatabase);
+        await this.state.update('neonLocal.selectedRole', this._selectedRole);
     }
 
     // Proxy status
@@ -130,7 +136,9 @@ export class StateService {
         branches: NeonBranch[],
         isProxyRunning: boolean,
         isStarting: boolean,
-        driver?: string
+        driver?: string,
+        databases: NeonDatabase[] = [],
+        roles: NeonRole[] = []
     ): ViewData {
         // Update the selected driver if one is provided and we're running
         if (driver && isProxyRunning) {
@@ -167,6 +175,8 @@ export class StateService {
             orgs,
             projects,
             branches,
+            databases,
+            roles,
             selectedOrgId: this._currentOrg || '',
             selectedOrgName,
             selectedProjectId: this._currentProject,
@@ -174,6 +184,8 @@ export class StateService {
             selectedBranchId: this._currentBranch,
             selectedBranchName: selectedBranch?.name,
             selectedDriver: this._selectedDriver,
+            selectedDatabase: this._selectedDatabase,
+            selectedRole: this._selectedRole,
             connected: isProxyRunning,
             isStarting,
             connectionType: this._connectionType,
@@ -190,6 +202,16 @@ export class StateService {
         this._currentBranch = '';
         this._parentBranchId = '';
         this._branches = [];
+        this.saveState();
+    }
+
+    public setSelectedDatabase(database: string): void {
+        this._selectedDatabase = database;
+        this.saveState();
+    }
+
+    public setSelectedRole(role: string): void {
+        this._selectedRole = role;
         this.saveState();
     }
 } 

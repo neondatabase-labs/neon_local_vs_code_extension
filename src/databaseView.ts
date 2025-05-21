@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { VIEW_TYPES } from './constants';
-import { NeonLocalManager } from './types';
+import { NeonLocalManager, WebviewMessage } from './types';
 import { getDatabaseHtml } from './templates/databaseView';
 
 export class DatabaseViewProvider implements vscode.WebviewViewProvider {
@@ -24,6 +24,7 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
             localResourceRoots: [this._extensionUri]
         };
 
+        this._neonLocal.setWebviewView(webviewView);
         this.updateView();
 
         webviewView.webview.onDidReceiveMessage(this.handleWebviewMessage.bind(this));
@@ -34,16 +35,27 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
         });
     }
 
-    private async handleWebviewMessage(message: any): Promise<void> {
+    private async handleWebviewMessage(message: WebviewMessage): Promise<void> {
         if (!this._view) return;
 
         try {
             switch (message.command) {
+                case 'selectDatabase':
+                    await this._neonLocal.handleDatabaseSelection(message.database);
+                    await this.updateView();
+                    break;
+                case 'selectRole':
+                    await this._neonLocal.handleRoleSelection(message.role);
+                    await this.updateView();
+                    break;
                 case 'openSqlEditor':
                     await vscode.commands.executeCommand('neon-local.openSqlEditor');
                     break;
                 case 'launchPsql':
                     await vscode.commands.executeCommand('neon-local.launchPsql');
+                    break;
+                case 'refresh':
+                    await this.updateView();
                     break;
             }
         } catch (error) {
