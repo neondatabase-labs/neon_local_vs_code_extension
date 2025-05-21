@@ -54,6 +54,47 @@ export class NeonLocalExtension implements NeonLocalManager {
             vscode.commands.registerCommand('neon-local.showPanel', () => this.showPanel()),
             vscode.commands.registerCommand('neon-local.stopProxy', () => this.stopProxy()),
             vscode.commands.registerCommand('neon-local.clearAuth', () => this.clearAuth()),
+            vscode.commands.registerCommand('neon-local.resetFromParent', async () => {
+                if (!this.stateService.currentProject || !this.stateService.isProxyRunning) {
+                    vscode.window.showErrorMessage('No active project or proxy connection.');
+                    return;
+                }
+
+                // Determine which branch ID to use
+                let branchId: string;
+                if (this.stateService.connectionType === 'new') {
+                    // For new branches, read from the file
+                    branchId = await this.stateService.currentlyConnectedBranch;
+                    if (!branchId) {
+                        vscode.window.showErrorMessage('Could not determine branch ID. Please wait for the connection to be established.');
+                        return;
+                    }
+                } else {
+                    // For existing branches, use the selected branch
+                    branchId = this.stateService.currentBranch || '';
+                    if (!branchId) {
+                        vscode.window.showErrorMessage('No branch selected.');
+                        return;
+                    }
+                }
+
+                try {
+                    // Show progress notification
+                    await vscode.window.withProgress({
+                        location: vscode.ProgressLocation.Notification,
+                        title: 'Resetting branch to parent...',
+                        cancellable: false
+                    }, async () => {
+                        await this.apiService.resetBranchToParent(this.stateService.currentProject || '', branchId);
+                        vscode.window.showInformationMessage('Branch has been reset to parent state.');
+                        
+                        // Refresh the view data after reset
+                        await this.updateViewData();
+                    });
+                } catch (error) {
+                    this.handleError(error);
+                }
+            }),
             vscode.commands.registerCommand('neon-local.openSqlEditor', async () => {
                 if (!this.stateService.currentProject || !this.stateService.isProxyRunning) {
                     vscode.window.showErrorMessage('No active project or proxy connection.');
