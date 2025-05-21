@@ -4,7 +4,7 @@ export const getStyles = (): string => `
         padding: 20px;
         font-family: var(--vscode-font-family);
         color: var(--vscode-editor-foreground);
-        line-height: 1.5;
+        line-height: 1.25;
     }
     .header {
         display: flex;
@@ -28,7 +28,7 @@ export const getStyles = (): string => `
         color: var(--vscode-dropdown-foreground);
         border: 1px solid var(--vscode-dropdown-border);
         border-radius: 4px;
-        font-size: 13px;
+        font-size: 12px;
         transition: border-color 0.2s, opacity 0.2s;
         appearance: none;
         background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='16' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M7.976 10.072l4.357-4.357.62.618L8.284 11h-.618L3 6.333l.619-.618 4.357 4.357z' fill='%23C5C5C5'/%3E%3C/svg%3E");
@@ -70,7 +70,7 @@ export const getStyles = (): string => `
         display: block;
         margin-bottom: 0px;
         color: var(--vscode-foreground);
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 500;
     }
     .proxy-buttons {
@@ -104,7 +104,7 @@ export const getStyles = (): string => `
     }
     .detail-value {
         color: var(--vscode-foreground);
-        font-size: 13px;
+        font-size: 12px;
         font-weight: normal;
     }
     .connection-status {
@@ -145,7 +145,7 @@ export const getStyles = (): string => `
     }
     .connection-string {
         flex: 1;
-        font-size: 13px;
+        font-size: 12px;
         word-break: break-all;
         color: var(--vscode-foreground);
     }
@@ -188,7 +188,7 @@ export const getStyles = (): string => `
     }
     .form-description {
         color: var(--vscode-descriptionForeground);
-        font-size: 13px;
+        font-size: 12px;
         margin-bottom: 16px;
     }
     .detail-label-container {
