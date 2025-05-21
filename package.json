@@ -104,6 +104,11 @@
           "type": "webview",
           "id": "neonLocalDatabase",
           "name": "Database"
+        },
+        {
+          "type": "webview",
+          "id": "neonLocalActions",
+          "name": "Actions"
         }
       ]
     },

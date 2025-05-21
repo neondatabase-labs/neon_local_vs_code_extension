@@ -217,5 +217,37 @@ export const getStyles = (): string => `
     .stop-button:hover, .reset-button:hover, .sql-editor-button:hover, .psql-button:hover {
         background-color: var(--vscode-button-hoverBackground);
     }
+    .actions-container {
+        padding: 16px 0;
+    }
+    .action-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .action-button {
+        width: 100%;
+        padding: 8px 12px;
+        background-color: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+        transition: background-color 0.2s;
+    }
+    .action-button:hover:not(:disabled) {
+        background-color: var(--vscode-button-hoverBackground);
+    }
+    .action-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    .status-message {
+        color: var(--vscode-descriptionForeground);
+        font-size: 13px;
+        text-align: center;
+        padding: 16px;
+    }
 </style>
 `; 

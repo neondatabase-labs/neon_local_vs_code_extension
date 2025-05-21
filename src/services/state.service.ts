@@ -168,7 +168,7 @@ export class StateService {
 
         // Generate connection info based on driver
         const connectionInfo = isProxyRunning ? 
-            'postgres://neon:npg@localhost:5432/neondb?sslmode=require' :
+            `postgres://neon:npg@localhost:5432/${this._selectedDatabase || 'neondb'}${this._selectedRole ? `_${this._selectedRole}` : ''}?sslmode=require` :
             undefined;
 
         const viewData = {
@@ -212,6 +212,6 @@ export class StateService {
 
     public setSelectedRole(role: string): void {
         this._selectedRole = role;
-        this.saveState();
+        this.state.update('neonLocal.selectedRole', role);
     }
 } 

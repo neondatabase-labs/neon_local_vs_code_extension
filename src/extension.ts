@@ -7,6 +7,7 @@ import { SignInWebviewProvider } from './signInView';
 import { NeonLocalManager, ViewData, NeonDatabase, NeonRole } from './types';
 import { ConnectViewProvider } from './connectView';
 import { DatabaseViewProvider } from './databaseView';
+import { ActionsViewProvider } from './actionsView';
 
 export class NeonLocalExtension implements NeonLocalManager {
     private dockerService: DockerService;
@@ -60,10 +61,12 @@ export class NeonLocalExtension implements NeonLocalManager {
         const signInProvider = new SignInWebviewProvider(this.context.extensionUri);
         const connectProvider = new ConnectViewProvider(this.context.extensionUri, this);
         const databaseProvider = new DatabaseViewProvider(this.context.extensionUri, this);
+        const actionsProvider = new ActionsViewProvider(this.context.extensionUri, this);
 
         this.context.subscriptions.push(
             vscode.window.registerWebviewViewProvider('neonLocalConnect', connectProvider),
-            vscode.window.registerWebviewViewProvider('neonLocalDatabase', databaseProvider)
+            vscode.window.registerWebviewViewProvider('neonLocalDatabase', databaseProvider),
+            vscode.window.registerWebviewViewProvider('neonLocalActions', actionsProvider)
         );
     }
 
@@ -268,6 +271,7 @@ export class NeonLocalExtension implements NeonLocalManager {
 
     public async handleRoleSelection(role: string): Promise<void> {
         this.stateService.setSelectedRole(role);
+        await this.updateViewData();
     }
 
     private async fetchDatabasesAndRoles(): Promise<void> {

@@ -46,7 +46,7 @@ const getDatabaseContent = (data: ViewData): string => `
                     `).join('')}
                 </select>
             </div>
-            ${data.connectionInfo ? `
+            
             <div class="detail-row">
                 <div class="detail-label-container">
                     <div class="detail-label">Connection Info</div>
@@ -62,11 +62,6 @@ const getDatabaseContent = (data: ViewData): string => `
                     <div class="connection-string">${data.connectionInfo}</div>
                 </div>
             </div>
-            ` : ''}
-        </div>
-        <div class="database-tools">
-            <button id="openSqlEditor" class="sql-editor-button">Open SQL Editor</button>
-            ${data.selectedDriver === 'postgres' ? '<button id="launchPsql" class="psql-button">Launch PSQL</button>' : ''}
         </div>
     </div>
 `;
@@ -131,21 +126,6 @@ const getClientScript = (): string => `
                             }
                         });
                     }
-                });
-            }
-
-            // Setup database tool buttons
-            const sqlEditorButton = document.getElementById('openSqlEditor');
-            if (sqlEditorButton) {
-                sqlEditorButton.addEventListener('click', () => {
-                    vscode.postMessage({ command: 'openSqlEditor' });
-                });
-            }
-
-            const launchPsqlButton = document.getElementById('launchPsql');
-            if (launchPsqlButton) {
-                launchPsqlButton.addEventListener('click', () => {
-                    vscode.postMessage({ command: 'launchPsql' });
                 });
             }
         });
