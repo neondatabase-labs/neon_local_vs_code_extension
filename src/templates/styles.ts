@@ -218,12 +218,12 @@ export const getStyles = (): string => `
         background-color: var(--vscode-button-hoverBackground);
     }
     .actions-container {
-        padding: 16px 0;
+        padding: 0;
     }
     .action-group {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 4px;
     }
     .action-button {
         width: 100%;
@@ -248,6 +248,13 @@ export const getStyles = (): string => `
         font-size: 13px;
         text-align: center;
         padding: 16px;
+    }
+
+    .description {
+        color: var(--vscode-descriptionForeground);
+        font-size: 13px;
+        margin: 0 0 16px 0;
+        line-height: 1.4;
     }
 </style>
 `; 
