@@ -195,12 +195,24 @@ export class DockerService {
                     // Check if the logs indicate the container is ready
                     if (logStr.includes('Neon Local is ready')) {
                         console.log('Container is ready');
-                        // Give a small delay for the .branches file to be written
-                        await new Promise(resolve => setTimeout(resolve, 2000));
                         
-                        // Check if the .branches file is properly populated
-                        if (await this.checkBranchesFile(this.context)) {
-                            console.log('Container is fully ready with populated branches file');
+                        // Get the environment variables to check if this is a new branch
+                        const envVars = containerInfo.Config.Env;
+                        const isNewBranch = envVars.some(env => env.startsWith('PARENT_BRANCH_ID='));
+                        
+                        if (isNewBranch) {
+                            // Only check branches file for new branches
+                            console.log('New branch creation detected, checking branches file...');
+                            // Give a small delay for the .branches file to be written
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            
+                            // Check if the .branches file is properly populated
+                            if (await this.checkBranchesFile(this.context)) {
+                                console.log('Container is fully ready with populated branches file');
+                                return;
+                            }
+                        } else {
+                            console.log('Existing branch connection, skipping branches file check');
                             return;
                         }
                     } else {

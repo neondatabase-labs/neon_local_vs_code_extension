@@ -54,7 +54,6 @@ const getConnectedView = (data: ViewData): string => `
             <div class="detail-label">Driver</div>
             <div class="detail-value">${data.selectedDriver === 'serverless' ? 'Neon Serverless' : 'PostgreSQL'}</div>
         </div>
-        ${data.connectionInfo ? getConnectionInfoSection(data.connectionInfo) : ''}
     </div>
 `;
 
@@ -153,9 +152,6 @@ const getProxyButtons = (data: ViewData, isConnected: boolean): string => {
     if (isConnected) {
         return `
             <button id="stopProxy" class="stop-button">Disconnect</button>
-            <button id="resetFromParent" class="reset-button">Reset from parent</button>
-            <button id="openSqlEditor" class="sql-editor-button">Sql editor</button>
-            ${data.selectedDriver === 'postgres' ? '<button id="launchPsql" class="psql-button">psql</button>' : ''}
         `;
     }
     return `
@@ -179,7 +175,6 @@ const getClientScript = (data: ViewData): string => `
             selectedBranchId: ${JSON.stringify(data.selectedBranchId)},
             selectedDriver: ${JSON.stringify(data.selectedDriver || 'postgres')},
             connected: ${JSON.stringify(data.connected)},
-            connectionInfo: ${JSON.stringify(data.connectionInfo)},
             connectionType: ${JSON.stringify(data.connectionType || 'existing')}
         };
 
@@ -190,7 +185,6 @@ const getClientScript = (data: ViewData): string => `
             projects: ${JSON.stringify(data.projects || [])},
             branches: ${JSON.stringify(data.branches || [])},
             connected: ${JSON.stringify(data.connected)},
-            connectionInfo: ${JSON.stringify(data.connectionInfo)},
             // Preserve selections from either current state or new data
             selectedOrgId: currentState.selectedOrgId || ${JSON.stringify(data.selectedOrgId)},
             selectedProjectId: currentState.selectedProjectId || ${JSON.stringify(data.selectedProjectId)},
@@ -416,7 +410,7 @@ const getClientScript = (data: ViewData): string => `
             if (startButton) {
                 startButton.addEventListener('click', function() {
                     this.disabled = true;
-                    this.textContent = 'Creating...';
+                    this.textContent = 'Connecting...';
                     
                     const connectionTypeSelect = document.getElementById('connection-type');
                     const driverSelect = document.getElementById('driver');
@@ -447,47 +441,6 @@ const getClientScript = (data: ViewData): string => `
                 });
             }
 
-            // Setup copy button
-            const copyButton = document.querySelector('.copy-button');
-            if (copyButton) {
-                copyButton.addEventListener('click', () => {
-                    const connectionString = document.querySelector('.connection-string')?.textContent;
-                    if (connectionString) {
-                        navigator.clipboard.writeText(connectionString).then(() => {
-                            const successMessage = document.querySelector('.copy-success');
-                            if (successMessage) {
-                                successMessage.classList.add('visible');
-                                setTimeout(() => {
-                                    successMessage.classList.remove('visible');
-                                }, 2000);
-                            }
-                        });
-                    }
-                });
-            }
-
-            // Setup additional buttons
-            const resetButton = document.getElementById('resetFromParent');
-            if (resetButton) {
-                resetButton.addEventListener('click', () => {
-                    vscode.postMessage({ command: 'resetFromParent' });
-                });
-            }
-
-            const sqlEditorButton = document.getElementById('openSqlEditor');
-            if (sqlEditorButton) {
-                sqlEditorButton.addEventListener('click', () => {
-                    vscode.postMessage({ command: 'openSqlEditor' });
-                });
-            }
-
-            const launchPsqlButton = document.getElementById('launchPsql');
-            if (launchPsqlButton) {
-                launchPsqlButton.addEventListener('click', () => {
-                    vscode.postMessage({ command: 'launchPsql' });
-                });
-            }
-
             updateStartProxyButton();
         }
 
@@ -499,20 +452,22 @@ const getClientScript = (data: ViewData): string => `
             switch (message.command) {
                 case 'updateViewData':
                     console.log('Updating view data with:', message.data);
+                    const wasConnected = currentState.connected;
                     currentState = {
                         ...currentState,
                         organizations: message.data.orgs || [],
                         projects: message.data.projects || [],
                         branches: message.data.branches || [],
                         connected: message.data.connected,
-                        connectionInfo: message.data.connectionInfo,
-                        selectedOrgId: message.data.selectedOrgId,
-                        selectedProjectId: message.data.selectedProjectId,
-                        selectedBranchId: message.data.selectedBranchId,
-                        selectedDriver: message.data.selectedDriver || 'postgres',
                         connectionType: message.data.connectionType || 'existing'
                     };
                     saveState();
+                    
+                    // If connection status changed, force a full page refresh
+                    if (wasConnected !== message.data.connected) {
+                        window.location.reload();
+                        break;
+                    }
                     
                     // Update dropdowns with new data
                     const orgSelect = document.getElementById('org');
@@ -572,10 +527,10 @@ const getClientScript = (data: ViewData): string => `
                 case 'updateStatus':
                     console.log('Updating status:', message);
                     currentState.connected = message.connected;
-                    currentState.connectionInfo = message.connectionInfo;
                     saveState();
                     if (currentState.connected !== message.connected) {
-                        vscode.postMessage({ command: 'refresh' });
+                        // Force a full page refresh to update the view
+                        window.location.reload();
                     }
                     break;
             }
