@@ -129,14 +129,15 @@ const getClientScript = (): string => `
                 });
             }
 
-            // Setup copy button
-            const copyButton = document.querySelector('.copy-button');
-            if (copyButton) {
-                copyButton.addEventListener('click', () => {
-                    const connectionString = document.querySelector('.connection-string')?.textContent;
+            // Setup copy buttons
+            document.querySelectorAll('.copy-button').forEach(button => {
+                button.addEventListener('click', () => {
+                    // Find the closest detail-row and get its connection-string
+                    const detailRow = button.closest('.detail-row');
+                    const connectionString = detailRow?.querySelector('.connection-string')?.textContent;
                     if (connectionString) {
                         navigator.clipboard.writeText(connectionString).then(() => {
-                            const successMessage = document.querySelector('.copy-success');
+                            const successMessage = button.querySelector('.copy-success');
                             if (successMessage) {
                                 successMessage.classList.add('visible');
                                 setTimeout(() => {
@@ -146,7 +147,7 @@ const getClientScript = (): string => `
                         });
                     }
                 });
-            }
+            });
         });
     </script>
 `; 
