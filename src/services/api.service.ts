@@ -174,4 +174,13 @@ export class NeonApiService {
             throw new Error(`Failed to fetch roles: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
+
+    public async resetBranchToParent(projectId: string, branchId: string): Promise<void> {
+        try {
+            const client = await this.ensureApiClient();
+            await client.post(`/projects/${projectId}/branches/${branchId}/reset_to_parent`);
+        } catch (error) {
+            throw new Error(`Failed to reset branch to parent: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
 } 

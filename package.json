@@ -36,6 +36,10 @@
       {
         "command": "neon-local.clearAuth",
         "title": "Neon Local: Clear Authentication"
+      },
+      {
+        "command": "neon-local.openSqlEditor",
+        "title": "Neon Local: Open SQL Editor"
       }
     ],
     "configuration": {
@@ -81,6 +85,10 @@
           "default": "existing",
           "description": "Type of connection to create",
           "scope": "application"
+        },
+        "neonLocal.workspacePath": {
+          "type": "string",
+          "description": "Absolute path to the workspace root directory"
         }
       }
     },

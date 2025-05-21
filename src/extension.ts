@@ -19,7 +19,7 @@ export class NeonLocalExtension implements NeonLocalManager {
     private _roles: NeonRole[] = [];
 
     constructor(private context: vscode.ExtensionContext) {
-        this.dockerService = new DockerService();
+        this.dockerService = new DockerService(context);
         this.apiService = new NeonApiService();
         this.stateService = new StateService(context);
         this.webviewService = new WebViewService();
@@ -53,7 +53,51 @@ export class NeonLocalExtension implements NeonLocalManager {
             vscode.commands.registerCommand('neon-local.configure', () => this.configure()),
             vscode.commands.registerCommand('neon-local.showPanel', () => this.showPanel()),
             vscode.commands.registerCommand('neon-local.stopProxy', () => this.stopProxy()),
-            vscode.commands.registerCommand('neon-local.clearAuth', () => this.clearAuth())
+            vscode.commands.registerCommand('neon-local.clearAuth', () => this.clearAuth()),
+            vscode.commands.registerCommand('neon-local.openSqlEditor', async () => {
+                if (!this.stateService.currentProject || !this.stateService.isProxyRunning) {
+                    vscode.window.showErrorMessage('No active project or proxy connection.');
+                    return;
+                }
+
+                // Determine which branch ID to use
+                let branchId: string;
+                if (this.stateService.connectionType === 'new') {
+                    // For new branches, read from the file
+                    branchId = await this.stateService.currentlyConnectedBranch;
+                    if (!branchId) {
+                        vscode.window.showErrorMessage('Could not determine branch ID. Please wait for the connection to be established.');
+                        return;
+                    }
+                } else {
+                    // For existing branches, use the selected branch
+                    branchId = this.stateService.currentBranch || '';
+                    if (!branchId) {
+                        vscode.window.showErrorMessage('No branch selected.');
+                        return;
+                    }
+                }
+
+                // Get list of databases
+                const databases = this._databases.map(db => db.name);
+                if (databases.length === 0) {
+                    vscode.window.showErrorMessage('No databases available.');
+                    return;
+                }
+
+                // Ask user to select a database
+                const selectedDatabase = await vscode.window.showQuickPick(databases, {
+                    placeHolder: 'Select a database to open in SQL Editor'
+                });
+
+                if (!selectedDatabase) {
+                    return; // User cancelled
+                }
+
+                // Open SQL Editor URL
+                const url = `https://console.neon.tech/app/projects/${this.stateService.currentProject}/branches/${branchId}/sql-editor?database=${selectedDatabase}`;
+                vscode.env.openExternal(vscode.Uri.parse(url));
+            })
         );
     }
 
@@ -239,7 +283,8 @@ export class NeonLocalExtension implements NeonLocalManager {
             this.stateService.setSelectedDatabase('');
             this.stateService.setSelectedRole('');
             
-            // Set the driver in state service before starting the container
+            // Set the connection type and driver in state service before starting the container
+            this.stateService.connectionType = isExisting ? 'existing' : 'new';
             console.log(`Setting initial driver to: ${driver}`);
             this.stateService.selectedDriver = driver;
             await this.updateViewData();

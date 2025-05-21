@@ -1,5 +1,8 @@
 import * as vscode from 'vscode';
 import { ViewData, NeonBranch, NeonOrg, NeonProject, NeonDatabase, NeonRole } from '../types';
+import { FileService } from '../services/file.service';
+import * as path from 'path';
+import * as fs from 'fs';
 
 export class StateService {
     private context: vscode.ExtensionContext;
@@ -15,15 +18,18 @@ export class StateService {
     private _selectedDriver = 'postgres';
     private _selectedDatabase: string = '';
     private _selectedRole: string = '';
+    private _currentlyConnectedBranch: string = '';
+    private fileService: FileService;
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
         this.state = context.globalState;
+        this.fileService = new FileService(context);
         this.loadState();
         this._connectionType = context.globalState.get('connectionType') || 'existing';
     }
 
-    private loadState() {
+    private async loadState() {
         this._currentOrg = this.state.get('neonLocal.currentOrg') || '';
         this._currentProject = this.state.get('neonLocal.currentProject') || '';
         this._currentBranch = this.state.get('neonLocal.currentBranch') || '';
@@ -33,6 +39,50 @@ export class StateService {
         this._selectedDriver = this.state.get('neonLocal.selectedDriver') || 'postgres';
         this._selectedDatabase = this.state.get('neonLocal.selectedDatabase') || '';
         this._selectedRole = this.state.get('neonLocal.selectedRole') || '';
+        
+        // Load currently connected branch from .branches file
+        console.log('Loading state - Current connection type:', this._connectionType);
+        console.log('Loading state - Is proxy running:', this._isProxyRunning);
+        
+        const branchId = await this.getBranchIdFromFile();
+        console.log('Loading state - Branch ID from file:', branchId);
+        this._currentlyConnectedBranch = branchId || '';
+        console.log('Loading state - Set currently connected branch to:', this._currentlyConnectedBranch);
+    }
+
+    private getBranchIdFromFile(): string | undefined {
+        try {
+            const neonLocalPath = path.join(this.context.globalStorageUri.fsPath, '.neon_local');
+            const branchesPath = path.join(neonLocalPath, '.branches');
+            console.log('Read .branches file at path:', branchesPath);
+
+            if (!fs.existsSync(branchesPath)) {
+                return undefined;
+            }
+
+            const content = fs.readFileSync(branchesPath, 'utf-8');
+            console.log('Raw .branches file content:', content);
+
+            const data = JSON.parse(content);
+            console.log('Parsed .branches file data:', JSON.stringify(data, null, 2));
+
+            // Find the first key that has a branch_id
+            const branchKey = Object.keys(data).find(key => 
+                data[key] && typeof data[key] === 'object' && 'branch_id' in data[key]
+            );
+
+            if (!branchKey) {
+                console.log('No branch ID found in branches file. Data structure:', JSON.stringify(data));
+                return undefined;
+            }
+
+            const branchId = data[branchKey].branch_id;
+            console.log('Found branch ID in file:', branchId);
+            return branchId;
+        } catch (error) {
+            console.error('Error reading branch ID from file:', error);
+            return undefined;
+        }
     }
 
     public async saveState() {
@@ -45,6 +95,33 @@ export class StateService {
         await this.state.update('neonLocal.selectedDriver', this._selectedDriver);
         await this.state.update('neonLocal.selectedDatabase', this._selectedDatabase);
         await this.state.update('neonLocal.selectedRole', this._selectedRole);
+
+        console.log('Saving state - Current connection type:', this._connectionType);
+        console.log('Saving state - Is proxy running:', this._isProxyRunning);
+        console.log('Saving state - Current branch:', this._currentBranch);
+
+        // Update the currently connected branch based on connection type
+        if (this._isProxyRunning) {
+            if (this._connectionType === 'new') {
+                // For new branches, always read from the .branches file
+                const branchId = await this.getBranchIdFromFile();
+                console.log('Saving state - Branch ID from file for new connection:', branchId);
+                if (branchId) {
+                    this._currentlyConnectedBranch = branchId;
+                    console.log('Saving state - Updated currently connected branch from file:', this._currentlyConnectedBranch);
+                } else {
+                    console.warn('Could not read branch ID from .branches file');
+                    console.log('Saving state - Current value of connected branch:', this._currentlyConnectedBranch);
+                }
+            } else {
+                // For existing branches, use the selected branch ID
+                this._currentlyConnectedBranch = this._currentBranch;
+                console.log('Saving state - Updated currently connected branch from selection:', this._currentlyConnectedBranch);
+            }
+        } else {
+            this._currentlyConnectedBranch = '';
+            console.log('Saving state - Cleared currently connected branch as proxy is not running');
+        }
     }
 
     // Proxy status
@@ -213,5 +290,13 @@ export class StateService {
     public setSelectedRole(role: string): void {
         this._selectedRole = role;
         this.state.update('neonLocal.selectedRole', role);
+    }
+
+    // Add getter for currently connected branch
+    public get currentlyConnectedBranch(): string {
+        console.log('Getting currently connected branch:', this._currentlyConnectedBranch);
+        console.log('Current connection type:', this._connectionType);
+        console.log('Current proxy running state:', this._isProxyRunning);
+        return this._currentlyConnectedBranch;
     }
 } 

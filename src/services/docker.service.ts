@@ -6,9 +6,11 @@ import * as fs from 'fs';
 export class DockerService {
     private docker: Dockerode;
     private containerName = 'neon_local_vscode';
+    private context: vscode.ExtensionContext;
 
-    constructor() {
+    constructor(context: vscode.ExtensionContext) {
         this.docker = new Dockerode();
+        this.context = context;
     }
 
     async checkContainerStatus(): Promise<boolean> {
@@ -45,31 +47,21 @@ export class DockerService {
         projectId: string;
     }): Promise<void> {
         const { branchId, driver, isExisting, context, projectId } = options;
-        
+
         try {
             // Get API key from configuration
             const config = vscode.workspace.getConfiguration('neonLocal');
             const apiKey = config.get<string>('apiKey');
 
             if (!apiKey) {
-                throw new Error('API key is not configured. Please set your Neon API key in the settings.');
+                throw new Error('API key not found. Please sign in first.');
             }
 
-            if (!projectId) {
-                throw new Error('Project ID is required to start the container.');
-            }
-
-            // Check for and remove existing container
-            try {
-                const existingContainer = await this.docker.getContainer(this.containerName);
-                await existingContainer.stop().catch(() => {}); // Ignore error if container is not running
-                await existingContainer.remove().catch(() => {}); // Ignore error if container doesn't exist
-            } catch (error) {
-                // Container doesn't exist, which is fine
-            }
+            // Pull the latest image
+            await this.pullImage();
 
             // Create container configuration
-            const containerConfig = {
+            const containerConfig: any = {
                 Image: 'neondatabase/neon_local:latest',
                 name: this.containerName,
                 Env: [
@@ -87,33 +79,24 @@ export class DockerService {
                 }
             };
 
-            // Pull image if not exists
-            try {
-                await this.docker.getImage('neondatabase/neon_local:latest').inspect();
-            } catch {
-                await new Promise((resolve, reject) => {
-                    this.docker.pull('neondatabase/neon_local:latest', {}, (err: any, stream: any) => {
-                        if (err) {
-                            reject(err);
-                            return;
-                        }
-                        this.docker.modem.followProgress(stream, (err: any) => {
-                            if (err) {
-                                reject(err);
-                                return;
-                            }
-                            resolve(true);
-                        });
-                    });
-                });
+            // Create .neon_local directory in global storage if it doesn't exist
+            const neonLocalPath = path.join(context.globalStorageUri.fsPath, '.neon_local');
+            if (!fs.existsSync(neonLocalPath)) {
+                fs.mkdirSync(neonLocalPath, { recursive: true });
             }
+            
+            // Add volume binding using global storage path
+            containerConfig.HostConfig.Binds = [`${neonLocalPath}:/tmp/.neon_local`];
 
-            // Create and start container
+            // Create and start the container
             const container = await this.docker.createContainer(containerConfig);
             await container.start();
 
+            // Wait for container to be running
+            await this.waitForContainer();
         } catch (error) {
-            throw new Error(`Failed to start container: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            console.error('Error starting container:', error);
+            throw error;
         }
     }
 
@@ -129,5 +112,114 @@ export class DockerService {
             }
             throw new Error(`Failed to stop container: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
+    }
+
+    private async pullImage(): Promise<void> {
+        try {
+            await this.docker.getImage('neondatabase/neon_local:latest').inspect();
+        } catch {
+            await new Promise((resolve, reject) => {
+                this.docker.pull('neondatabase/neon_local:latest', {}, (err: any, stream: any) => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+                    this.docker.modem.followProgress(stream, (err: any) => {
+                        if (err) {
+                            reject(err);
+                            return;
+                        }
+                        resolve(true);
+                    });
+                });
+            });
+        }
+    }
+
+    private async checkBranchesFile(context: vscode.ExtensionContext): Promise<boolean> {
+        try {
+            const neonLocalPath = path.join(context.globalStorageUri.fsPath, '.neon_local');
+            const branchesPath = path.join(neonLocalPath, '.branches');
+            
+            if (!fs.existsSync(branchesPath)) {
+                console.log('Branches file does not exist yet');
+                return false;
+            }
+            
+            const content = await fs.promises.readFile(branchesPath, 'utf-8');
+            console.log('Read .branches file content:', content);
+            
+            const data = JSON.parse(content);
+            console.log('Parsed .branches file data:', JSON.stringify(data, null, 2));
+            
+            // Find the first key that has a branch_id
+            const branchKey = Object.keys(data).find(key => 
+                data[key] && typeof data[key] === 'object' && 'branch_id' in data[key]
+            );
+            
+            if (!branchKey) {
+                console.log('No branch ID found in branches file. Data structure:', JSON.stringify(data));
+                return false;
+            }
+            
+            const branchId = data[branchKey].branch_id;
+            console.log('Found branch ID in branches file:', branchId);
+            return true;
+        } catch (error) {
+            console.error('Error checking branches file:', error);
+            return false;
+        }
+    }
+
+    private async waitForContainer(): Promise<void> {
+        const maxAttempts = 30; // 30 seconds timeout
+        let attempts = 0;
+        
+        while (attempts < maxAttempts) {
+            try {
+                const container = await this.docker.getContainer(this.containerName);
+                const containerInfo = await container.inspect();
+                
+                if (containerInfo.State.Running) {
+                    console.log('Container is running, checking logs for readiness...');
+                    // Container is running, now wait for the .branches file to be populated
+                    const logs = await container.logs({
+                        stdout: true,
+                        stderr: true,
+                        tail: 50
+                    });
+                    
+                    const logStr = logs.toString();
+                    console.log('Container logs:', logStr);
+                    
+                    // Check if the logs indicate the container is ready
+                    if (logStr.includes('Neon Local is ready')) {
+                        console.log('Container is ready');
+                        // Give a small delay for the .branches file to be written
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        
+                        // Check if the .branches file is properly populated
+                        if (await this.checkBranchesFile(this.context)) {
+                            console.log('Container is fully ready with populated branches file');
+                            return;
+                        }
+                    } else {
+                        console.log('Container not yet ready');
+                    }
+                } else {
+                    console.log('Container not yet running...');
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                attempts++;
+                console.log(`Waiting for container attempt ${attempts}/${maxAttempts}`);
+            } catch (error) {
+                console.error('Error while waiting for container:', error);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                attempts++;
+            }
+        }
+        
+        throw new Error('Timeout waiting for container to be ready');
     }
 } 
