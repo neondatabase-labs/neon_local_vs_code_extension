@@ -6,12 +6,13 @@ export class StateService {
     private state: vscode.Memento;
     private _isProxyRunning: boolean = false;
     private _isStarting: boolean = false;
-    private _currentOrg?: string;
-    private _currentProject?: string;
-    private _currentBranch?: string;
-    private _parentBranchId?: string;
+    private _currentOrg = '';
+    private _currentProject = '';
+    private _currentBranch = '';
+    private _parentBranchId = '';
     private _branches: NeonBranch[] = [];
     private _connectionType: 'existing' | 'new' = 'existing';
+    private _selectedDriver = 'postgres';
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
@@ -21,12 +22,13 @@ export class StateService {
     }
 
     private loadState() {
-        this._currentOrg = this.state.get('neonLocal.currentOrg');
-        this._currentProject = this.state.get('neonLocal.currentProject');
-        this._currentBranch = this.state.get('neonLocal.currentBranch');
-        this._parentBranchId = this.state.get('neonLocal.parentBranchId');
+        this._currentOrg = this.state.get('neonLocal.currentOrg') || '';
+        this._currentProject = this.state.get('neonLocal.currentProject') || '';
+        this._currentBranch = this.state.get('neonLocal.currentBranch') || '';
+        this._parentBranchId = this.state.get('neonLocal.parentBranchId') || '';
         this._connectionType = this.state.get('neonLocal.connectionType') || 'existing';
         this._isProxyRunning = this.state.get('neonLocal.isProxyRunning') || false;
+        this._selectedDriver = this.state.get('neonLocal.selectedDriver') || 'postgres';
     }
 
     public async saveState() {
@@ -36,6 +38,7 @@ export class StateService {
         await this.state.update('neonLocal.parentBranchId', this._parentBranchId);
         await this.state.update('neonLocal.connectionType', this._connectionType);
         await this.state.update('neonLocal.isProxyRunning', this._isProxyRunning);
+        await this.state.update('neonLocal.selectedDriver', this._selectedDriver);
     }
 
     // Proxy status
@@ -62,7 +65,7 @@ export class StateService {
     }
 
     set currentOrg(value: string | undefined) {
-        this._currentOrg = value;
+        this._currentOrg = value || '';
         this.saveState();
     }
 
@@ -72,7 +75,7 @@ export class StateService {
     }
 
     set currentProject(value: string | undefined) {
-        this._currentProject = value;
+        this._currentProject = value || '';
         this.saveState();
     }
 
@@ -82,7 +85,7 @@ export class StateService {
     }
 
     set currentBranch(value: string | undefined) {
-        this._currentBranch = value;
+        this._currentBranch = value || '';
         this.saveState();
     }
 
@@ -91,7 +94,7 @@ export class StateService {
     }
 
     set parentBranchId(value: string | undefined) {
-        this._parentBranchId = value;
+        this._parentBranchId = value || '';
     }
 
     get branches(): NeonBranch[] {
@@ -111,6 +114,16 @@ export class StateService {
         this.context.globalState.update('connectionType', value);
     }
 
+    // Driver
+    get selectedDriver(): string {
+        return this._selectedDriver;
+    }
+
+    set selectedDriver(value: string) {
+        this._selectedDriver = value;
+        this.saveState();
+    }
+
     public getViewData(
         orgs: NeonOrg[],
         projects: NeonProject[],
@@ -119,8 +132,15 @@ export class StateService {
         isStarting: boolean,
         driver?: string
     ): ViewData {
+        // Update the selected driver if one is provided and we're running
+        if (driver && isProxyRunning) {
+            this._selectedDriver = driver;
+            this.saveState();
+        }
+
         console.log('Getting view data with currentOrg:', this._currentOrg);
         console.log('Projects received:', projects);
+        console.log('Current driver:', this._selectedDriver);
         
         // Find the selected org name, handling the personal account case
         const selectedOrg = this._currentOrg && this._currentOrg.length > 0 ? 
@@ -148,7 +168,7 @@ export class StateService {
             selectedProjectName: selectedProject?.name,
             selectedBranchId: this._currentBranch,
             selectedBranchName: selectedBranch?.name,
-            selectedDriver: driver,
+            selectedDriver: this._selectedDriver,
             connected: isProxyRunning,
             isStarting,
             connectionType: this._connectionType
@@ -159,10 +179,10 @@ export class StateService {
     }
 
     public clearState() {
-        this._currentOrg = undefined;
-        this._currentProject = undefined;
-        this._currentBranch = undefined;
-        this._parentBranchId = undefined;
+        this._currentOrg = '';
+        this._currentProject = '';
+        this._currentBranch = '';
+        this._parentBranchId = '';
         this._branches = [];
         this.saveState();
     }

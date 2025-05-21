@@ -52,7 +52,7 @@ const getConnectedView = (data: ViewData): string => `
         </div>
         <div class="detail-row">
             <div class="detail-label">Driver</div>
-            <div class="detail-value">${data.selectedDriver === 'neon' ? 'Neon Serverless' : 'PostgreSQL'}</div>
+            <div class="detail-value">${data.selectedDriver === 'serverless' ? 'Neon Serverless' : 'PostgreSQL'}</div>
         </div>
         ${data.connectionInfo ? getConnectionInfoSection(data.connectionInfo) : ''}
     </div>
@@ -142,7 +142,7 @@ const getFormView = (
         <div class="section">
             <label for="driver">Driver</label>
             <select id="driver" ${!data.selectedBranchId ? 'disabled' : ''}>
-                <option value="neon" ${data.selectedDriver === 'neon' ? 'selected' : ''}>Neon Serverless</option>
+                <option value="serverless" ${data.selectedDriver === 'serverless' ? 'selected' : ''}>Neon Serverless</option>
                 <option value="postgres" ${(!data.selectedDriver || data.selectedDriver === 'postgres') ? 'selected' : ''}>PostgreSQL</option>
             </select>
         </div>
@@ -400,6 +400,14 @@ const getClientScript = (data: ViewData): string => `
                     currentState.selectedDriver = this.value;
                     saveState();
                     updateStartProxyButton();
+                    
+                    // Send the selected driver value back to the extension
+                    vscode.postMessage({
+                        command: 'selectBranch',
+                        branchId: currentState.selectedBranchId,
+                        restartProxy: false,
+                        driver: this.value
+                    });
                 });
             }
 

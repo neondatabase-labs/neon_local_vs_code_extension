@@ -92,12 +92,23 @@ export class NeonLocalExtension implements NeonLocalManager {
                 await this.apiService.getBranches(this.stateService.currentProject) : [];
             console.log('Branches:', branches);
 
+            // Get the current driver from the container if it's running
+            if (this.stateService.isProxyRunning) {
+                const containerDriver = await this.dockerService.getCurrentDriver();
+                // Only update if different to avoid race conditions
+                if (containerDriver !== this.stateService.selectedDriver) {
+                    console.log(`Driver mismatch - container: ${containerDriver}, selected: ${this.stateService.selectedDriver}`);
+                    this.stateService.selectedDriver = containerDriver;
+                }
+            }
+
             const viewData = await this.stateService.getViewData(
                 orgs,
                 projects,
                 branches,
                 this.stateService.isProxyRunning,
-                this.stateService.isStarting
+                this.stateService.isStarting,
+                this.stateService.selectedDriver
             );
             console.log('View data:', viewData);
 
@@ -175,6 +186,8 @@ export class NeonLocalExtension implements NeonLocalManager {
     public async handleBranchSelection(branchId: string, restartProxy: boolean, driver: string) {
         try {
             this.stateService.currentBranch = branchId;
+            // Update the driver in state service
+            this.stateService.selectedDriver = driver;
             if (restartProxy) {
                 await this.handleStartProxy(driver, true, branchId);
             } else {
@@ -193,6 +206,9 @@ export class NeonLocalExtension implements NeonLocalManager {
 
         try {
             this.stateService.isStarting = true;
+            // Set the driver in state service before starting the container
+            console.log(`Setting initial driver to: ${driver}`);
+            this.stateService.selectedDriver = driver;
             await this.updateViewData();
 
             await this.dockerService.startContainer({
@@ -204,6 +220,10 @@ export class NeonLocalExtension implements NeonLocalManager {
             });
 
             this.stateService.isProxyRunning = true;
+            // Update the driver again after container is running to ensure it matches
+            const containerDriver = await this.dockerService.getCurrentDriver();
+            console.log(`Container started with driver: ${containerDriver}`);
+            this.stateService.selectedDriver = containerDriver;
             this.stateService.isStarting = false;
             await this.updateViewData();
         } catch (error) {
@@ -213,7 +233,6 @@ export class NeonLocalExtension implements NeonLocalManager {
     }
 
     public async getViewData(): Promise<ViewData> {
-        const config = vscode.workspace.getConfiguration('neonLocal');
         const orgs = await this.apiService.getOrgs();
         const projects = this.stateService.currentOrg ? 
             await this.apiService.getProjects(this.stateService.currentOrg) : [];
@@ -226,7 +245,7 @@ export class NeonLocalExtension implements NeonLocalManager {
             branches,
             this.stateService.isProxyRunning,
             this.stateService.isStarting,
-            config.get('driver')
+            this.stateService.selectedDriver
         );
     }
 
