@@ -48,7 +48,7 @@ export class StateService {
     }
 
     private async loadState() {
-        // Load state from persistent storage
+        // Load all state properties from persistent storage
         this._state = {
             currentOrg: this.state.get('neonLocal.currentOrg', ''),
             currentProject: this.state.get('neonLocal.currentProject', ''),
@@ -56,63 +56,12 @@ export class StateService {
             parentBranchId: this.state.get('neonLocal.parentBranchId', ''),
             connectionType: this.state.get('neonLocal.connectionType', 'existing'),
             isProxyRunning: this.state.get('neonLocal.isProxyRunning', false),
-            isStarting: false,
+            isStarting: this.state.get('neonLocal.isStarting', false),
             selectedDriver: this.state.get('neonLocal.selectedDriver', 'postgres'),
             selectedDatabase: this.state.get('neonLocal.selectedDatabase', ''),
             selectedRole: this.state.get('neonLocal.selectedRole', ''),
-            currentlyConnectedBranch: ''
+            currentlyConnectedBranch: this.state.get('neonLocal.currentlyConnectedBranch', '')
         };
-
-        // Load currently connected branch from .branches file
-        console.log('Loading state:', this._state);
-        const branchId = await this.getBranchIdFromFile();
-        this.updateState({ currentlyConnectedBranch: branchId || '' });
-    }
-
-    public getBranchIdFromFile(): string | undefined {
-        try {
-            const neonLocalPath = path.join(this.context.globalStorageUri.fsPath, '.neon_local');
-            const branchesPath = path.join(neonLocalPath, '.branches');
-            console.log('Reading .branches file at path:', branchesPath);
-
-            if (!fs.existsSync(branchesPath)) {
-                return undefined;
-            }
-
-            const content = fs.readFileSync(branchesPath, 'utf-8');
-            console.log('Raw .branches file content:', content);
-
-            const data = JSON.parse(content);
-            console.log('Parsed .branches file data:', JSON.stringify(data, null, 2));
-
-            // Find the first key that has a branch_id
-            const branchKey = Object.keys(data).find(key => 
-                data[key] && typeof data[key] === 'object' && 'branch_id' in data[key]
-            );
-
-            if (!branchKey) {
-                console.log('No branch ID found in branches file');
-                return undefined;
-            }
-
-            const branchId = data[branchKey].branch_id;
-            console.log('Found branch ID in file:', branchId);
-            return branchId;
-        } catch (error) {
-            console.error('Error reading branch ID from file:', error);
-            return undefined;
-        }
-    }
-
-    private async updateState(partialState: Partial<NeonLocalState>) {
-        // Update state immutably
-        this._state = {
-            ...this._state,
-            ...partialState
-        };
-
-        // Save changes to persistent storage
-        await this.saveState();
     }
 
     private async saveState() {
@@ -128,13 +77,20 @@ export class StateService {
             this.state.update('neonLocal.isProxyRunning', this._state.isProxyRunning),
             this.state.update('neonLocal.selectedDriver', this._state.selectedDriver),
             this.state.update('neonLocal.selectedDatabase', this._state.selectedDatabase),
-            this.state.update('neonLocal.selectedRole', this._state.selectedRole)
+            this.state.update('neonLocal.selectedRole', this._state.selectedRole),
+            this.state.update('neonLocal.currentlyConnectedBranch', this._state.currentlyConnectedBranch)
         ]);
+    }
 
-        // Clear currently connected branch if proxy is not running
-        if (!this._state.isProxyRunning) {
-            this._state.currentlyConnectedBranch = '';
-        }
+    private async updateState(updates: Partial<NeonLocalState>) {
+        // Update local state
+        this._state = {
+            ...this._state,
+            ...updates
+        };
+
+        // Save to persistent storage
+        await this.saveState();
     }
 
     // Getters
@@ -146,7 +102,9 @@ export class StateService {
     get isProxyRunning(): boolean { return this._state.isProxyRunning; }
     get isStarting(): boolean { return this._state.isStarting; }
     get selectedDriver(): string { return this._state.selectedDriver; }
-    get currentlyConnectedBranch(): string { return this._state.currentlyConnectedBranch; }
+    get selectedDatabase(): string { return this._state.selectedDatabase; }
+    get selectedRole(): string { return this._state.selectedRole; }
+    get currentlyConnectedBranch(): Promise<string> { return this.getBranchIdFromFile(); }
 
     // Setters with state updates
     async setCurrentOrg(value: string) {
@@ -159,6 +117,8 @@ export class StateService {
             updates.currentProject = '';
             updates.currentBranch = '';
             updates.parentBranchId = '';
+            updates.selectedDatabase = '';
+            updates.selectedRole = '';
         }
 
         await this.updateState(updates);
@@ -166,47 +126,81 @@ export class StateService {
 
     async setCurrentProject(value: string) {
         const updates: Partial<NeonLocalState> = {
-            currentProject: value || '',
-            currentBranch: '',
-            parentBranchId: ''
+            currentProject: value || ''
         };
+
+        // Only clear related state if project actually changed
+        if (this._state.currentProject !== value) {
+            updates.currentBranch = '';
+            updates.parentBranchId = '';
+            updates.selectedDatabase = '';
+            updates.selectedRole = '';
+        }
+
         await this.updateState(updates);
     }
 
     async setCurrentBranch(value: string) {
-        await this.updateState({ currentBranch: value || '' });
+        await this.updateState({
+            currentBranch: value || ''
+        });
     }
 
     async setParentBranchId(value: string) {
-        await this.updateState({ parentBranchId: value || '' });
+        await this.updateState({
+            parentBranchId: value || ''
+        });
     }
 
     async setConnectionType(value: 'existing' | 'new') {
-        await this.updateState({ connectionType: value });
+        await this.updateState({
+            connectionType: value
+        });
     }
 
     async setIsProxyRunning(value: boolean) {
-        await this.updateState({ isProxyRunning: value });
+        const updates: Partial<NeonLocalState> = {
+            isProxyRunning: value
+        };
+
+        // Clear state when proxy is stopped
+        if (!value) {
+            updates.selectedDatabase = '';
+            updates.selectedRole = '';
+            updates.currentlyConnectedBranch = '';
+        }
+
+        await this.updateState(updates);
     }
 
     async setIsStarting(value: boolean) {
-        await this.updateState({ isStarting: value });
+        await this.updateState({
+            isStarting: value
+        });
     }
 
     async setSelectedDriver(value: string) {
-        await this.updateState({ selectedDriver: value });
+        await this.updateState({
+            selectedDriver: value || 'postgres'
+        });
     }
 
     async setSelectedDatabase(value: string) {
-        await this.updateState({ selectedDatabase: value });
+        await this.updateState({
+            selectedDatabase: value || ''
+        });
     }
 
     async setSelectedRole(value: string) {
-        await this.updateState({ selectedRole: value });
+        await this.updateState({
+            selectedRole: value || ''
+        });
     }
 
     async setCurrentlyConnectedBranch(value: string) {
-        await this.updateState({ currentlyConnectedBranch: value || '' });
+        await this.updateState({
+            currentlyConnectedBranch: value || ''
+        });
     }
 
     async clearState() {
@@ -240,6 +234,16 @@ export class StateService {
             await this.setSelectedDriver(driver);
         }
 
+        // Update proxy running state if it changed
+        if (this._state.isProxyRunning !== isProxyRunning) {
+            await this.setIsProxyRunning(isProxyRunning);
+        }
+
+        // Update starting state if it changed
+        if (this._state.isStarting !== isStarting) {
+            await this.setIsStarting(isStarting);
+        }
+
         // Find the selected org, handling the personal account case
         const selectedOrg = this._state.currentOrg ? 
             orgs.find(org => org.id === this._state.currentOrg) : null;
@@ -249,18 +253,24 @@ export class StateService {
         const selectedProject = this._state.currentProject ? 
             projects.find(project => project.id === this._state.currentProject) : null;
 
+        // If selected project no longer exists, clear project-related state
+        if (this._state.currentProject && !selectedProject) {
+            await this.setCurrentProject('');
+        }
+
         // For new branches, always use currentlyConnectedBranch when proxy is running
         // For existing branches, use currentBranch
-        const activeBranchId = (this._state.isProxyRunning && this._state.connectionType === 'new') ? 
-            this._state.currentlyConnectedBranch : this._state.currentBranch;
-
-        console.log('Active branch selection:', {
-            isProxyRunning: this._state.isProxyRunning,
-            connectionType: this._state.connectionType,
-            currentlyConnectedBranch: this._state.currentlyConnectedBranch,
-            currentBranch: this._state.currentBranch,
-            activeBranchId
-        });
+        let activeBranchId: string;
+        if (this._state.isProxyRunning && this._state.connectionType === 'new') {
+            // For new branches that are connected, get the branch ID from the file
+            activeBranchId = await this.getBranchIdFromFile() || '';
+            // Update the currentlyConnectedBranch in state
+            if (activeBranchId) {
+                await this.setCurrentlyConnectedBranch(activeBranchId);
+            }
+        } else {
+            activeBranchId = this._state.currentBranch;
+        }
 
         // Find the selected branch
         let selectedBranch = activeBranchId ? 
@@ -275,10 +285,10 @@ export class StateService {
         if (this._state.isProxyRunning && 
             this._state.connectionType === 'new' && 
             !selectedBranch && 
-            this._state.currentlyConnectedBranch) {
+            activeBranchId) {
             selectedBranch = {
-                id: this._state.currentlyConnectedBranch,
-                name: parentBranch ? `${parentBranch.name} (New)` : 'New Branch',
+                id: activeBranchId,
+                name: `New Branch (${activeBranchId})`,
                 project_id: this._state.currentProject,
                 parent_id: this._state.parentBranchId
             };
@@ -313,5 +323,38 @@ export class StateService {
 
         console.log('Generated view data:', viewData);
         return viewData;
+    }
+
+    public async getBranchIdFromFile(): Promise<string> {
+        try {
+            console.log('Reading .branches file at path:', this.fileService.branchesFilePath);
+            const content = await fs.promises.readFile(this.fileService.branchesFilePath, 'utf8');
+            console.log('Raw .branches file content:', content);
+            
+            const data = JSON.parse(content);
+            console.log('Parsed .branches file data:', data);
+            
+            // First try to get branch ID using project ID
+            let branchId = data[this._state.currentProject]?.branch_id;
+            
+            // If not found, try to get it from the "None" key
+            if (!branchId && data['None']?.branch_id) {
+                branchId = data['None'].branch_id;
+            }
+            
+            if (!branchId) {
+                console.log('No branch ID found in branches file');
+                return '';
+            }
+            
+            return branchId;
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+                console.log('No .branches file found');
+                return '';
+            }
+            console.error('Error reading branch ID from file:', error);
+            return '';
+        }
     }
 } 

@@ -266,16 +266,26 @@ const getClientScript = (data: ViewData): string => `
             const driverSelect = document.getElementById('driver');
             const connectionTypeSelect = document.getElementById('connection-type');
 
-            const isExisting = connectionTypeSelect.value === 'existing';
+            const isExisting = connectionTypeSelect?.value === 'existing';
             const branchValue = isExisting ? branchSelect?.value : parentBranchSelect?.value;
 
-            const allSelected = orgSelect?.value && 
-                              projectSelect?.value && 
-                              branchValue && 
-                              driverSelect?.value &&
-                              connectionTypeSelect?.value;
+            // Get the current driver value from the select element or state
+            const driverValue = driverSelect?.value || currentState.selectedDriver || 'postgres';
+
+            // Check if all required fields have values
+            const allSelected = 
+                orgSelect?.value && 
+                projectSelect?.value && 
+                branchValue && 
+                driverValue && // Use the driver value we got above
+                connectionTypeSelect?.value;
 
             startButton.disabled = !allSelected;
+
+            // Update button text based on connection type
+            if (connectionTypeSelect) {
+                startButton.textContent = connectionTypeSelect.value === 'existing' ? 'Connect' : 'Create';
+            }
         }
 
         function initializeDropdowns() {
@@ -325,7 +335,6 @@ const getClientScript = (data: ViewData): string => `
                     const projectSelect = document.getElementById('project');
                     const branchSelect = document.getElementById('branch');
                     const parentBranchSelect = document.getElementById('parent-branch');
-                    const driverSelect = document.getElementById('driver');
                     
                     if (projectSelect) {
                         projectSelect.value = '';
@@ -339,10 +348,6 @@ const getClientScript = (data: ViewData): string => `
                     if (parentBranchSelect) {
                         parentBranchSelect.value = '';
                         parentBranchSelect.disabled = true;
-                    }
-                    if (driverSelect) {
-                        driverSelect.value = 'postgres';
-                        currentState.selectedDriver = 'postgres';
                     }
                     
                     saveState();
@@ -361,24 +366,28 @@ const getClientScript = (data: ViewData): string => `
                 projectSelect.value = currentState.selectedProjectId || '';
                 projectSelect.disabled = !currentState.selectedOrgId;
                 projectSelect.addEventListener('change', function() {
+                    const previousProjectId = currentState.selectedProjectId;
                     currentState.selectedProjectId = this.value;
+                    
+                    // Clear branch selection if project changed
+                    if (previousProjectId !== this.value) {
+                        currentState.selectedBranchId = '';
+                    }
+                    
                     saveState();
                     
                     const branchSelect = document.getElementById('branch');
                     const parentBranchSelect = document.getElementById('parent-branch');
-                    const driverSelect = document.getElementById('driver');
                     
                     if (branchSelect) {
                         branchSelect.value = '';
+                        branchSelect.selectedIndex = 0;
                         branchSelect.disabled = !this.value;
                     }
                     if (parentBranchSelect) {
                         parentBranchSelect.value = '';
+                        parentBranchSelect.selectedIndex = 0;
                         parentBranchSelect.disabled = !this.value;
-                    }
-                    if (driverSelect) {
-                        driverSelect.value = 'postgres';
-                        currentState.selectedDriver = 'postgres';
                     }
                     
                     saveState();
@@ -396,19 +405,26 @@ const getClientScript = (data: ViewData): string => `
             const parentBranchSelect = document.getElementById('parent-branch');
             
             if (branchSelect) {
-                branchSelect.value = currentState.selectedBranchId || '';
+                // Only set branch value if we have a project selected and branches available
+                if (currentState.selectedProjectId && currentState.branches.length > 0) {
+                    // Check if the selected branch belongs to the current project
+                    const branchExists = currentState.branches.some(branch => 
+                        branch.id === currentState.selectedBranchId && 
+                        branch.project_id === currentState.selectedProjectId
+                    );
+                    branchSelect.value = branchExists ? currentState.selectedBranchId : '';
+                } else {
+                    branchSelect.value = '';
+                    branchSelect.selectedIndex = 0;
+                }
                 branchSelect.disabled = !currentState.selectedProjectId;
+                
                 branchSelect.addEventListener('change', function() {
                     currentState.selectedBranchId = this.value;
                     saveState();
                     
                     if (parentBranchSelect) {
                         parentBranchSelect.value = this.value;
-                    }
-                    
-                    const driverSelect = document.getElementById('driver');
-                    if (driverSelect) {
-                        driverSelect.disabled = !this.value;
                     }
                     
                     updateStartProxyButton();
@@ -423,19 +439,26 @@ const getClientScript = (data: ViewData): string => `
             }
 
             if (parentBranchSelect) {
-                parentBranchSelect.value = currentState.selectedBranchId || '';
+                // Only set parent branch value if we have a project selected and branches available
+                if (currentState.selectedProjectId && currentState.branches.length > 0) {
+                    // Check if the selected branch belongs to the current project
+                    const branchExists = currentState.branches.some(branch => 
+                        branch.id === currentState.selectedBranchId && 
+                        branch.project_id === currentState.selectedProjectId
+                    );
+                    parentBranchSelect.value = branchExists ? currentState.selectedBranchId : '';
+                } else {
+                    parentBranchSelect.value = '';
+                    parentBranchSelect.selectedIndex = 0;
+                }
                 parentBranchSelect.disabled = !currentState.selectedProjectId;
+                
                 parentBranchSelect.addEventListener('change', function() {
                     currentState.selectedBranchId = this.value;
                     saveState();
                     
                     if (branchSelect) {
                         branchSelect.value = this.value;
-                    }
-                    
-                    const driverSelect = document.getElementById('driver');
-                    if (driverSelect) {
-                        driverSelect.disabled = !this.value;
                     }
                     
                     updateStartProxyButton();
@@ -450,13 +473,16 @@ const getClientScript = (data: ViewData): string => `
             // Setup driver dropdown
             const driverSelect = document.getElementById('driver');
             if (driverSelect) {
+                // Set initial value from state
                 driverSelect.value = currentState.selectedDriver || 'postgres';
+                currentState.selectedDriver = driverSelect.value; // Ensure state matches the selected value
+                saveState();
+                
                 driverSelect.addEventListener('change', function() {
                     currentState.selectedDriver = this.value;
                     saveState();
                     updateStartProxyButton();
                     
-                    // Send the selected driver value back to the extension
                     vscode.postMessage({
                         command: 'selectBranch',
                         branchId: currentState.selectedBranchId,
@@ -475,7 +501,7 @@ const getClientScript = (data: ViewData): string => `
                     
                     const connectionTypeSelect = document.getElementById('connection-type');
                     const driverSelect = document.getElementById('driver');
-                    const isExisting = connectionTypeSelect.value === 'existing';
+                    const isExisting = connectionTypeSelect?.value === 'existing';
                     
                     const branchSelect = document.getElementById('branch');
                     const parentBranchSelect = document.getElementById('parent-branch');
@@ -502,6 +528,7 @@ const getClientScript = (data: ViewData): string => `
                 });
             }
 
+            // Initial button state update after all dropdowns are initialized
             updateStartProxyButton();
         }
 

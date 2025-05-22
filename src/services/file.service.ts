@@ -12,22 +12,25 @@ interface BranchesFile {
 }
 
 export class FileService {
-    private globalStorageUri: vscode.Uri;
+    private context: vscode.ExtensionContext;
+    private _neonLocalPath: string;
+    public readonly branchesFilePath: string;
 
     constructor(context: vscode.ExtensionContext) {
-        this.globalStorageUri = context.globalStorageUri;
+        this.context = context;
+        this._neonLocalPath = path.join(context.globalStorageUri.fsPath, '.neon_local');
+        this.branchesFilePath = path.join(this._neonLocalPath, '.branches');
+        
+        // Ensure the .neon_local directory exists
+        if (!fs.existsSync(this._neonLocalPath)) {
+            fs.mkdirSync(this._neonLocalPath, { recursive: true });
+        }
     }
 
     private get neonLocalDir(): string {
-        const neonLocalPath = path.join(this.globalStorageUri.fsPath, '.neon_local');
+        const neonLocalPath = path.join(this.context.globalStorageUri.fsPath, '.neon_local');
         console.log('Neon local directory path:', neonLocalPath);
         return neonLocalPath;
-    }
-
-    private get branchesFilePath(): string {
-        const branchesPath = path.join(this.neonLocalDir, '.branches');
-        console.log('Branches file path:', branchesPath);
-        return branchesPath;
     }
 
     public async readBranchesFile(): Promise<string | undefined> {
