@@ -33,7 +33,7 @@ const getConnectedView = (data: ViewData): string => `
     <div class="connection-status">
         <div class="status-indicator connected">
             <span class="status-dot"></span>
-            Connected
+            Connected to ${data.connectionType === 'new' ? 'new' : 'existing'} branch
         </div>
     </div>
 
