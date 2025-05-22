@@ -112,7 +112,7 @@ export class SignInWebviewProvider implements vscode.WebviewViewProvider {
         </head>
         <body>
             <div class="container">
-                <p class="description">Sign in to access your Neon projects and databases.</p>
+                <p class="description">Sign in to connect to your Neon database.</p>
                 <button class="sign-in-button" id="signInButton">Sign in to Neon</button>
                 <div class="spinner" id="spinner"></div>
             </div>
