@@ -146,7 +146,7 @@ const getFormView = (
 
         <div class="section">
             <label for="driver">Driver</label>
-            <select id="driver" ${!data.selectedBranchId ? 'disabled' : ''}>
+            <select id="driver">
                 <option value="serverless" ${data.selectedDriver === 'serverless' ? 'selected' : ''}>Neon Serverless</option>
                 <option value="postgres" ${(!data.selectedDriver || data.selectedDriver === 'postgres') ? 'selected' : ''}>PostgreSQL</option>
             </select>
@@ -284,7 +284,6 @@ const getClientScript = (data: ViewData): string => `
                     }
                     if (driverSelect) {
                         driverSelect.value = 'postgres';
-                        driverSelect.disabled = true;
                         currentState.selectedDriver = 'postgres';
                     }
                     
@@ -321,7 +320,6 @@ const getClientScript = (data: ViewData): string => `
                     }
                     if (driverSelect) {
                         driverSelect.value = 'postgres';
-                        driverSelect.disabled = true;
                         currentState.selectedDriver = 'postgres';
                     }
                     
@@ -395,7 +393,6 @@ const getClientScript = (data: ViewData): string => `
             const driverSelect = document.getElementById('driver');
             if (driverSelect) {
                 driverSelect.value = currentState.selectedDriver || 'postgres';
-                driverSelect.disabled = !currentState.selectedBranchId;
                 driverSelect.addEventListener('change', function() {
                     currentState.selectedDriver = this.value;
                     saveState();
@@ -459,10 +456,16 @@ const getClientScript = (data: ViewData): string => `
                 case 'updateViewData':
                     console.log('Updating view data with:', message.data);
                     const wasConnected = currentState.connected;
+                    const previousProjects = currentState.projects || [];
+                    
+                    // If we're disconnecting, keep the previous projects
+                    const updatedProjects = !message.data.connected && wasConnected ? 
+                        previousProjects : message.data.projects || [];
+                    
                     currentState = {
                         ...currentState,
                         organizations: message.data.orgs || [],
-                        projects: message.data.projects || [],
+                        projects: updatedProjects,
                         branches: message.data.branches || [],
                         connected: message.data.connected,
                         connectionType: message.data.connectionType || 'existing'
@@ -496,11 +499,11 @@ const getClientScript = (data: ViewData): string => `
                     }
                     
                     if (projectSelect) {
-                        console.log('Updating project select with:', message.data.projects);
+                        console.log('Updating project select with:', updatedProjects);
                         while (projectSelect.options.length > 1) {
                             projectSelect.remove(1);
                         }
-                        message.data.projects.forEach(project => {
+                        updatedProjects.forEach(project => {
                             const option = document.createElement('option');
                             option.value = project.id;
                             option.text = project.name;
@@ -508,7 +511,7 @@ const getClientScript = (data: ViewData): string => `
                             projectSelect.appendChild(option);
                         });
                         // Enable project select if we have projects, regardless of org selection
-                        projectSelect.disabled = message.data.projects.length === 0;
+                        projectSelect.disabled = updatedProjects.length === 0;
                         console.log('Project select updated, disabled:', projectSelect.disabled);
                     }
                     

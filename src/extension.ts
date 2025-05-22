@@ -283,13 +283,13 @@ export class NeonLocalExtension implements NeonLocalManager {
         const isRunning = await this.dockerService.checkContainerStatus();
         
         if (this.stateService.isProxyRunning !== isRunning && !this.stateService.isStarting) {
-            this.stateService.isProxyRunning = isRunning;
+            await this.stateService.setIsProxyRunning(isRunning);
             if (!isRunning) {
                 // Clear databases and roles when disconnected
                 this._databases = [];
                 this._roles = [];
-                this.stateService.setSelectedDatabase('');
-                this.stateService.setSelectedRole('');
+                await this.stateService.setSelectedDatabase('');
+                await this.stateService.setSelectedRole('');
             }
             await this.updateViewData();
         }
@@ -298,8 +298,13 @@ export class NeonLocalExtension implements NeonLocalManager {
     private async updateViewData() {
         try {
             const orgs = await this.apiService.getOrgs();
-            const projects = this.stateService.currentOrg !== undefined ? 
-                await this.apiService.getProjects(this.stateService.currentOrg) : [];
+            
+            // For personal account, currentOrg will be empty string
+            // For organization, currentOrg will be the org ID
+            const projects = await this.apiService.getProjects(this.stateService.currentOrg);
+            console.log('Projects fetched:', projects.length, 'for org:', this.stateService.currentOrg || 'personal account');
+            
+            // Only fetch branches if we have a current project
             const branches = this.stateService.currentProject ? 
                 await this.apiService.getBranches(this.stateService.currentProject) : [];
 
@@ -309,24 +314,21 @@ export class NeonLocalExtension implements NeonLocalManager {
                 const containerDriver = await this.dockerService.getCurrentDriver();
                 if (containerDriver !== this.stateService.selectedDriver) {
                     console.log(`Updating driver from ${this.stateService.selectedDriver} to ${containerDriver}`);
-                    this.stateService.selectedDriver = containerDriver;
+                    await this.stateService.setSelectedDriver(containerDriver);
                 }
+                // Only fetch databases and roles if we're connected
+                await this.fetchDatabasesAndRoles();
             } else {
-                // Clear databases and roles when disconnected
+                // Only clear databases and roles when disconnected
                 this._databases = [];
                 this._roles = [];
-                this.stateService.setSelectedDatabase('');
-                this.stateService.setSelectedRole('');
-            }
-
-            // If we're connected, fetch databases and roles
-            if (isProxyRunning) {
-                await this.fetchDatabasesAndRoles();
+                await this.stateService.setSelectedDatabase('');
+                await this.stateService.setSelectedRole('');
             }
 
             const viewData = await this.stateService.getViewData(
                 orgs,
-                projects,
+                projects, // Pass the projects array regardless of proxy state
                 branches,
                 isProxyRunning,
                 this.stateService.isStarting,
@@ -363,12 +365,12 @@ export class NeonLocalExtension implements NeonLocalManager {
             const deleteOnStop = config.get<boolean>('deleteOnStop') ?? false;
             
             await this.dockerService.stopContainer(deleteOnStop);
-            this.stateService.isProxyRunning = false;
+            await this.stateService.setIsProxyRunning(false);
             // Clear databases and roles when stopping
             this._databases = [];
             this._roles = [];
-            this.stateService.setSelectedDatabase('');
-            this.stateService.setSelectedRole('');
+            await this.stateService.setSelectedDatabase('');
+            await this.stateService.setSelectedRole('');
             await this.updateViewData();
         } catch (error) {
             this.handleError(error);
@@ -391,12 +393,7 @@ export class NeonLocalExtension implements NeonLocalManager {
     public async handleOrgSelection(orgId: string) {
         try {
             console.log('Organization selected:', orgId);
-            // For personal account, orgId will be an empty string
-            this.stateService.currentOrg = orgId;
-            this.stateService.currentProject = undefined;
-            this.stateService.currentBranch = undefined;
-
-            // Update the view data which will fetch and display the projects
+            await this.stateService.setCurrentOrg(orgId);
             await this.updateViewData();
         } catch (error) {
             this.handleError(error);
@@ -405,8 +402,7 @@ export class NeonLocalExtension implements NeonLocalManager {
 
     public async handleProjectSelection(projectId: string) {
         try {
-            this.stateService.currentProject = projectId;
-            this.stateService.currentBranch = undefined;
+            await this.stateService.setCurrentProject(projectId);
             await this.updateViewData();
         } catch (error) {
             this.handleError(error);
@@ -415,10 +411,8 @@ export class NeonLocalExtension implements NeonLocalManager {
 
     public async handleBranchSelection(branchId: string, restartProxy: boolean, driver: string) {
         try {
-            // Set the current branch in state service
-            this.stateService.currentBranch = branchId;
-            // Update the driver in state service
-            this.stateService.selectedDriver = driver;
+            await this.stateService.setCurrentBranch(branchId);
+            await this.stateService.setSelectedDriver(driver);
             if (restartProxy) {
                 await this.handleStartProxy(driver, true, branchId);
             } else {
@@ -431,7 +425,7 @@ export class NeonLocalExtension implements NeonLocalManager {
 
     public async handleParentBranchSelection(parentBranchId: string) {
         try {
-            this.stateService.parentBranchId = parentBranchId;
+            await this.stateService.setParentBranchId(parentBranchId);
             await this.updateViewData();
         } catch (error) {
             this.handleError(error);
@@ -445,22 +439,29 @@ export class NeonLocalExtension implements NeonLocalManager {
         }
 
         try {
-            this.stateService.isStarting = true;
+            await this.stateService.setIsStarting(true);
             // Clear any existing selections when starting
             this._databases = [];
             this._roles = [];
-            this.stateService.setSelectedDatabase('');
-            this.stateService.setSelectedRole('');
+            await this.stateService.setSelectedDatabase('');
+            await this.stateService.setSelectedRole('');
             
             // Set the connection type and driver in state service before starting the container
-            this.stateService.connectionType = isExisting ? 'existing' : 'new';
+            await this.stateService.setConnectionType(isExisting ? 'existing' : 'new');
+            
+            // Set the appropriate branch ID based on connection type
             if (isExisting) {
-                this.stateService.currentBranch = branchId;
+                await this.stateService.setCurrentBranch(branchId || '');
+                // For existing branches, currentlyConnectedBranch should match currentBranch
+                await this.stateService.setCurrentlyConnectedBranch(branchId || '');
             } else if (parentBranchId) {
-                this.stateService.parentBranchId = parentBranchId;
+                await this.stateService.setParentBranchId(parentBranchId);
+                // For new branches, keep the currentlyConnectedBranch as is
+                // It will be updated when the container starts and writes to the .branches file
             }
+            
             console.log(`Setting initial driver to: ${driver}`);
-            this.stateService.selectedDriver = driver;
+            await this.stateService.setSelectedDriver(driver);
             await this.updateViewData();
 
             await this.dockerService.startContainer({
@@ -471,43 +472,55 @@ export class NeonLocalExtension implements NeonLocalManager {
                 projectId: this.stateService.currentProject || ''
             });
 
-            this.stateService.isProxyRunning = true;
+            await this.stateService.setIsProxyRunning(true);
             // Update the driver again after container is running to ensure it matches
             const containerDriver = await this.dockerService.getCurrentDriver();
             console.log(`Container started with driver: ${containerDriver}`);
-            this.stateService.selectedDriver = containerDriver;
-            this.stateService.isStarting = false;
+            await this.stateService.setSelectedDriver(containerDriver);
 
-            // For new branches, refresh the branch list to get the new branch
-            if (!isExisting && this.stateService.currentProject) {
-                const branches = await this.apiService.getBranches(this.stateService.currentProject);
-                this.stateService.branches = branches;
+            // For new branches, read the branch ID from the file after container starts
+            if (!isExisting) {
+                const branchId = await this.stateService.getBranchIdFromFile();
+                if (branchId) {
+                    await this.stateService.setCurrentlyConnectedBranch(branchId);
+                } else {
+                    console.error('Failed to read branch ID from file after container start');
+                }
             }
 
+            await this.stateService.setIsStarting(false);
             await this.updateViewData();
         } catch (error) {
-            this.stateService.isStarting = false;
+            await this.stateService.setIsStarting(false);
             this.handleError(error);
         }
     }
 
     public async handleDatabaseSelection(database: string): Promise<void> {
-        this.stateService.setSelectedDatabase(database);
+        await this.stateService.setSelectedDatabase(database);
     }
 
     public async handleRoleSelection(role: string): Promise<void> {
-        this.stateService.setSelectedRole(role);
+        await this.stateService.setSelectedRole(role);
         await this.updateViewData();
     }
 
     private async fetchDatabasesAndRoles(): Promise<void> {
         const projectId = this.stateService.currentProject;
-        //const branchId = this.stateService.currentBranch;
-        const branchId = this.stateService.currentlyConnectedBranch;
-        const connectedBranch = this.stateService.currentlyConnectedBranch;
+        let branchId: string;
+        
+        // For new branches, use currentlyConnectedBranch
+        // For existing branches, use currentBranch
+        if (this.stateService.connectionType === 'new') {
+            branchId = await this.stateService.currentlyConnectedBranch;
+        } else {
+            branchId = this.stateService.currentBranch;
+        }
+        
         console.log('X projectId:', projectId);
         console.log('X branchId:', branchId);
-        console.log('X connectedBranch:', connectedBranch);
+        console.log('X connectionType:', this.stateService.connectionType);
+        
         if (projectId && branchId) {
             try {
                 // Fetch databases and roles in parallel
@@ -526,6 +539,7 @@ export class NeonLocalExtension implements NeonLocalManager {
                 this._roles = [];
             }
         } else {
+            console.error('Missing projectId or branchId:', { projectId, branchId });
             this._databases = [];
             this._roles = [];
         }
@@ -536,7 +550,8 @@ export class NeonLocalExtension implements NeonLocalManager {
         const projectId = this.stateService.currentProject;
         const orgId = this.stateService.currentOrg;
         
-        const projects = projectId ? await this.apiService.getProjects(orgId) : [];
+        // Always fetch projects if we have an org ID
+        const projects = orgId ? await this.apiService.getProjects(orgId) : [];
         const branches = projectId ? await this.apiService.getBranches(projectId) : [];
         
         // If we're connected, fetch databases and roles
@@ -588,7 +603,7 @@ export class NeonLocalExtension implements NeonLocalManager {
                 vscode.window.showErrorMessage(message.text);
                 break;
             case 'updateConnectionType':
-                this.stateService.connectionType = message.connectionType;
+                this.stateService.setConnectionType(message.connectionType);
                 break;
             default:
                 console.warn('Unknown command:', message.command);

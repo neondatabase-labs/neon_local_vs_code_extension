@@ -36,8 +36,10 @@ export class NeonApiService {
                 
                 if (refreshTokenStr) {
                     try {
+                        console.log('Token expired, attempting refresh...');
                         // Get new access token
                         const newAccessToken = await refreshToken(refreshTokenStr);
+                        console.log('Successfully refreshed token');
                         
                         // Update the failed request's authorization header
                         error.config.headers['Authorization'] = `Bearer ${newAccessToken}`;
@@ -48,9 +50,19 @@ export class NeonApiService {
                         // Update stored API key
                         await config.update('apiKey', newAccessToken, true);
                         
+                        // Create a new request with the updated token
+                        const retryConfig = {
+                            ...error.config,
+                            headers: {
+                                ...error.config.headers,
+                                'Authorization': `Bearer ${newAccessToken}`
+                            }
+                        };
+                        
                         // Retry the failed request with the new token
-                        return instance(error.config);
+                        return instance(retryConfig);
                     } catch (refreshError) {
+                        console.error('Token refresh failed:', refreshError);
                         // If refresh fails, clear tokens and require re-authentication
                         await config.update('apiKey', undefined, true);
                         await config.update('refreshToken', undefined, true);
@@ -113,11 +125,49 @@ export class NeonApiService {
             // For personal account (empty or undefined orgId), don't include the org_id parameter
             const url = orgId && orgId.length > 0 ? `/projects?org_id=${orgId}` : '/projects';
             console.log('Fetching projects from URL:', url);
-            const response = await client.get(url);
-            // Ensure we return an array of projects
-            const projects = Array.isArray(response.data) ? response.data : response.data.projects || [];
-            console.log('Received projects:', projects);
-            return projects;
+
+            // Add retry logic
+            let retryCount = 0;
+            const maxRetries = 3;
+            let lastError: any;
+
+            while (retryCount < maxRetries) {
+                try {
+                    const response = await client.get(url);
+                    console.log('Raw API response:', response.data);
+
+                    // Handle both array and object responses
+                    let projects: NeonProject[] = [];
+                    if (Array.isArray(response.data)) {
+                        projects = response.data;
+                    } else if (response.data.projects && Array.isArray(response.data.projects)) {
+                        projects = response.data.projects;
+                    } else if (typeof response.data === 'object') {
+                        // If it's a single project object, wrap it in an array
+                        projects = [response.data];
+                    }
+
+                    // If we got an empty array but we know there should be projects, retry
+                    if (projects.length === 0 && retryCount < maxRetries - 1) {
+                        console.log('Received empty projects array, retrying...');
+                        retryCount++;
+                        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // Exponential backoff
+                        continue;
+                    }
+
+                    console.log('Processed projects:', projects);
+                    return projects;
+                } catch (error) {
+                    lastError = error;
+                    console.error(`Attempt ${retryCount + 1} failed:`, error);
+                    retryCount++;
+                    if (retryCount < maxRetries) {
+                        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // Exponential backoff
+                    }
+                }
+            }
+
+            throw lastError || new Error('Failed to fetch projects after multiple attempts');
         } catch (error) {
             console.error('Error fetching projects:', error);
             throw new Error(`Failed to fetch projects: ${error instanceof Error ? error.message : 'Unknown error'}`);
