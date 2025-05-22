@@ -309,7 +309,7 @@ export class NeonLocalExtension implements NeonLocalManager {
         if (this.stateService.isProxyRunning !== isRunning && !this.stateService.isStarting) {
             await this.stateService.setIsProxyRunning(isRunning);
             if (!isRunning) {
-                // Clear databases and roles when disconnected
+                // Clear only connection-specific data
                 this._databases = [];
                 this._roles = [];
                 await this.stateService.setSelectedDatabase('');
@@ -343,16 +343,22 @@ export class NeonLocalExtension implements NeonLocalManager {
                 // Only fetch databases and roles if we're connected
                 await this.fetchDatabasesAndRoles();
             } else {
-                // Only clear databases and roles when disconnected
+                // Only clear connection-specific data when disconnected
                 this._databases = [];
                 this._roles = [];
                 await this.stateService.setSelectedDatabase('');
                 await this.stateService.setSelectedRole('');
             }
 
+            // Store current state values before updating
+            const currentConnectionType = this.stateService.connectionType;
+            const currentBranch = this.stateService.currentBranch;
+            const parentBranchId = this.stateService.parentBranchId;
+            const currentlyConnectedBranch = await this.stateService.currentlyConnectedBranch;
+
             const viewData = await this.stateService.getViewData(
                 orgs,
-                projects, // Pass the projects array regardless of proxy state
+                projects,
                 branches,
                 isProxyRunning,
                 this.stateService.isStarting,
@@ -360,6 +366,13 @@ export class NeonLocalExtension implements NeonLocalManager {
                 this._databases,
                 this._roles
             );
+
+            // Restore state values after view update
+            await this.stateService.setConnectionType(currentConnectionType);
+            await this.stateService.setCurrentBranch(currentBranch);
+            await this.stateService.setParentBranchId(parentBranchId);
+            await this.stateService.setCurrentlyConnectedBranch(currentlyConnectedBranch);
+
             console.log('View data:', viewData);
 
             // Update all views with the same data
@@ -388,20 +401,28 @@ export class NeonLocalExtension implements NeonLocalManager {
             const config = vscode.workspace.getConfiguration('neonLocal');
             const deleteOnStop = config.get<boolean>('deleteOnStop') ?? false;
             
-            // Store the current connection type before stopping
+            // Store the current state before stopping
             const currentConnectionType = this.stateService.connectionType;
+            const currentBranch = this.stateService.currentBranch;
+            const parentBranchId = this.stateService.parentBranchId;
+            const currentlyConnectedBranch = await this.stateService.currentlyConnectedBranch;
             
             await this.dockerService.stopContainer(deleteOnStop);
             await this.stateService.setIsProxyRunning(false);
-            // Clear databases and roles when stopping
+            
+            // Clear only connection-specific data
             this._databases = [];
             this._roles = [];
             await this.stateService.setSelectedDatabase('');
             await this.stateService.setSelectedRole('');
             
-            // Restore the connection type after stopping
+            // Restore the connection state
             await this.stateService.setConnectionType(currentConnectionType);
+            await this.stateService.setCurrentBranch(currentBranch);
+            await this.stateService.setParentBranchId(parentBranchId);
+            await this.stateService.setCurrentlyConnectedBranch(currentlyConnectedBranch);
             
+            // Update view data after restoring state
             await this.updateViewData();
         } catch (error) {
             this.handleError(error);

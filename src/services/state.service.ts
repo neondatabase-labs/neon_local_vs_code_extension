@@ -163,11 +163,11 @@ export class StateService {
             isProxyRunning: value
         };
 
-        // Clear state when proxy is stopped
+        // Clear only connection-specific state when proxy is stopped
         if (!value) {
             updates.selectedDatabase = '';
             updates.selectedRole = '';
-            updates.currentlyConnectedBranch = '';
+            // Don't clear currentlyConnectedBranch as it might be needed for reconnection
         }
 
         await this.updateState(updates);
@@ -311,6 +311,7 @@ export class StateService {
             selectedProjectName: selectedProject?.name,
             selectedBranchId: activeBranchId,
             selectedBranchName: selectedBranch?.name,
+            parentBranchId: this._state.parentBranchId,
             parentBranchName: parentBranch?.name,
             selectedDriver: this._state.selectedDriver,
             selectedDatabase: this._state.selectedDatabase,

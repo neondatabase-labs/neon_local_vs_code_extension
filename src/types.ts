@@ -44,6 +44,7 @@ export interface ViewData {
     selectedProjectName?: string;
     selectedBranchId: string;
     selectedBranchName?: string;
+    parentBranchId?: string;
     parentBranchName?: string;
     selectedDriver: string;
     selectedDatabase?: string;

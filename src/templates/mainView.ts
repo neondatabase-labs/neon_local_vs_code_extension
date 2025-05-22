@@ -179,6 +179,7 @@ const getClientScript = (data: ViewData): string => `
             selectedOrgId: ${JSON.stringify(data.selectedOrgId)},
             selectedProjectId: ${JSON.stringify(data.selectedProjectId)},
             selectedBranchId: ${JSON.stringify(data.selectedBranchId)},
+            parentBranchId: ${JSON.stringify(data.parentBranchId)},
             selectedDriver: ${JSON.stringify(data.selectedDriver || 'postgres')},
             connected: ${JSON.stringify(data.connected)},
             connectionType: ${JSON.stringify(data.connectionType || 'existing')}
@@ -191,16 +192,17 @@ const getClientScript = (data: ViewData): string => `
             projects: ${JSON.stringify(data.projects || [])},
             branches: ${JSON.stringify(data.branches || [])},
             connected: ${JSON.stringify(data.connected)},
-            // Preserve the connection type regardless of connection state
+            // Preserve the connection type and parent branch ID regardless of connection state
             connectionType: currentState.connectionType || ${JSON.stringify(data.connectionType || 'existing')},
+            parentBranchId: currentState.parentBranchId || ${JSON.stringify(data.parentBranchId)},
             // Only preserve other selections if we have orgs
             selectedOrgId: ${JSON.stringify(data.orgs || [])}.length ? (currentState.selectedOrgId || ${JSON.stringify(data.selectedOrgId)}) : '',
             selectedProjectId: ${JSON.stringify(data.orgs || [])}.length ? (currentState.selectedProjectId || ${JSON.stringify(data.selectedProjectId)}) : '',
             selectedBranchId: ${JSON.stringify(data.orgs || [])}.length ? (currentState.selectedBranchId || ${JSON.stringify(data.selectedBranchId)}) : '',
-            selectedDriver: ${JSON.stringify(data.orgs || [])}.length ? (currentState.selectedDriver || ${JSON.stringify(data.selectedDriver || 'postgres')}) : 'postgres'
+            selectedDriver: currentState.selectedDriver || ${JSON.stringify(data.selectedDriver || 'postgres')}
         };
 
-        // Save initial state
+        // Save the updated state
         vscode.setState(currentState);
 
         function saveState() {
@@ -208,8 +210,9 @@ const getClientScript = (data: ViewData): string => `
         }
 
         function clearState() {
-            // Store the current connection type before clearing
+            // Store the current values before clearing
             const currentConnectionType = currentState.connectionType;
+            const currentParentBranchId = currentState.parentBranchId;
             
             currentState = {
                 organizations: [],
@@ -220,8 +223,9 @@ const getClientScript = (data: ViewData): string => `
                 selectedBranchId: '',
                 selectedDriver: 'postgres',
                 connected: false,
-                // Preserve the connection type
-                connectionType: currentConnectionType || 'existing'
+                // Preserve connection type and parent branch ID
+                connectionType: currentConnectionType || 'existing',
+                parentBranchId: currentParentBranchId || ''
             };
             vscode.setState(currentState);
             
@@ -447,12 +451,24 @@ const getClientScript = (data: ViewData): string => `
             if (parentBranchSelect) {
                 // Only set parent branch value if we have a project selected and branches available
                 if (currentState.selectedProjectId && currentState.branches.length > 0) {
-                    // Check if the selected branch belongs to the current project
-                    const branchExists = currentState.branches.some(branch => 
-                        branch.id === currentState.selectedBranchId && 
-                        branch.project_id === currentState.selectedProjectId
-                    );
-                    parentBranchSelect.value = branchExists ? currentState.selectedBranchId : '';
+                    // First try to use the stored parent branch ID
+                    if (currentState.parentBranchId) {
+                        const branchExists = currentState.branches.some(branch => 
+                            branch.id === currentState.parentBranchId && 
+                            branch.project_id === currentState.selectedProjectId
+                        );
+                        if (branchExists) {
+                            parentBranchSelect.value = currentState.parentBranchId;
+                        }
+                    }
+                    // If no parent branch ID or it doesn't exist, fall back to selected branch ID
+                    if (!parentBranchSelect.value) {
+                        const branchExists = currentState.branches.some(branch => 
+                            branch.id === currentState.selectedBranchId && 
+                            branch.project_id === currentState.selectedProjectId
+                        );
+                        parentBranchSelect.value = branchExists ? currentState.selectedBranchId : '';
+                    }
                 } else {
                     parentBranchSelect.value = '';
                     parentBranchSelect.selectedIndex = 0;
@@ -460,6 +476,8 @@ const getClientScript = (data: ViewData): string => `
                 parentBranchSelect.disabled = !currentState.selectedProjectId;
                 
                 parentBranchSelect.addEventListener('change', function() {
+                    // Store both parent branch ID and selected branch ID
+                    currentState.parentBranchId = this.value;
                     currentState.selectedBranchId = this.value;
                     saveState();
                     
@@ -562,9 +580,9 @@ const getClientScript = (data: ViewData): string => `
                         projects: updatedProjects,
                         branches: message.data.branches || [],
                         connected: message.data.connected,
-                        // Preserve the existing connection type unless auth was cleared
+                        // Preserve existing values unless auth was cleared
                         connectionType: authCleared ? 'existing' : (currentState.connectionType || message.data.connectionType || 'existing'),
-                        // Clear all selections if auth was cleared
+                        parentBranchId: authCleared ? '' : (currentState.parentBranchId || message.data.parentBranchId),
                         selectedOrgId: authCleared ? '' : currentState.selectedOrgId,
                         selectedProjectId: authCleared ? '' : currentState.selectedProjectId,
                         selectedBranchId: authCleared ? '' : currentState.selectedBranchId,
