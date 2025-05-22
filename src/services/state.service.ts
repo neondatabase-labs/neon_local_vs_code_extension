@@ -237,8 +237,10 @@ export class StateService {
         const selectedProject = this._currentProject ? 
             projects.find(project => project.id === this._currentProject) : null;
             
-        // For branch selection, use currentlyConnectedBranch logic
-        const activeBranchId = this._isProxyRunning ? this.currentlyConnectedBranch : this._currentBranch;
+        // For branch selection, use currentlyConnectedBranch when proxy is running and connection type is 'new'
+        // For existing branches, always use the selected branch from the dropdown
+        const activeBranchId = (this._isProxyRunning && this._connectionType === 'new') ? 
+            this._currentlyConnectedBranch : this._currentBranch;
         let selectedBranch = activeBranchId ? 
             branches.find(branch => branch.id === activeBranchId) : null;
 
@@ -248,11 +250,11 @@ export class StateService {
 
         // If we're connected and using a new branch, but couldn't find the branch in the list,
         // use the parent branch name with " (New)" appended
-        if (this._isProxyRunning && this._connectionType === 'new' && !selectedBranch) {
+        if (this._isProxyRunning && this._connectionType === 'new' && !selectedBranch && parentBranch) {
             selectedBranch = {
-                ...parentBranch!,
-                id: activeBranchId || '',
-                name: `${parentBranch?.name || ''} (New)`
+                ...parentBranch,
+                id: this._currentlyConnectedBranch || '',
+                name: `${parentBranch.name} (New)`
             };
         }
 
@@ -261,6 +263,7 @@ export class StateService {
         console.log('Selected branch:', selectedBranch);
         console.log('Parent branch:', parentBranch);
         console.log('Active branch ID:', activeBranchId);
+        console.log('Currently connected branch:', this._currentlyConnectedBranch);
         console.log('Projects to display:', projects);
 
         // Generate connection info based on driver and active branch

@@ -415,6 +415,7 @@ export class NeonLocalExtension implements NeonLocalManager {
 
     public async handleBranchSelection(branchId: string, restartProxy: boolean, driver: string) {
         try {
+            // Set the current branch in state service
             this.stateService.currentBranch = branchId;
             // Update the driver in state service
             this.stateService.selectedDriver = driver;
@@ -453,7 +454,9 @@ export class NeonLocalExtension implements NeonLocalManager {
             
             // Set the connection type and driver in state service before starting the container
             this.stateService.connectionType = isExisting ? 'existing' : 'new';
-            if (!isExisting && parentBranchId) {
+            if (isExisting) {
+                this.stateService.currentBranch = branchId;
+            } else if (parentBranchId) {
                 this.stateService.parentBranchId = parentBranchId;
             }
             console.log(`Setting initial driver to: ${driver}`);
@@ -500,7 +503,7 @@ export class NeonLocalExtension implements NeonLocalManager {
     private async fetchDatabasesAndRoles(): Promise<void> {
         const projectId = this.stateService.currentProject;
         //const branchId = this.stateService.currentBranch;
-        const branchId = this.stateService.currentlyConnectedBranch ? this.stateService.currentlyConnectedBranch : this.stateService.currentBranch;
+        const branchId = this.stateService.currentlyConnectedBranch;
         const connectedBranch = this.stateService.currentlyConnectedBranch;
         console.log('X projectId:', projectId);
         console.log('X branchId:', branchId);
