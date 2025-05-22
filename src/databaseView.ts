@@ -24,6 +24,21 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
             localResourceRoots: [this._extensionUri]
         };
 
+        // Initialize view with empty state to show not connected message
+        webviewView.webview.html = getDatabaseHtml({
+            orgs: [],
+            projects: [],
+            branches: [],
+            databases: [],
+            roles: [],
+            selectedOrgId: '',
+            selectedOrgName: '',
+            selectedBranchId: '',
+            selectedDriver: 'postgres',
+            connected: false,
+            isStarting: false
+        });
+
         this._neonLocal.setWebviewView(webviewView);
         this.updateView();
 

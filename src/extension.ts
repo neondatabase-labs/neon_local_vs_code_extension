@@ -38,8 +38,20 @@ export class NeonLocalExtension implements NeonLocalManager {
         // Initial container status check
         await this.checkContainerStatus();
 
-        // Initial view data update
+        // Initial view data update - ensure this happens even if not connected
         await this.updateViewData();
+
+        // Set initial state for views
+        this.webviewService.updateViewData(await this.stateService.getViewData(
+            [], // Empty orgs array for initial state
+            [], // Empty projects array for initial state
+            [], // Empty branches array for initial state
+            false, // Not connected initially
+            false, // Not starting initially
+            undefined, // No driver initially
+            [], // Empty databases array for initial state
+            [] // Empty roles array for initial state
+        ));
     }
 
     public deactivate() {
