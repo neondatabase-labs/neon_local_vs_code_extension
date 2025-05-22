@@ -184,19 +184,19 @@ const getClientScript = (data: ViewData): string => `
             connectionType: ${JSON.stringify(data.connectionType || 'existing')}
         };
 
-        // Update state with any new data while preserving selections
+        // Update state with any new data while preserving selections ONLY if we have orgs
         currentState = {
             ...currentState,
             organizations: ${JSON.stringify(data.orgs || [])},
             projects: ${JSON.stringify(data.projects || [])},
             branches: ${JSON.stringify(data.branches || [])},
             connected: ${JSON.stringify(data.connected)},
-            // Preserve selections from either current state or new data
-            selectedOrgId: currentState.selectedOrgId || ${JSON.stringify(data.selectedOrgId)},
-            selectedProjectId: currentState.selectedProjectId || ${JSON.stringify(data.selectedProjectId)},
-            selectedBranchId: currentState.selectedBranchId || ${JSON.stringify(data.selectedBranchId)},
-            selectedDriver: currentState.selectedDriver || ${JSON.stringify(data.selectedDriver || 'postgres')},
-            connectionType: currentState.connectionType || ${JSON.stringify(data.connectionType || 'existing')}
+            // Only preserve selections if we have orgs, otherwise clear them
+            selectedOrgId: ${JSON.stringify(data.orgs || [])}.length ? (currentState.selectedOrgId || ${JSON.stringify(data.selectedOrgId)}) : '',
+            selectedProjectId: ${JSON.stringify(data.orgs || [])}.length ? (currentState.selectedProjectId || ${JSON.stringify(data.selectedProjectId)}) : '',
+            selectedBranchId: ${JSON.stringify(data.orgs || [])}.length ? (currentState.selectedBranchId || ${JSON.stringify(data.selectedBranchId)}) : '',
+            selectedDriver: ${JSON.stringify(data.orgs || [])}.length ? (currentState.selectedDriver || ${JSON.stringify(data.selectedDriver || 'postgres')}) : 'postgres',
+            connectionType: ${JSON.stringify(data.orgs || [])}.length ? (currentState.connectionType || ${JSON.stringify(data.connectionType || 'existing')}) : 'existing'
         };
 
         // Save initial state
@@ -204,6 +204,55 @@ const getClientScript = (data: ViewData): string => `
 
         function saveState() {
             vscode.setState(currentState);
+        }
+
+        function clearState() {
+            currentState = {
+                organizations: [],
+                projects: [],
+                branches: [],
+                selectedOrgId: '',
+                selectedProjectId: '',
+                selectedBranchId: '',
+                selectedDriver: 'postgres',
+                connected: false,
+                connectionType: 'existing'
+            };
+            vscode.setState(currentState);
+            
+            // Also reset all dropdowns to their default state
+            const orgSelect = document.getElementById('org');
+            const projectSelect = document.getElementById('project');
+            const branchSelect = document.getElementById('branch');
+            const parentBranchSelect = document.getElementById('parent-branch');
+            const driverSelect = document.getElementById('driver');
+            const connectionTypeSelect = document.getElementById('connection-type');
+            
+            if (orgSelect) {
+                orgSelect.value = '';
+                orgSelect.selectedIndex = 0;
+            }
+            if (projectSelect) {
+                projectSelect.value = '';
+                projectSelect.selectedIndex = 0;
+                projectSelect.disabled = true;
+            }
+            if (branchSelect) {
+                branchSelect.value = '';
+                branchSelect.selectedIndex = 0;
+                branchSelect.disabled = true;
+            }
+            if (parentBranchSelect) {
+                parentBranchSelect.value = '';
+                parentBranchSelect.selectedIndex = 0;
+                parentBranchSelect.disabled = true;
+            }
+            if (driverSelect) {
+                driverSelect.value = 'postgres';
+            }
+            if (connectionTypeSelect) {
+                connectionTypeSelect.value = 'existing';
+            }
         }
 
         function updateStartProxyButton() {
@@ -259,7 +308,16 @@ const getClientScript = (data: ViewData): string => `
             // Setup organization dropdown
             const orgSelect = document.getElementById('org');
             if (orgSelect) {
-                orgSelect.value = currentState.selectedOrgId || '';
+                // Only set a value if we have organizations and a selected org
+                if (currentState.organizations.length > 0 && currentState.selectedOrgId) {
+                    orgSelect.value = currentState.selectedOrgId;
+                } else {
+                    // Otherwise reset to default state
+                    orgSelect.selectedIndex = 0;
+                    currentState.selectedOrgId = '';
+                    saveState();
+                }
+                
                 orgSelect.addEventListener('change', function() {
                     currentState.selectedOrgId = this.value;
                     saveState();
@@ -462,18 +520,27 @@ const getClientScript = (data: ViewData): string => `
                     const updatedProjects = !message.data.connected && wasConnected ? 
                         previousProjects : message.data.projects || [];
                     
+                    // Check if auth was cleared (no orgs)
+                    const authCleared = !message.data.orgs?.length;
+                    
                     currentState = {
                         ...currentState,
                         organizations: message.data.orgs || [],
                         projects: updatedProjects,
                         branches: message.data.branches || [],
                         connected: message.data.connected,
-                        connectionType: message.data.connectionType || 'existing'
+                        connectionType: message.data.connectionType || 'existing',
+                        // Clear all selections if auth was cleared
+                        selectedOrgId: authCleared ? '' : currentState.selectedOrgId,
+                        selectedProjectId: authCleared ? '' : currentState.selectedProjectId,
+                        selectedBranchId: authCleared ? '' : currentState.selectedBranchId,
+                        selectedDriver: authCleared ? 'postgres' : currentState.selectedDriver
                     };
                     saveState();
                     
-                    // If connection status changed, force a full page refresh
-                    if (wasConnected !== message.data.connected) {
+                    // If connection status changed or auth was cleared, force a full page refresh
+                    if (wasConnected !== message.data.connected || authCleared) {
+                        clearState();
                         window.location.reload();
                         break;
                     }
@@ -489,13 +556,18 @@ const getClientScript = (data: ViewData): string => `
                         while (orgSelect.options.length > 1) {
                             orgSelect.remove(1);
                         }
-                        message.data.orgs.forEach(org => {
-                            const option = document.createElement('option');
-                            option.value = org.id;
-                            option.text = org.name;
-                            option.selected = org.id === currentState.selectedOrgId;
-                            orgSelect.add(option);
-                        });
+                        // If auth was cleared, reset to default state
+                        if (authCleared) {
+                            orgSelect.selectedIndex = 0;
+                        } else {
+                            message.data.orgs.forEach(org => {
+                                const option = document.createElement('option');
+                                option.value = org.id;
+                                option.text = org.name;
+                                option.selected = org.id === currentState.selectedOrgId;
+                                orgSelect.add(option);
+                            });
+                        }
                     }
                     
                     if (projectSelect) {
@@ -531,6 +603,11 @@ const getClientScript = (data: ViewData): string => `
                             select.disabled = !currentState.selectedProjectId;
                         });
                     }
+                    break;
+                    
+                case 'clearState':
+                    clearState();
+                    window.location.reload();
                     break;
                     
                 case 'updateStatus':

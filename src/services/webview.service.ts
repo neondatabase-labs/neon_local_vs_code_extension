@@ -39,6 +39,20 @@ export class WebViewService {
         }
     }
 
+    public postMessage(message: { command: string; [key: string]: any }): void {
+        for (const view of this.views.values()) {
+            if (!view.visible) {
+                continue;
+            }
+
+            try {
+                view.webview.postMessage(message);
+            } catch (error) {
+                console.error('Failed to post message to view:', error);
+            }
+        }
+    }
+
     public showPanel(context: vscode.ExtensionContext): void {
         const panel = vscode.window.createWebviewPanel(
             'neonLocal',

@@ -378,12 +378,38 @@ export class NeonLocalExtension implements NeonLocalManager {
     }
 
     public async clearAuth() {
-        const config = vscode.workspace.getConfiguration('neonLocal');
-        await config.update('apiKey', undefined, true);
-        await config.update('refreshToken', undefined, true);
-        this.apiService.clearApiClient();
-        this.stateService.clearState();
-        await this.updateViewData();
+        try {
+            // Clear API key and refresh token from configuration
+            const config = vscode.workspace.getConfiguration('neonLocal');
+            await config.update('apiKey', undefined, true);
+            await config.update('refreshToken', undefined, true);
+            
+            // Clear API client
+            this.apiService.clearApiClient();
+            
+            // Stop proxy if running
+            if (this.stateService.isProxyRunning) {
+                await this.stopProxy();
+            }
+            
+            // Clear all state
+            await this.stateService.clearState();
+            
+            // Clear local data
+            this._databases = [];
+            this._roles = [];
+            
+            // Clear webview state
+            this.webviewService.postMessage({ command: 'clearState' });
+            
+            // Update view with cleared data
+            await this.updateViewData();
+            
+            // Show confirmation message
+            vscode.window.showInformationMessage('Successfully cleared authentication and all extension data.');
+        } catch (error) {
+            this.handleError(error);
+        }
     }
 
     public setWebviewView(view: vscode.WebviewView): void {

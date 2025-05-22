@@ -215,9 +215,13 @@ export class StateService {
             currentProject: '',
             currentBranch: '',
             parentBranchId: '',
-            currentlyConnectedBranch: '',
+            connectionType: 'existing',
+            isProxyRunning: false,
+            isStarting: false,
+            selectedDriver: 'postgres',
             selectedDatabase: '',
-            selectedRole: ''
+            selectedRole: '',
+            currentlyConnectedBranch: ''
         });
     }
 
