@@ -49,9 +49,10 @@ export class DockerService {
         const { branchId, driver, isExisting, context, projectId } = options;
 
         try {
-            // Get API key from configuration
+            // Get API key and refresh token from configuration
             const config = vscode.workspace.getConfiguration('neonLocal');
             const apiKey = config.get<string>('apiKey');
+            const refreshToken = config.get<string>('refreshToken');
 
             if (!apiKey) {
                 throw new Error('API key not found. Please sign in first.');
@@ -69,6 +70,8 @@ export class DockerService {
                     `DRIVER=${driver === 'serverless' ? 'serverless' : 'postgres'}`,
                     `NEON_API_KEY=${apiKey}`,
                     `NEON_PROJECT_ID=${projectId}`,
+                    // Add refresh token if available
+                    ...(refreshToken ? [`NEON_REFRESH_TOKEN=${refreshToken}`] : []),
                     // Conditionally add either BRANCH_ID or PARENT_BRANCH_ID
                     ...(isExisting ? [`BRANCH_ID=${branchId}`] : [`PARENT_BRANCH_ID=${branchId}`])
                 ],
