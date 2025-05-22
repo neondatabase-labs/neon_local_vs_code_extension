@@ -90,6 +90,18 @@ export class NeonLocalExtension implements NeonLocalManager {
                     }
                 }
 
+                // Show confirmation dialog
+                const answer = await vscode.window.showWarningMessage(
+                    'Are you sure you want to reset this branch to its parent state? This action cannot be undone.',
+                    { modal: true },
+                    'Yes, Reset Branch',
+                    'Cancel'
+                );
+
+                if (answer !== 'Yes, Reset Branch') {
+                    return;
+                }
+
                 try {
                     // Show progress notification
                     await vscode.window.withProgress({
