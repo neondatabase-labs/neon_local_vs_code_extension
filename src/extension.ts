@@ -376,6 +376,9 @@ export class NeonLocalExtension implements NeonLocalManager {
             const config = vscode.workspace.getConfiguration('neonLocal');
             const deleteOnStop = config.get<boolean>('deleteOnStop') ?? false;
             
+            // Store the current connection type before stopping
+            const currentConnectionType = this.stateService.connectionType;
+            
             await this.dockerService.stopContainer(deleteOnStop);
             await this.stateService.setIsProxyRunning(false);
             // Clear databases and roles when stopping
@@ -383,6 +386,10 @@ export class NeonLocalExtension implements NeonLocalManager {
             this._roles = [];
             await this.stateService.setSelectedDatabase('');
             await this.stateService.setSelectedRole('');
+            
+            // Restore the connection type after stopping
+            await this.stateService.setConnectionType(currentConnectionType);
+            
             await this.updateViewData();
         } catch (error) {
             this.handleError(error);

@@ -184,19 +184,20 @@ const getClientScript = (data: ViewData): string => `
             connectionType: ${JSON.stringify(data.connectionType || 'existing')}
         };
 
-        // Update state with any new data while preserving selections ONLY if we have orgs
+        // Update state with any new data while preserving selections
         currentState = {
             ...currentState,
             organizations: ${JSON.stringify(data.orgs || [])},
             projects: ${JSON.stringify(data.projects || [])},
             branches: ${JSON.stringify(data.branches || [])},
             connected: ${JSON.stringify(data.connected)},
-            // Only preserve selections if we have orgs, otherwise clear them
+            // Preserve the connection type regardless of connection state
+            connectionType: currentState.connectionType || ${JSON.stringify(data.connectionType || 'existing')},
+            // Only preserve other selections if we have orgs
             selectedOrgId: ${JSON.stringify(data.orgs || [])}.length ? (currentState.selectedOrgId || ${JSON.stringify(data.selectedOrgId)}) : '',
             selectedProjectId: ${JSON.stringify(data.orgs || [])}.length ? (currentState.selectedProjectId || ${JSON.stringify(data.selectedProjectId)}) : '',
             selectedBranchId: ${JSON.stringify(data.orgs || [])}.length ? (currentState.selectedBranchId || ${JSON.stringify(data.selectedBranchId)}) : '',
-            selectedDriver: ${JSON.stringify(data.orgs || [])}.length ? (currentState.selectedDriver || ${JSON.stringify(data.selectedDriver || 'postgres')}) : 'postgres',
-            connectionType: ${JSON.stringify(data.orgs || [])}.length ? (currentState.connectionType || ${JSON.stringify(data.connectionType || 'existing')}) : 'existing'
+            selectedDriver: ${JSON.stringify(data.orgs || [])}.length ? (currentState.selectedDriver || ${JSON.stringify(data.selectedDriver || 'postgres')}) : 'postgres'
         };
 
         // Save initial state
@@ -207,6 +208,9 @@ const getClientScript = (data: ViewData): string => `
         }
 
         function clearState() {
+            // Store the current connection type before clearing
+            const currentConnectionType = currentState.connectionType;
+            
             currentState = {
                 organizations: [],
                 projects: [],
@@ -216,7 +220,8 @@ const getClientScript = (data: ViewData): string => `
                 selectedBranchId: '',
                 selectedDriver: 'postgres',
                 connected: false,
-                connectionType: 'existing'
+                // Preserve the connection type
+                connectionType: currentConnectionType || 'existing'
             };
             vscode.setState(currentState);
             
@@ -251,7 +256,8 @@ const getClientScript = (data: ViewData): string => `
                 driverSelect.value = 'postgres';
             }
             if (connectionTypeSelect) {
-                connectionTypeSelect.value = 'existing';
+                // Set the connection type select to the preserved value
+                connectionTypeSelect.value = currentConnectionType || 'existing';
             }
         }
 
@@ -556,7 +562,8 @@ const getClientScript = (data: ViewData): string => `
                         projects: updatedProjects,
                         branches: message.data.branches || [],
                         connected: message.data.connected,
-                        connectionType: message.data.connectionType || 'existing',
+                        // Preserve the existing connection type unless auth was cleared
+                        connectionType: authCleared ? 'existing' : (currentState.connectionType || message.data.connectionType || 'existing'),
                         // Clear all selections if auth was cleared
                         selectedOrgId: authCleared ? '' : currentState.selectedOrgId,
                         selectedProjectId: authCleared ? '' : currentState.selectedProjectId,
