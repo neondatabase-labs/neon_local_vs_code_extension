@@ -499,7 +499,8 @@ export class NeonLocalExtension implements NeonLocalManager {
 
     private async fetchDatabasesAndRoles(): Promise<void> {
         const projectId = this.stateService.currentProject;
-        const branchId = this.stateService.currentBranch;
+        //const branchId = this.stateService.currentBranch;
+        const branchId = this.stateService.currentlyConnectedBranch ? this.stateService.currentlyConnectedBranch : this.stateService.currentBranch;
         const connectedBranch = this.stateService.currentlyConnectedBranch;
         console.log('X projectId:', projectId);
         console.log('X branchId:', branchId);
