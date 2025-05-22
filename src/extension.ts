@@ -298,7 +298,7 @@ export class NeonLocalExtension implements NeonLocalManager {
     private async updateViewData() {
         try {
             const orgs = await this.apiService.getOrgs();
-            const projects = this.stateService.currentOrg ? 
+            const projects = this.stateService.currentOrg !== undefined ? 
                 await this.apiService.getProjects(this.stateService.currentOrg) : [];
             const branches = this.stateService.currentProject ? 
                 await this.apiService.getBranches(this.stateService.currentProject) : [];
