@@ -154,6 +154,7 @@ export class NeonApiService {
     }
 
     public async getDatabases(projectId: string, branchId: string): Promise<NeonDatabase[]> {
+        console.log('Getting databases for projectId:', projectId, 'and branchId:', branchId);
         try {
             const client = await this.ensureApiClient();
             const response = await client.get(`/projects/${projectId}/branches/${branchId}/databases`);

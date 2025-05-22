@@ -298,7 +298,7 @@ export class NeonLocalExtension implements NeonLocalManager {
     private async updateViewData() {
         try {
             const orgs = await this.apiService.getOrgs();
-            const projects = this.stateService.currentProject ? 
+            const projects = this.stateService.currentOrg ? 
                 await this.apiService.getProjects(this.stateService.currentOrg) : [];
             const branches = this.stateService.currentProject ? 
                 await this.apiService.getBranches(this.stateService.currentProject) : [];
@@ -428,6 +428,15 @@ export class NeonLocalExtension implements NeonLocalManager {
         }
     }
 
+    public async handleParentBranchSelection(parentBranchId: string) {
+        try {
+            this.stateService.parentBranchId = parentBranchId;
+            await this.updateViewData();
+        } catch (error) {
+            this.handleError(error);
+        }
+    }
+
     public async handleStartProxy(driver: string, isExisting: boolean, branchId?: string, parentBranchId?: string) {
         const selectedBranchId = isExisting ? branchId : parentBranchId;
         if (!selectedBranchId) {
@@ -444,6 +453,9 @@ export class NeonLocalExtension implements NeonLocalManager {
             
             // Set the connection type and driver in state service before starting the container
             this.stateService.connectionType = isExisting ? 'existing' : 'new';
+            if (!isExisting && parentBranchId) {
+                this.stateService.parentBranchId = parentBranchId;
+            }
             console.log(`Setting initial driver to: ${driver}`);
             this.stateService.selectedDriver = driver;
             await this.updateViewData();
@@ -488,7 +500,10 @@ export class NeonLocalExtension implements NeonLocalManager {
     private async fetchDatabasesAndRoles(): Promise<void> {
         const projectId = this.stateService.currentProject;
         const branchId = this.stateService.currentBranch;
-        
+        const connectedBranch = this.stateService.currentlyConnectedBranch;
+        console.log('X projectId:', projectId);
+        console.log('X branchId:', branchId);
+        console.log('X connectedBranch:', connectedBranch);
         if (projectId && branchId) {
             try {
                 // Fetch databases and roles in parallel
@@ -498,7 +513,9 @@ export class NeonLocalExtension implements NeonLocalManager {
                 ]);
                 
                 this._databases = databases;
+                console.log('X databases:', this._databases);
                 this._roles = roles;
+                console.log('X roles:', this._roles);
             } catch (error) {
                 console.error('Error fetching databases and roles:', error);
                 this._databases = [];
@@ -520,7 +537,9 @@ export class NeonLocalExtension implements NeonLocalManager {
         
         // If we're connected, fetch databases and roles
         const isProxyRunning = await this.dockerService.checkContainerStatus();
+        console.log('X isProxyRunning:', isProxyRunning);
         if (isProxyRunning) {
+            console.log('X fetching databases and roles');
             await this.fetchDatabasesAndRoles();
         }
 
@@ -538,6 +557,38 @@ export class NeonLocalExtension implements NeonLocalManager {
 
     public async handleStopProxy(): Promise<void> {
         await this.stopProxy();
+    }
+
+    private handleWebviewMessage(message: any) {
+        console.log('Received message from webview:', message);
+        switch (message.command) {
+            case 'selectOrg':
+                this.handleOrgSelection(message.orgId);
+                break;
+            case 'selectProject':
+                this.handleProjectSelection(message.projectId);
+                break;
+            case 'selectBranch':
+                this.handleBranchSelection(message.branchId, message.restartProxy, message.driver);
+                break;
+            case 'selectParentBranch':
+                this.handleParentBranchSelection(message.parentBranchId);
+                break;
+            case 'startProxy':
+                this.handleStartProxy(message.driver, message.isExisting, message.branchId, message.parentBranchId);
+                break;
+            case 'stopProxy':
+                this.stopProxy();
+                break;
+            case 'showError':
+                vscode.window.showErrorMessage(message.text);
+                break;
+            case 'updateConnectionType':
+                this.stateService.connectionType = message.connectionType;
+                break;
+            default:
+                console.warn('Unknown command:', message.command);
+        }
     }
 }
 

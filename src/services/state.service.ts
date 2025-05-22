@@ -178,6 +178,7 @@ export class StateService {
 
     set parentBranchId(value: string | undefined) {
         this._parentBranchId = value || '';
+        this.saveState();
     }
 
     get branches(): NeonBranch[] {

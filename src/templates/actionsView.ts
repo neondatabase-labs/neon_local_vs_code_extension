@@ -33,11 +33,9 @@ const getActionsContent = (data: ViewData): string => `
             <button id="openSqlEditor" class="action-button">
                 Open SQL Editor
             </button>
-            ${data.selectedDriver === 'postgres' ? `
-                <button id="launchPsql" class="action-button">
-                    Launch PSQL
-                </button>
-            ` : ''}
+            <button id="launchPsql" class="action-button">
+                Launch PSQL
+            </button>
         </div>
     </div>
 `;

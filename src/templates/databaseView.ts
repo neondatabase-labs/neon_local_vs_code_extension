@@ -78,7 +78,7 @@ const getDatabaseContent = (data: ViewData): string => `
                 </button>
             </div>
             <div class="detail-value connection-string-container">
-                <div class="connection-string">import { neonConfig } from '@neondatabase/serverless';\nneonConfig.fetchEndpoint = 'http://localhost:5432/sql';</div>
+                <div class="connection-string">import { neonConfig } from '@neondatabase/serverless';</br></br>neonConfig.fetchEndpoint = 'http://localhost:5432/sql';</div>
             </div>
         </div>
         ` : ''}
