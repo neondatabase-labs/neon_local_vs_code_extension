@@ -70,6 +70,7 @@ export class DockerService {
                     `DRIVER=${driver === 'serverless' ? 'serverless' : 'postgres'}`,
                     `NEON_API_KEY=${apiKey}`,
                     `NEON_PROJECT_ID=${projectId}`,
+                    'CLIENT=vscode',
                     // Add refresh token if available
                     ...(refreshToken ? [`NEON_REFRESH_TOKEN=${refreshToken}`] : []),
                     // Conditionally add either BRANCH_ID or PARENT_BRANCH_ID
