@@ -10,18 +10,57 @@ export class WebViewService {
     }
 
     public async updateViewData(data: ViewData): Promise<void> {
-        for (const [viewType, view] of this.views) {
-            if (!view.visible) {
-                continue;
-            }
+        // Process orgs to ensure they are properly initialized
+        const processedOrgs = Array.isArray(data.orgs) ? data.orgs : [];
 
-            try {
+        // Ensure all arrays are properly initialized and connection state is valid
+        const viewData: ViewData = {
+            ...data,
+            orgs: processedOrgs,
+            projects: Array.isArray(data.projects) ? data.projects : [],
+            branches: Array.isArray(data.branches) ? data.branches : [],
+            databases: Array.isArray(data.databases) ? data.databases : [],
+            roles: Array.isArray(data.roles) ? data.roles : [],
+            selectedOrgId: data.selectedOrgId || '',
+            selectedOrgName: data.selectedOrgName || '',
+            selectedProjectId: data.selectedProjectId || '',
+            selectedProjectName: data.selectedProjectName || '',
+            selectedBranchId: data.selectedBranchId || '',
+            selectedBranchName: data.selectedBranchName || '',
+            parentBranchId: data.parentBranchId || '',
+            parentBranchName: data.parentBranchName || '',
+            selectedDriver: data.selectedDriver || 'postgres',
+            selectedDatabase: data.selectedDatabase || '',
+            selectedRole: data.selectedRole || '',
+            connected: data.connected,
+            connectionInfo: data.connectionInfo || '',
+            connectionType: data.connectionType || 'existing',
+            isStarting: data.isStarting || false
+        };
+
+        // Update main view first
+        const mainView = this.views.get('neonLocalConnect');
+        if (mainView) {
+            console.log('WebView service: Updating main view');
+            await mainView.webview.postMessage({
+                command: 'updateViewData',
+                data: viewData
+            });
+
+            // Small delay to ensure main view updates first
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        // Update database and actions views together
+        const otherViews = ['neonLocalDatabase', 'neonLocalActions'];
+        for (const viewType of otherViews) {
+            const view = this.views.get(viewType);
+            if (view) {
+                console.log(`WebView service: Sending data to ${viewType}`);
                 await view.webview.postMessage({
                     command: 'updateViewData',
-                    data
+                    data: viewData
                 });
-            } catch (error) {
-                console.error(`Failed to update ${viewType} view:`, error);
             }
         }
     }

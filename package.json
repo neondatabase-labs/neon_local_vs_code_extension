@@ -3,8 +3,9 @@
   "displayName": "Neon Local",
   "description": "Local development environment for Neon Database with branch management",
   "version": "0.0.1",
+  "publisher": "neon",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.96.0"
   },
   "categories": [
     "Other"
@@ -128,9 +129,7 @@
         }
       ]
     },
-    "menus": {
-      
-    }
+    "menus": {}
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -149,25 +148,50 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.10.0",
     "@types/opener": "^1.4.3",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
     "@types/sinon": "^17.0.4",
     "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^6.13.1",
     "@typescript-eslint/parser": "^6.13.1",
     "@vscode/test-electron": "^2.5.2",
+    "assert": "^2.1.0",
+    "browserify-zlib": "^0.2.0",
+    "buffer": "^6.0.3",
+    "constants-browserify": "^1.0.0",
+    "crypto-browserify": "^3.12.1",
+    "css-loader": "^6.10.0",
     "eslint": "^8.54.0",
     "glob": "^11.0.2",
+    "https-browserify": "^1.0.0",
+    "mini-css-extract-plugin": "^2.9.2",
     "mocha": "^11.3.0",
+    "node-loader": "^2.1.0",
+    "os-browserify": "^0.3.0",
+    "path-browserify": "^1.0.1",
+    "process": "^0.11.10",
+    "querystring-es3": "^0.2.1",
     "sinon": "^20.0.0",
+    "stream-browserify": "^3.0.0",
+    "stream-http": "^3.2.0",
+    "style-loader": "^3.3.4",
     "ts-loader": "^9.5.1",
     "typescript": "^5.3.2",
+    "url": "^0.11.4",
+    "util": "^0.12.5",
+    "vm-browserify": "^1.1.2",
     "webpack": "^5.89.0",
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
+    "@reduxjs/toolkit": "^2.2.1",
     "axios": "^1.6.2",
     "docker-compose": "^0.24.2",
     "dockerode": "^4.0.0",
     "open": "^10.1.1",
-    "opener": "^1.5.2"
+    "opener": "^1.5.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-redux": "^9.1.0"
   }
 }

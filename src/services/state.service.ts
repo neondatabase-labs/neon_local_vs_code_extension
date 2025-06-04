@@ -16,6 +16,7 @@ interface NeonLocalState {
     selectedDatabase: string;
     selectedRole: string;
     currentlyConnectedBranch: string;
+    connectionInfo: string;
 }
 
 export class StateService {
@@ -41,14 +42,15 @@ export class StateService {
             selectedDriver: 'postgres',
             selectedDatabase: '',
             selectedRole: '',
-            currentlyConnectedBranch: ''
+            currentlyConnectedBranch: '',
+            connectionInfo: ''
         };
 
         this.loadState();
     }
 
     private async loadState() {
-        // Load all state properties from persistent storage
+        // Load all state properties from persistent storage with proper defaults
         this._state = {
             currentOrg: this.state.get('neonLocal.currentOrg', ''),
             currentProject: this.state.get('neonLocal.currentProject', ''),
@@ -56,12 +58,26 @@ export class StateService {
             parentBranchId: this.state.get('neonLocal.parentBranchId', ''),
             connectionType: this.state.get('neonLocal.connectionType', 'existing'),
             isProxyRunning: this.state.get('neonLocal.isProxyRunning', false),
-            isStarting: this.state.get('neonLocal.isStarting', false),
+            isStarting: false, // Always start with not starting
             selectedDriver: this.state.get('neonLocal.selectedDriver', 'postgres'),
             selectedDatabase: this.state.get('neonLocal.selectedDatabase', ''),
             selectedRole: this.state.get('neonLocal.selectedRole', ''),
-            currentlyConnectedBranch: this.state.get('neonLocal.currentlyConnectedBranch', '')
+            currentlyConnectedBranch: this.state.get('neonLocal.currentlyConnectedBranch', ''),
+            connectionInfo: this.state.get('neonLocal.connectionInfo', '')
         };
+
+        // Validate state consistency
+        if (!this._state.currentProject) {
+            // If no project is selected, clear branch-related state
+            this._state.currentBranch = '';
+            this._state.parentBranchId = '';
+            this._state.currentlyConnectedBranch = '';
+            this._state.selectedDatabase = '';
+            this._state.selectedRole = '';
+        }
+
+        // Save the validated state
+        await this.saveState();
     }
 
     private async saveState() {
@@ -78,16 +94,33 @@ export class StateService {
             this.state.update('neonLocal.selectedDriver', this._state.selectedDriver),
             this.state.update('neonLocal.selectedDatabase', this._state.selectedDatabase),
             this.state.update('neonLocal.selectedRole', this._state.selectedRole),
-            this.state.update('neonLocal.currentlyConnectedBranch', this._state.currentlyConnectedBranch)
+            this.state.update('neonLocal.currentlyConnectedBranch', this._state.currentlyConnectedBranch),
+            this.state.update('neonLocal.connectionInfo', this._state.connectionInfo)
         ]);
     }
 
     private async updateState(updates: Partial<NeonLocalState>) {
-        // Update local state
-        this._state = {
+        // Validate state transitions
+        const newState = {
             ...this._state,
             ...updates
         };
+
+        // Validate project and branch relationships
+        if (newState.isProxyRunning) {
+            if (!newState.currentProject) {
+                throw new Error('Cannot set proxy running without a project');
+            }
+            if (newState.connectionType === 'existing' && !newState.currentBranch) {
+                throw new Error('Cannot set proxy running for existing connection without a branch');
+            }
+            if (newState.connectionType === 'new' && !newState.parentBranchId) {
+                throw new Error('Cannot set proxy running for new connection without a parent branch');
+            }
+        }
+
+        // Update local state
+        this._state = newState;
 
         // Save to persistent storage
         await this.saveState();
@@ -105,6 +138,7 @@ export class StateService {
     get selectedDatabase(): string { return this._state.selectedDatabase; }
     get selectedRole(): string { return this._state.selectedRole; }
     get currentlyConnectedBranch(): Promise<string> { return this.getBranchIdFromFile(); }
+    get connectionInfo(): string { return this._state.connectionInfo; }
 
     // Setters with state updates
     async setCurrentOrg(value: string) {
@@ -197,6 +231,12 @@ export class StateService {
         });
     }
 
+    async setConnectionInfo(value: string) {
+        await this.updateState({
+            connectionInfo: value || ''
+        });
+    }
+
     async setCurrentlyConnectedBranch(value: string) {
         await this.updateState({
             currentlyConnectedBranch: value || ''
@@ -215,7 +255,8 @@ export class StateService {
             selectedDriver: 'postgres',
             selectedDatabase: '',
             selectedRole: '',
-            currentlyConnectedBranch: ''
+            currentlyConnectedBranch: '',
+            connectionInfo: ''
         });
     }
 
@@ -229,104 +270,94 @@ export class StateService {
         databases: NeonDatabase[] = [],
         roles: NeonRole[] = []
     ): Promise<ViewData> {
+        // Ensure orgs is always an array
+        const validOrgs = Array.isArray(orgs) ? orgs : [];
+        
+        // Find the selected org
+        const selectedOrg = validOrgs.find(org => org.id === this._state.currentOrg);
+        const selectedOrgName = selectedOrg?.name || '';
+
+        // Find the selected project
+        const validProjects = Array.isArray(projects) ? projects : [];
+        const selectedProject = validProjects.find(project => project.id === this._state.currentProject);
+
+        // Find the selected branch and parent branch
+        const validBranches = Array.isArray(branches) ? branches : [];
+        
+        // Get the currently connected branch ID when connected
+        const connectedBranchId = isProxyRunning ? await this.currentlyConnectedBranch : '';
+        
+        // Find branch info based on connection state and type
+        let selectedBranch: NeonBranch | undefined;
+        if (isProxyRunning) {
+            // When connected, use the currently connected branch from the .branches file
+            selectedBranch = validBranches.find(branch => branch.id === connectedBranchId);
+        } else {
+            // When not connected, use the selected branch based on connection type
+            const branchId = this._state.connectionType === 'existing' ? this._state.currentBranch : this._state.parentBranchId;
+            selectedBranch = validBranches.find(branch => branch.id === branchId);
+        }
+        
+        const parentBranch = validBranches.find(branch => branch.id === this._state.parentBranchId);
+
         // Update the selected driver if one is provided and we're running
         if (driver && isProxyRunning) {
             await this.setSelectedDriver(driver);
         }
 
-        // Update proxy running state if it changed
-        if (this._state.isProxyRunning !== isProxyRunning) {
-            await this.setIsProxyRunning(isProxyRunning);
-        }
+        // Determine active branch ID based on connection state and type
+        const activeBranchId = isProxyRunning ? connectedBranchId : (
+            this._state.connectionType === 'existing' ? this._state.currentBranch : this._state.parentBranchId
+        );
 
-        // Update starting state if it changed
-        if (this._state.isStarting !== isStarting) {
-            await this.setIsStarting(isStarting);
-        }
-
-        // Find the selected org, handling the personal account case
-        const selectedOrg = this._state.currentOrg ? 
-            orgs.find(org => org.id === this._state.currentOrg) : null;
-        const selectedOrgName = selectedOrg?.name || 'Personal account';
-
-        // Find the selected project
-        const selectedProject = this._state.currentProject ? 
-            projects.find(project => project.id === this._state.currentProject) : null;
-
-        // If selected project no longer exists, clear project-related state
-        if (this._state.currentProject && !selectedProject) {
-            await this.setCurrentProject('');
-        }
-
-        // For new branches, always use currentlyConnectedBranch when proxy is running
-        // For existing branches, use currentBranch
-        let activeBranchId: string;
-        if (this._state.isProxyRunning && this._state.connectionType === 'new') {
-            // For new branches that are connected, get the branch ID from the file
-            activeBranchId = await this.getBranchIdFromFile() || '';
-            // Update the currentlyConnectedBranch in state
-            if (activeBranchId) {
-                await this.setCurrentlyConnectedBranch(activeBranchId);
-            }
-        } else {
-            activeBranchId = this._state.currentBranch;
-        }
-
-        // Find the selected branch
-        let selectedBranch = activeBranchId ? 
-            branches.find(branch => branch.id === activeBranchId) : null;
-
-        // Find the parent branch
-        const parentBranch = this._state.parentBranchId ? 
-            branches.find(branch => branch.id === this._state.parentBranchId) : null;
-
-        // For new branches that are connected but not in the branches list yet,
-        // create a new branch object with the connected branch ID
-        if (this._state.isProxyRunning && 
-            this._state.connectionType === 'new' && 
-            !selectedBranch && 
-            activeBranchId) {
-            selectedBranch = {
-                id: activeBranchId,
-                name: `New Branch (${activeBranchId})`,
-                project_id: this._state.currentProject,
-                parent_id: this._state.parentBranchId
-            };
-        }
-
-        // Generate connection info
-        const connectionInfo = isProxyRunning ? 
-            `postgres://neon:npg@localhost:5432/${this._state.selectedDatabase || 'neondb'}${this._state.selectedRole ? `_${this._state.selectedRole}` : ''}?sslmode=require` :
-            undefined;
+        // Log connection status
+        console.log('StateService: Connection status:', {
+            isProxyRunning,
+            isStarting,
+            connectionInfo: this._state.connectionInfo,
+            currentlyConnectedBranch: connectedBranchId,
+            selectedBranch: selectedBranch?.name
+        });
 
         const viewData: ViewData = {
-            orgs,
-            projects,
-            branches,
+            orgs: validOrgs,
+            projects: validProjects,
+            branches: validBranches,
             databases,
             roles,
             selectedOrgId: this._state.currentOrg,
             selectedOrgName,
             selectedProjectId: this._state.currentProject,
-            selectedProjectName: selectedProject?.name,
+            selectedProjectName: selectedProject?.name || '',
             selectedBranchId: activeBranchId,
-            selectedBranchName: selectedBranch?.name,
+            selectedBranchName: selectedBranch?.name || '',
             parentBranchId: this._state.parentBranchId,
-            parentBranchName: parentBranch?.name,
+            parentBranchName: parentBranch?.name || '',
             selectedDriver: this._state.selectedDriver,
             selectedDatabase: this._state.selectedDatabase,
             selectedRole: this._state.selectedRole,
             connected: isProxyRunning,
             isStarting,
             connectionType: this._state.connectionType,
-            connectionInfo
+            connectionInfo: this._state.connectionInfo
         };
 
-        console.log('Generated view data:', viewData);
+        console.log('Generated view data:', {
+            ...viewData,
+            connected: viewData.connected,
+            isStarting: viewData.isStarting,
+            connectionInfo: viewData.connectionInfo,
+            selectedBranchName: viewData.selectedBranchName
+        });
         return viewData;
     }
 
     public async getBranchIdFromFile(): Promise<string> {
+        // If we're connecting to an existing branch, return the selected branch ID
+        if (this._state.connectionType === 'existing' && this._state.currentBranch) {
+            return this._state.currentBranch;
+        }
+
         try {
             console.log('Reading .branches file at path:', this.fileService.branchesFilePath);
             const content = await fs.promises.readFile(this.fileService.branchesFilePath, 'utf8');

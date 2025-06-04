@@ -2,7 +2,7 @@ import { ViewData } from '../types';
 import { getStyles } from './styles';
 
 export const getMainHtml = (data: ViewData): string => {
-    const isConnected = data.connected || !!data.connectionInfo;
+    const isConnected = data.connected;
     const organizations = Array.isArray(data.orgs) ? data.orgs : [];
     const projects = Array.isArray(data.projects) ? data.projects : [];
     const branches = Array.isArray(data.branches) ? data.branches : [];
@@ -59,24 +59,6 @@ const getConnectedView = (data: ViewData): string => `
         <div class="detail-row">
             <div class="detail-label">Driver</div>
             <div class="detail-value">${data.selectedDriver === 'serverless' ? 'Neon Serverless' : 'PostgreSQL'}</div>
-        </div>
-    </div>
-`;
-
-const getConnectionInfoSection = (connectionInfo: string): string => `
-    <div class="detail-row">
-        <div class="detail-label-container">
-            <div class="detail-label">Connection Info</div>
-            <button class="copy-button" title="Copy connection string">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M10.75 1.75H4.25C3.97386 1.75 3.75 1.97386 3.75 2.25V11.25C3.75 11.5261 3.97386 11.75 4.25 11.75H10.75C11.0261 11.75 11.25 11.5261 11.25 11.25V2.25C11.25 1.97386 11.0261 1.75 10.75 1.75Z" stroke="currentColor" stroke-width="1.5"/>
-                    <path d="M12.25 4.25H13.75V13.75H5.75V12.25" stroke="currentColor" stroke-width="1.5"/>
-                </svg>
-                <span class="copy-success">Copied!</span>
-            </button>
-        </div>
-        <div class="detail-value connection-string-container">
-            <div class="connection-string">${connectionInfo}</div>
         </div>
     </div>
 `;

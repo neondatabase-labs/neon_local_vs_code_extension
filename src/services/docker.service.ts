@@ -193,7 +193,12 @@ export class DockerService {
                     });
                     
                     const logStr = logs.toString();
-                    console.log('Container logs:', logStr);
+                    
+                    // Check if there are any error messages in the logs
+                    if (logStr.includes('Error:') || logStr.includes('error:')) {
+                        console.error('Found error in container logs:', logStr);
+                        throw new Error('Container reported an error in logs');
+                    }
                     
                     // Check if the logs indicate the container is ready
                     if (logStr.includes('Neon Local is ready')) {
@@ -213,25 +218,39 @@ export class DockerService {
                             if (await this.checkBranchesFile(this.context)) {
                                 console.log('Container is fully ready with populated branches file');
                                 return;
+                            } else {
+                                console.log('Branches file not yet populated, continuing to wait...');
                             }
                         } else {
-                            console.log('Existing branch connection, skipping branches file check');
+                            // For existing branches, we don't need to wait for the .branches file
+                            console.log('Existing branch connection, container is ready');
                             return;
                         }
                     } else {
-                        console.log('Container not yet ready');
+                        console.log('Container not yet ready, waiting for ready message...');
                     }
+                } else if (containerInfo.State.ExitCode !== 0) {
+                    console.error('Container exited with error code:', containerInfo.State.ExitCode);
+                    throw new Error(`Container exited with error code ${containerInfo.State.ExitCode}`);
                 } else {
                     console.log('Container not yet running...');
                 }
-                
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                attempts++;
-                console.log(`Waiting for container attempt ${attempts}/${maxAttempts}`);
             } catch (error) {
+                // Log the error but continue waiting unless it's a critical error
                 console.error('Error while waiting for container:', error);
+                if (error instanceof Error && 
+                    (error.message.includes('Container exited with error') || 
+                     error.message.includes('Container reported an error'))) {
+                    throw error;
+                }
+            }
+            
+            // Increment attempts and wait before next try
+            attempts++;
+            if (attempts < maxAttempts) {
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                attempts++;
+            } else {
+                console.error('Container failed to become ready after', maxAttempts, 'seconds');
             }
         }
         

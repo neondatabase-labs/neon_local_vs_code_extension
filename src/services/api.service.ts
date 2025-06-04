@@ -104,17 +104,25 @@ export class NeonApiService {
 
     public async getOrgs(): Promise<NeonOrg[]> {
         try {
+            console.log('Fetching organizations...');
             const client = await this.ensureApiClient();
             const response = await client.get('/users/me/organizations');
+            console.log('Raw organizations response:', JSON.stringify(response.data, null, 2));
+
             // Ensure we return an array of organizations
-            const orgs = Array.isArray(response.data) ? response.data : response.data.organizations || [];
+            let orgs = Array.isArray(response.data) ? response.data : response.data.organizations || [];
+            console.log('Organizations array before processing:', JSON.stringify(orgs, null, 2));
             
             // Add Personal account as the first option
-            return [
+            orgs = [
                 { id: '', name: 'Personal account' },
                 ...orgs
             ];
+
+            console.log('Final processed organizations:', JSON.stringify(orgs, null, 2));
+            return orgs;
         } catch (error) {
+            console.error('Error fetching organizations:', error);
             throw new Error(`Failed to fetch organizations: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }

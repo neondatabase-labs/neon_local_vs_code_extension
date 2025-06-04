@@ -76,7 +76,8 @@ export type WebviewCommand =
     | 'refresh'
     | 'resetFromParent'
     | 'openSqlEditor'
-    | 'launchPsql';
+    | 'launchPsql'
+    | 'requestInitialData';
 
 export interface NeonLocalManager {
     setWebviewView(view: vscode.WebviewView): void;

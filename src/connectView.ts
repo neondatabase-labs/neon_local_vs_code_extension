@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
 import { authenticate } from './auth';
-import { ConfigurationManager, Logger, debounce } from './utils';
+import { ConfigurationManager, Logger } from './utils';
 import { DEBOUNCE_DELAY, VIEW_TYPES } from './constants';
 import { ViewData, WebviewMessage, NeonLocalManager } from './types';
-import { getMainHtml } from './templates/mainView';
+import { getStyles } from './templates/styles';
 import { getSignInHtml } from './templates/signIn';
+import * as path from 'path';
 
 export class ConnectViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = VIEW_TYPES.CONNECT;
@@ -24,9 +25,14 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         });
     }
 
-    private debouncedUpdateView = debounce(() => {
-        this.updateView();
-    }, DEBOUNCE_DELAY);
+    private debouncedUpdateView = () => {
+        if (this._updateViewTimeout) {
+            clearTimeout(this._updateViewTimeout);
+        }
+        this._updateViewTimeout = setTimeout(() => {
+            this.updateView();
+        }, DEBOUNCE_DELAY);
+    };
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
@@ -40,9 +46,13 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             localResourceRoots: [this._extensionUri]
         };
 
-        this._neonLocal.setWebviewView(webviewView);
-        this.updateView();
+        // Initialize view with empty state
+        webviewView.webview.html = this.getWebviewContent(webviewView.webview);
 
+        // Register the webview with the manager
+        this._neonLocal.setWebviewView(webviewView);
+
+        // Set up message handlers
         webviewView.webview.onDidReceiveMessage(this.handleWebviewMessage.bind(this));
         webviewView.onDidChangeVisibility(() => {
             if (webviewView.visible) {
@@ -85,6 +95,9 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     await ConfigurationManager.updateConfig('connectionType', message.connectionType);
                     await this.updateView();
                     break;
+                case 'requestInitialData':
+                    await this.updateView();
+                    break;
             }
         } catch (error) {
             Logger.error('Error handling webview message', error);
@@ -94,37 +107,41 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    private async handleSignIn(): Promise<void> {
-        if (!this._view) return;
-
-        try {
-            this._view.webview.postMessage({ command: 'showLoading' });
-            
-            const apiKey = await authenticate();
-            await ConfigurationManager.updateConfig('apiKey', apiKey);
-            
-            try {
-                const data = await this._neonLocal.getViewData();
-                this._view.webview.html = getMainHtml(data);
-            } catch (viewError) {
-                Logger.error('Error getting view data', viewError);
-                this._view.webview.postMessage({ command: 'resetSignIn' });
-                throw viewError;
-            }
-        } catch (error) {
-            Logger.error('Sign in error', error);
-            this._view.webview.postMessage({ command: 'resetSignIn' });
-            if (error instanceof Error) {
-                vscode.window.showErrorMessage(`Authentication failed: ${error.message}`);
-            }
-        }
-    }
-
     public dispose(): void {
         if (this._updateViewTimeout) {
             clearTimeout(this._updateViewTimeout);
         }
         this._configurationChangeListener.dispose();
+    }
+
+    private getWebviewContent(webview: vscode.Webview): string {
+        const scriptUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview.js')
+        );
+
+        const styleUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'dist', 'styles.css')
+        );
+
+        const nonce = getNonce();
+
+        return `<!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval'; img-src ${webview.cspSource} data: https:; font-src ${webview.cspSource}; frame-src 'self';">
+                <link href="${styleUri}" rel="stylesheet" />
+                <title>Neon Local</title>
+            </head>
+            <body>
+                <div id="root"></div>
+                <script nonce="${nonce}">
+                    window.vscodeApi = acquireVsCodeApi();
+                </script>
+                <script nonce="${nonce}" src="${scriptUri}"></script>
+            </body>
+            </html>`;
     }
 
     public async updateView(): Promise<void> {
@@ -143,8 +160,35 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 return;
             }
 
+            // Get the current view data
             const data = await this._neonLocal.getViewData();
-            this._view.webview.html = getMainHtml(data);
+
+            // Get the current connection type from configuration
+            const connectionType = ConfigurationManager.getConfigValue('connectionType') || 'existing';
+
+            // Log the data being sent to the webview
+            console.log('ConnectViewProvider: Updating view with data:', {
+                orgsCount: data.orgs?.length,
+                orgs: data.orgs,
+                selectedOrgId: data.selectedOrgId,
+                selectedOrgName: data.selectedOrgName,
+                connectionType: connectionType
+            });
+
+            // Update the HTML first
+            this._view.webview.html = this.getWebviewContent(this._view.webview);
+
+            // Wait a moment for the webview to be ready
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Send the data to the webview
+            await this._view.webview.postMessage({
+                command: 'updateViewData',
+                data: {
+                    ...data,
+                    connectionType: connectionType
+                }
+            });
         } catch (error) {
             Logger.error('Error updating view', error);
             this._view.webview.html = getSignInHtml();
@@ -155,4 +199,25 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             this._isUpdating = false;
         }
     }
+
+    private async handleSignIn(): Promise<void> {
+        try {
+            await authenticate();
+            await this.updateView();
+        } catch (error) {
+            Logger.error('Error during sign in', error);
+            if (error instanceof Error) {
+                vscode.window.showErrorMessage(error.message);
+            }
+        }
+    }
+}
+
+function getNonce() {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
 } 

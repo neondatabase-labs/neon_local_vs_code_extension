@@ -42,7 +42,7 @@ const getActionsContent = (data: ViewData): string => `
 
 const getNotConnectedContent = (): string => `
     <div class="not-connected">
-        <p>Please connect to a database in the Connect view first.</p>
+        <p>Connect to a database to see database actions.</p>
     </div>
 `;
 

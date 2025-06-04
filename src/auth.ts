@@ -3,7 +3,6 @@ import axios from 'axios';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { AddressInfo } from 'net';
 import * as crypto from 'crypto';
-import opener from 'opener';
 
 // Using the same client ID as neonctl
 const CLIENT_ID = 'neonctl';
@@ -168,7 +167,10 @@ export async function authenticate(): Promise<string> {
                     clearTimeout(timer);
                     
                     // Store both access token and refresh token
-                    await vscode.workspace.getConfiguration('neonLocal').update('refreshToken', tokenResponse.data.refresh_token, true);
+                    const config = vscode.workspace.getConfiguration('neonLocal');
+                    await config.update('refreshToken', tokenResponse.data.refresh_token, true);
+                    await config.update('apiKey', tokenResponse.data.access_token, true);
+                    
                     resolve(tokenResponse.data.access_token);
                     server.close();
                 } catch (tokenError: any) {
@@ -200,15 +202,21 @@ export async function authenticate(): Promise<string> {
             void onRequest(req, res);
         });
 
-        // Open browser for authentication
+        // Open browser for authentication using VS Code's built-in method
         vscode.window.showInformationMessage('Please authenticate in your browser to continue.');
-        try {
-            opener(authUrl.toString());
-        } catch (err) {
-            const msg = `Failed to open web browser. Please copy & paste this URL to authenticate: ${authUrl.toString()}`;
-            vscode.window.showErrorMessage(msg);
-            console.error(err);
-        }
+        vscode.env.openExternal(vscode.Uri.parse(authUrl.toString())).then(
+            success => {
+                if (!success) {
+                    const msg = `Failed to open web browser. Please copy & paste this URL to authenticate: ${authUrl.toString()}`;
+                    vscode.window.showErrorMessage(msg);
+                }
+            },
+            error => {
+                const msg = `Failed to open web browser. Please copy & paste this URL to authenticate: ${authUrl.toString()}`;
+                vscode.window.showErrorMessage(msg);
+                console.error('Failed to open browser:', error);
+            }
+        );
     });
 }
 
