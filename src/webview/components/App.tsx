@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, updateViewData, setLoading, updateConnectionType, selectBranch, updateDriver, updateParentBranch } from '../store';
 import { ViewData, NeonOrg, NeonProject, NeonBranch } from '../../types';
@@ -11,50 +11,67 @@ interface AppProps {
 export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
   const dispatch = useDispatch();
   const state = useSelector((state: RootState) => state);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const lastConnectedState = useRef<boolean>(false);
   
   // Only show connected view if proxy is running AND we have a connection info
-  const isConnected = state.connected && !!state.connectionInfo;
+  // Add a small delay before showing disconnected state to prevent flicker
+  const isConnected = state.connected || (lastConnectedState.current && state.isStarting);
 
-  // Initialize state from props
+  // Initialize state from props and request initial data in a single effect
   useEffect(() => {
     if (initialState) {
       console.log('App.tsx: Initializing state with:', {
         orgsCount: initialState.orgs?.length,
         orgs: initialState.orgs,
         selectedOrgId: initialState.selectedOrgId,
-        selectedOrgName: initialState.selectedOrgName
+        selectedOrgName: initialState.selectedOrgName,
+        connected: initialState.connected,
+        isStarting: initialState.isStarting
       });
       dispatch(updateViewData(initialState));
+      lastConnectedState.current = initialState.connected;
     }
-  }, [dispatch, initialState]);
 
-  // Request initial data when component mounts
-  useEffect(() => {
     // Request initial data from the extension
     vscode.postMessage({
       command: 'requestInitialData'
     });
-  }, [vscode]);
 
+    setIsInitialized(true);
+  }, [dispatch, initialState, vscode]);
+
+  // Handle incoming messages
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       const message = event.data;
-      if (message.command === 'updateViewData') {
+      if (message.command === 'updateViewData' && isInitialized) {
         console.log('App.tsx: Received view data:', {
           orgsCount: message.data.orgs?.length,
           orgs: message.data.orgs,
           selectedOrgId: message.data.selectedOrgId,
-          selectedOrgName: message.data.selectedOrgName
+          selectedOrgName: message.data.selectedOrgName,
+          connected: message.data.connected,
+          isStarting: message.data.isStarting,
+          connectionInfo: !!message.data.connectionInfo
         });
+
+        // Update the lastConnectedState before dispatching
+        if (message.data.connected) {
+          lastConnectedState.current = true;
+        } else if (!message.data.isStarting) {
+          // Only update to false if we're not in a starting state
+          lastConnectedState.current = false;
+        }
+
         dispatch(updateViewData(message.data));
-        // Store state in VS Code's storage
         vscode.setState(message.data);
       }
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [dispatch, vscode]);
+  }, [dispatch, vscode, isInitialized]);
 
   // Add effect to log state changes
   useEffect(() => {
@@ -62,9 +79,13 @@ export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
       orgsCount: state.orgs?.length,
       orgs: state.orgs,
       selectedOrgId: state.selectedOrgId,
-      selectedOrgName: state.selectedOrgName
+      selectedOrgName: state.selectedOrgName,
+      connected: state.connected,
+      isStarting: state.isStarting,
+      lastConnectedState: lastConnectedState.current,
+      connectionInfo: !!state.connectionInfo
     });
-  }, [state.orgs, state.selectedOrgId, state.selectedOrgName]);
+  }, [state.orgs, state.selectedOrgId, state.selectedOrgName, state.connected, state.connectionInfo, state.isStarting]);
 
   const handleConnectionTypeChange = (value: 'existing' | 'new') => {
     console.log('Changing connection type to:', value);
@@ -108,7 +129,7 @@ export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
 
   const handleProjectChange = (value: string) => {
     dispatch(setLoading({ type: 'branches', loading: true }));
-    const selectedProject = state.projects.find((project: NeonProject) => project.id === value);
+    const selectedProject = (state.projects as NeonProject[]).find(project => project.id === value);
     vscode.postMessage({
       command: 'selectProject',
       projectId: value,
@@ -117,7 +138,7 @@ export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
   };
 
   const handleBranchChange = (value: string) => {
-    const selectedBranch = state.branches.find((branch: NeonBranch) => branch.id === value);
+    const selectedBranch = (state.branches as NeonBranch[]).find(branch => branch.id === value);
     vscode.postMessage({
       command: 'selectBranch',
       branchId: value,
@@ -126,7 +147,7 @@ export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
   };
 
   const handleParentBranchChange = (value: string) => {
-    const selectedBranch = state.branches.find((branch: NeonBranch) => branch.id === value);
+    const selectedBranch = (state.branches as NeonBranch[]).find(branch => branch.id === value);
     console.log('Selecting parent branch:', {
       value,
       selectedBranch,

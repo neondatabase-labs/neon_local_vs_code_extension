@@ -9,6 +9,7 @@ interface AppState extends ViewData {
     branches: boolean;
   };
   currentlyConnectedBranch?: string;
+  displayConnectionInfo?: string;
 }
 
 const initialState: AppState = {
@@ -32,6 +33,7 @@ const initialState: AppState = {
   isStarting: false,
   connectionType: 'existing',
   connectionInfo: '',
+  displayConnectionInfo: '',
   isLoading: false,
   currentlyConnectedBranch: undefined,
   loadingStates: {
@@ -39,6 +41,20 @@ const initialState: AppState = {
     projects: false,
     branches: false
   }
+};
+
+// Helper function to create display connection string
+const createDisplayConnectionString = (connectionInfo: string, selectedDatabase: string) => {
+  if (!connectionInfo) return '';
+  
+  // Extract the database name and query parameters from the connection string
+  const dbNameMatch = connectionInfo.match(/\/([^/?]+)\?/);
+  const queryParams = connectionInfo.split('?')[1] || '';
+  
+  if (!dbNameMatch) return connectionInfo;
+  
+  // Create a new connection string with hardcoded credentials
+  return `postgresql://neon:npg@localhost:5432/${selectedDatabase}?${queryParams}`;
 };
 
 const appSlice = createSlice({
@@ -87,6 +103,13 @@ const appSlice = createSlice({
         }
       });
 
+      // Create display connection string if we have a real connection string
+      if (data.connectionInfo && data.selectedDatabase) {
+        state.displayConnectionInfo = createDisplayConnectionString(data.connectionInfo, data.selectedDatabase);
+      } else {
+        state.displayConnectionInfo = '';
+      }
+
       console.log('Redux store: Final state after update:', {
         connected: state.connected,
         isStarting: state.isStarting,
@@ -94,7 +117,9 @@ const appSlice = createSlice({
         roles: state.roles?.length,
         selectedDatabase: state.selectedDatabase,
         selectedRole: state.selectedRole,
-        connectionType: state.connectionType
+        connectionType: state.connectionType,
+        hasConnectionInfo: Boolean(state.connectionInfo),
+        hasDisplayConnectionInfo: Boolean(state.displayConnectionInfo)
       });
     },
     selectOrg: (state, action: PayloadAction<string>) => {

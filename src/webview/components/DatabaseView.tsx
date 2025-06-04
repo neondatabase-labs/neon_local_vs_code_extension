@@ -24,9 +24,11 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
     });
   };
 
-  const handleCopy = async (text: string, type: string) => {
+  const handleCopy = async (text: string | undefined, type: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      // Always copy the actual connection string, not the display version
+      const textToCopy = type === 'connection' ? (state.connectionInfo || '') : (text || '');
+      await navigator.clipboard.writeText(textToCopy);
       setCopySuccess(type);
       setTimeout(() => setCopySuccess(null), 2000);
     } catch (err) {
@@ -80,14 +82,14 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
         </select>
       </div>
 
-      {state.connectionInfo && (
+      {state.displayConnectionInfo && (
         <div className="detail-row">
           <div className="detail-label-container">
             <div className="detail-label">Local Connection String</div>
             <button
               className="copy-button"
               title="Copy connection string"
-              onClick={() => handleCopy(state.connectionInfo, 'connection')}
+              onClick={() => handleCopy(state.displayConnectionInfo || '', 'connection')}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M10.75 1.75H4.25C3.97386 1.75 3.75 1.97386 3.75 2.25V11.25C3.75 11.5261 3.97386 11.75 4.25 11.75H10.75C11.0261 11.75 11.25 11.5261 11.25 11.25V2.25C11.25 1.97386 11.0261 1.75 10.75 1.75Z" stroke="currentColor" strokeWidth="1.5"/>
@@ -99,7 +101,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
             </button>
           </div>
           <div className="detail-value connection-string-container">
-            <div className="connection-string">{state.connectionInfo}</div>
+            <div className="connection-string">{state.displayConnectionInfo}</div>
           </div>
         </div>
       )}
