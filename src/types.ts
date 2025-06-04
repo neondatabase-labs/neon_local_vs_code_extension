@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { StateService } from './services/state.service';
 
 export interface NeonBranch {
     id: string;
@@ -53,6 +54,8 @@ export interface ViewData {
     isStarting: boolean;
     connectionType?: 'existing' | 'new';
     connectionInfo?: string;
+    isExplicitUpdate?: boolean;
+    currentlyConnectedBranch?: string;
 }
 
 export interface WebviewMessage {
@@ -77,15 +80,26 @@ export type WebviewCommand =
     | 'resetFromParent'
     | 'openSqlEditor'
     | 'launchPsql'
-    | 'requestInitialData';
+    | 'requestInitialData'
+    | 'openTableView';
 
 export interface NeonLocalManager {
+    stateService: {
+        setConnectionType(value: 'existing' | 'new'): Promise<void>;
+        getConnectionType(): 'existing' | 'new';
+        currentProject?: string;
+        currentOrg?: string;
+        isProxyRunning: boolean;
+        isStarting: boolean;
+        selectedDriver: string;
+        connectionType: 'existing' | 'new';
+        currentBranch?: string;
+        parentBranchId?: string;
+    };
     setWebviewView(view: vscode.WebviewView): void;
     handleOrgSelection(orgId: string): Promise<void>;
     handleProjectSelection(projectId: string): Promise<void>;
     handleBranchSelection(branchId: string, restartProxy: boolean, driver: string): Promise<void>;
-    handleDatabaseSelection(database: string): Promise<void>;
-    handleRoleSelection(role: string): Promise<void>;
     handleStartProxy(driver: string, isExisting: boolean, branchId?: string, parentBranchId?: string): Promise<void>;
     handleStopProxy(): Promise<void>;
     getViewData(): Promise<ViewData>;

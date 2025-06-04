@@ -13,6 +13,8 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
     private _configurationChangeListener: vscode.Disposable;
     private _updateViewTimeout?: NodeJS.Timeout;
     private _isUpdating = false;
+    private _lastRequestedConnectionType?: 'existing' | 'new';
+    private _connectionTypeUpdateTimeout?: NodeJS.Timeout;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -24,15 +26,6 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             }
         });
     }
-
-    private debouncedUpdateView = () => {
-        if (this._updateViewTimeout) {
-            clearTimeout(this._updateViewTimeout);
-        }
-        this._updateViewTimeout = setTimeout(() => {
-            this.updateView();
-        }, DEBOUNCE_DELAY);
-    };
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
@@ -60,6 +53,15 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             }
         });
     }
+
+    private debouncedUpdateView = () => {
+        if (this._updateViewTimeout) {
+            clearTimeout(this._updateViewTimeout);
+        }
+        this._updateViewTimeout = setTimeout(() => {
+            this.updateView();
+        }, DEBOUNCE_DELAY);
+    };
 
     private async handleWebviewMessage(message: WebviewMessage): Promise<void> {
         if (!this._view) return;
@@ -92,7 +94,15 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     await this.updateView();
                     break;
                 case 'updateConnectionType':
-                    await ConfigurationManager.updateConfig('connectionType', message.connectionType);
+                    console.log('ConnectViewProvider: Handling connection type update:', {
+                        newType: message.connectionType,
+                        currentType: this._lastRequestedConnectionType
+                    });
+                    // Store the requested connection type
+                    this._lastRequestedConnectionType = message.connectionType;
+                    // Update the connection type through the state service
+                    await this._neonLocal.stateService.setConnectionType(message.connectionType);
+                    // Update the view to reflect the change
                     await this.updateView();
                     break;
                 case 'requestInitialData':
@@ -110,6 +120,9 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
     public dispose(): void {
         if (this._updateViewTimeout) {
             clearTimeout(this._updateViewTimeout);
+        }
+        if (this._connectionTypeUpdateTimeout) {
+            clearTimeout(this._connectionTypeUpdateTimeout);
         }
         this._configurationChangeListener.dispose();
     }
@@ -157,41 +170,64 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
 
             if (!apiKey && !refreshToken) {
                 this._view.webview.html = getSignInHtml();
+                this._isUpdating = false;
                 return;
             }
 
             // Get the current view data
-            const data = await this._neonLocal.getViewData();
+            const viewData = await this._neonLocal.getViewData();
 
-            // Get the current connection type from configuration
-            const connectionType = ConfigurationManager.getConfigValue('connectionType') || 'existing';
+            // If we have a pending connection type change, ensure it's respected
+            if (this._lastRequestedConnectionType && viewData.connectionType !== this._lastRequestedConnectionType) {
+                console.log('ConnectViewProvider: Connection type mismatch, correcting:', {
+                    requested: this._lastRequestedConnectionType,
+                    received: viewData.connectionType
+                });
+                viewData.connectionType = this._lastRequestedConnectionType;
+                viewData.isExplicitUpdate = true;
+            }
 
-            // Log the data being sent to the webview
+            // Log the complete view data being sent to the webview
             console.log('ConnectViewProvider: Updating view with data:', {
-                orgsCount: data.orgs?.length,
-                orgs: data.orgs,
-                selectedOrgId: data.selectedOrgId,
-                selectedOrgName: data.selectedOrgName,
-                connectionType: connectionType
+                orgsCount: viewData.orgs?.length,
+                selectedOrgId: viewData.selectedOrgId,
+                selectedOrgName: viewData.selectedOrgName,
+                selectedProjectId: viewData.selectedProjectId,
+                selectedProjectName: viewData.selectedProjectName,
+                selectedBranchId: viewData.selectedBranchId,
+                selectedBranchName: viewData.selectedBranchName,
+                currentlyConnectedBranch: viewData.currentlyConnectedBranch,
+                parentBranchId: viewData.parentBranchId,
+                parentBranchName: viewData.parentBranchName,
+                connectionType: viewData.connectionType,
+                lastRequestedType: this._lastRequestedConnectionType,
+                connected: viewData.connected,
+                isStarting: viewData.isStarting,
+                isExplicitUpdate: viewData.isExplicitUpdate
             });
 
             // Update the HTML first
             this._view.webview.html = this.getWebviewContent(this._view.webview);
 
             // Wait a moment for the webview to be ready
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => setTimeout(resolve, 50));
 
-            // Send the data to the webview
+            // Send the complete view data update
             await this._view.webview.postMessage({
                 command: 'updateViewData',
-                data: {
-                    ...data,
-                    connectionType: connectionType
-                }
+                data: viewData
+            });
+
+            // Log what was actually sent
+            console.log('ConnectViewProvider: Sent view data update with branch info:', {
+                selectedBranchId: viewData.selectedBranchId,
+                selectedBranchName: viewData.selectedBranchName,
+                currentlyConnectedBranch: viewData.currentlyConnectedBranch,
+                connectionType: viewData.connectionType,
+                connected: viewData.connected
             });
         } catch (error) {
             Logger.error('Error updating view', error);
-            this._view.webview.html = getSignInHtml();
             if (error instanceof Error) {
                 vscode.window.showErrorMessage(error.message);
             }

@@ -12,7 +12,7 @@ import { ActionsViewProvider } from './actionsView';
 export class NeonLocalExtension implements NeonLocalManager {
     private dockerService: DockerService;
     private apiService: NeonApiService;
-    private stateService: StateService;
+    public stateService: StateService;
     private webviewService: WebViewService;
     private statusCheckInterval?: NodeJS.Timeout;
     private _databases: NeonDatabase[] = [];
@@ -129,10 +129,13 @@ export class NeonLocalExtension implements NeonLocalManager {
                     }
                 }
 
+                // Fetch latest databases
+                await this.fetchDatabasesAndRoles();
+
                 // Get list of databases
                 const databases = this._databases.map(db => db.name);
                 if (databases.length === 0) {
-                    vscode.window.showErrorMessage('No databases available.');
+                    vscode.window.showErrorMessage('No databases available. Please wait a moment and try again.');
                     return;
                 }
 
@@ -173,10 +176,13 @@ export class NeonLocalExtension implements NeonLocalManager {
                     }
                 }
 
+                // Fetch latest databases
+                await this.fetchDatabasesAndRoles();
+
                 // Get list of databases
                 const databases = this._databases.map(db => db.name);
                 if (databases.length === 0) {
-                    vscode.window.showErrorMessage('No databases available.');
+                    vscode.window.showErrorMessage('No databases available. Please wait a moment and try again.');
                     return;
                 }
 
@@ -257,7 +263,7 @@ export class NeonLocalExtension implements NeonLocalManager {
                     ]);
 
                     // Create the psql connection string
-                    const connectionString = `postgresql://${selectedRole}:${password}@${endpoint}/${selectedDatabase}?sslmode=require`;
+                    const connectionString = `postgresql://neon:npg@${endpoint}/${selectedDatabase}?sslmode=require`;
 
                     // Create a new terminal and run the psql command
                     const terminal = vscode.window.createTerminal('Neon PSQL');
@@ -325,7 +331,7 @@ export class NeonLocalExtension implements NeonLocalManager {
         }
     }
 
-    private async updateViewData() {
+    private async updateViewData(isExplicitUpdate: boolean = false) {
         try {
             console.log('Fetching organizations and projects...');
             const orgs = await this.apiService.getOrgs();
@@ -340,31 +346,21 @@ export class NeonLocalExtension implements NeonLocalManager {
             const branches = this.stateService.currentProject ? 
                 await this.apiService.getBranches(this.stateService.currentProject) : [];
 
-            // Store current state values before updating
-            const currentConnectionType = this.stateService.connectionType;
-            const currentBranch = this.stateService.currentBranch;
-            const parentBranchId = this.stateService.parentBranchId;
-            const currentlyConnectedBranch = await this.stateService.currentlyConnectedBranch;
-
+            // Get view data with current state
             const viewData = await this.stateService.getViewData(
                 orgs,
                 projects,
                 branches,
-                this.stateService.isProxyRunning, // Use the stored proxy state instead of checking
+                this.stateService.isProxyRunning,
                 this.stateService.isStarting,
-                undefined,
+                this.stateService.selectedDriver,
                 this._databases,
-                this._roles
+                this._roles,
+                isExplicitUpdate
             );
 
             // Log the view data before sending it
             console.log('View data to be sent:', viewData);
-
-            // Restore state values after view update
-            await this.stateService.setConnectionType(currentConnectionType);
-            await this.stateService.setCurrentBranch(currentBranch);
-            await this.stateService.setParentBranchId(parentBranchId);
-            await this.stateService.setCurrentlyConnectedBranch(currentlyConnectedBranch);
 
             // Update all views with the same data
             await this.webviewService.updateViewData(viewData);
@@ -519,26 +515,49 @@ export class NeonLocalExtension implements NeonLocalManager {
         try {
             await this.stateService.setIsStarting(true);
             
+            // Store current state before starting
+            const currentOrg = this.stateService.currentOrg;
+            const currentProject = this.stateService.currentProject;
+            const currentConnectionType = this.stateService.connectionType;
+            
             // Clear any existing selections when starting
             this._databases = [];
             this._roles = [];
             await this.stateService.setSelectedDatabase('');
             await this.stateService.setSelectedRole('');
             
-            // Set the connection type and driver in state service before starting the container
-            await this.stateService.setConnectionType(isExisting ? 'existing' : 'new');
+            // Only update connection type if it's different from current state
+            const newConnectionType = isExisting ? 'existing' : 'new';
+            if (currentConnectionType !== newConnectionType) {
+                await this.stateService.setConnectionType(newConnectionType);
+            }
             
             // Set the appropriate branch ID based on connection type
             if (isExisting) {
                 await this.stateService.setCurrentBranch(branchId || '');
+                await this.stateService.setParentBranchId(''); // Clear parent branch ID for existing connections
                 // For existing branches, currentlyConnectedBranch should match currentBranch
                 await this.stateService.setCurrentlyConnectedBranch(branchId || '');
-            } else if (parentBranchId) {
-                await this.stateService.setParentBranchId(parentBranchId);
-                // For new branches, keep the currentlyConnectedBranch as is
-                // It will be updated when the container starts and writes to the .branches file
+            } else {
+                // For new branches, set both parent branch ID and clear current branch
+                await this.stateService.setParentBranchId(parentBranchId || '');
+                await this.stateService.setCurrentBranch('');
+                // For new branches, currentlyConnectedBranch will be set when reading from .branches file
                 await this.stateService.setCurrentlyConnectedBranch('');
             }
+            
+            // Restore org and project
+            await this.stateService.setCurrentOrg(currentOrg);
+            await this.stateService.setCurrentProject(currentProject);
+            
+            console.log('Branch IDs set:', {
+                isExisting,
+                currentBranch: this.stateService.currentBranch,
+                parentBranchId: this.stateService.parentBranchId,
+                selectedBranchId,
+                currentOrg,
+                currentProject
+            });
             
             console.log(`Setting initial driver to: ${driver}`);
             await this.stateService.setSelectedDriver(driver);
@@ -554,38 +573,26 @@ export class NeonLocalExtension implements NeonLocalManager {
             });
             console.log('Container started successfully');
 
-            // Set proxy as running and update view in one go
+            // After container starts, read the branch ID from the file to ensure we have the correct one
+            const connectedBranchId = await this.stateService.getBranchIdFromFile();
+            if (connectedBranchId) {
+                await this.stateService.setCurrentlyConnectedBranch(connectedBranchId);
+            }
+
+            // Update proxy running state after successful container start
             await this.stateService.setIsProxyRunning(true);
             await this.stateService.setIsStarting(false);
-            
-            // Use cached data for initial view update to show connection immediately
-            const cachedViewData = await this.stateService.getViewData(
-                [], // We'll use cached orgs
-                [], // We'll use cached projects
-                [], // We'll use cached branches
-                true, // isProxyRunning
-                false, // isStarting
-                driver,
-                [], // databases will be fetched in background
-                []  // roles will be fetched in background
-            );
-            
-            // Update view immediately with cached data
-            await this.webviewService.updateViewData(cachedViewData);
-            
-            // Show success message based on connection type
-            const successMessage = isExisting
-                ? 'Successfully connected to existing branch'
-                : 'Successfully created and connected to new branch';
-            console.log('Showing success message:', successMessage);
-            await vscode.window.showInformationMessage(successMessage);
-            
-            // Fetch fresh data in the background
-            this.updateViewData().catch(error => {
-                console.error('Error updating view data in background:', error);
-            });
+
+            // Fetch databases and roles since we're connected
+            await this.fetchDatabasesAndRoles();
+
+            // Update view data with the new state
+            await this.updateViewData(true);
+
+            // Show success message
+            vscode.window.showInformationMessage(`Successfully connected to ${isExisting ? 'existing' : 'new'} branch`);
         } catch (error) {
-            console.error('Error in handleStartProxy:', error);
+            this.handleError(error);
             await this.stateService.setIsStarting(false);
             await this.stateService.setIsProxyRunning(false);
             throw error;
@@ -702,7 +709,8 @@ export class NeonLocalExtension implements NeonLocalManager {
             await this.fetchDatabasesAndRoles();
         }
 
-        return this.stateService.getViewData(
+        // Get view data without connection type
+        const viewData = await this.stateService.getViewData(
             orgs,
             projects,
             branches,
@@ -712,6 +720,17 @@ export class NeonLocalExtension implements NeonLocalManager {
             this._databases,
             this._roles
         );
+
+        // Log the view data being sent
+        console.log('Extension: Sending view data:', {
+            orgsCount: viewData.orgs?.length,
+            selectedOrgId: viewData.selectedOrgId,
+            currentConnectionType: this.stateService.connectionType,
+            // Don't include connection type in regular updates
+            isExplicitUpdate: false
+        });
+
+        return viewData;
     }
 
     public async handleStopProxy(): Promise<void> {
@@ -743,11 +762,57 @@ export class NeonLocalExtension implements NeonLocalManager {
                 vscode.window.showErrorMessage(message.text);
                 break;
             case 'updateConnectionType':
-                this.stateService.setConnectionType(message.connectionType);
+                console.log('Handling connection type update:', message.connectionType);
+                this.handleConnectionTypeChange(message.connectionType).catch(error => {
+                    console.error('Error updating connection type:', error);
+                    vscode.window.showErrorMessage('Failed to update connection type');
+                });
+                break;
+            case 'selectDriver':
+                console.log('Handling driver selection:', message.driver);
+                this.stateService.setSelectedDriver(message.driver).then(() => {
+                    // After updating driver, refresh the view data
+                    this.updateViewData();
+                }).catch(error => {
+                    console.error('Error updating driver:', error);
+                    vscode.window.showErrorMessage('Failed to update driver');
+                });
                 break;
             default:
                 console.warn('Unknown command:', message.command);
         }
+    }
+
+    public async handleConnectionTypeChange(connectionType: 'existing' | 'new'): Promise<void> {
+        console.log('Setting connection type:', {
+            newType: connectionType,
+            currentType: this.stateService.connectionType,
+            isExplicitUpdate: true
+        });
+
+        await this.stateService.setConnectionType(connectionType);
+        await this.stateService.setParentBranchId('');
+
+        // Get current state
+        const orgs = await this.apiService.getOrgs();
+        const projects = await this.apiService.getProjects(this.stateService.currentOrg);
+        const branches = this.stateService.currentProject ? await this.apiService.getBranches(this.stateService.currentProject) : [];
+
+        // Get view data with explicit update flag
+        const viewData = await this.stateService.getViewData(
+            orgs,
+            projects,
+            branches,
+            this.stateService.isProxyRunning,
+            this.stateService.isStarting,
+            this.stateService.selectedDriver,
+            this._databases,
+            this._roles,
+            true // Set isExplicitUpdate to true for connection type changes
+        );
+
+        // Send the view data update
+        await this.webviewService.updateViewData(viewData);
     }
 }
 

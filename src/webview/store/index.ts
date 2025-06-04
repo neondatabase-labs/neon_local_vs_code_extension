@@ -3,6 +3,12 @@ import { ViewData, NeonOrg, NeonProject, NeonBranch } from '../../types';
 
 interface AppState extends ViewData {
   isLoading: boolean;
+  loadingStates: {
+    orgs: boolean;
+    projects: boolean;
+    branches: boolean;
+  };
+  currentlyConnectedBranch?: string;
 }
 
 const initialState: AppState = {
@@ -26,7 +32,13 @@ const initialState: AppState = {
   isStarting: false,
   connectionType: 'existing',
   connectionInfo: '',
-  isLoading: false
+  isLoading: false,
+  currentlyConnectedBranch: undefined,
+  loadingStates: {
+    orgs: false,
+    projects: false,
+    branches: false
+  }
 };
 
 const appSlice = createSlice({
@@ -35,80 +47,75 @@ const appSlice = createSlice({
   reducers: {
     updateViewData: (state, action: PayloadAction<ViewData>) => {
       const data = action.payload;
-      console.log('Redux store: Updating view data:', {
-        orgsCount: data.orgs?.length,
-        orgs: data.orgs,
-        selectedOrgId: data.selectedOrgId,
-        selectedOrgName: data.selectedOrgName,
-        connectionType: data.connectionType,
+      console.log('Redux store: Processing view data update:', {
+        currentConnectionType: state.connectionType,
+        incomingConnectionType: data.connectionType,
+        isExplicitUpdate: data.isExplicitUpdate,
         connected: data.connected,
-        isStarting: data.isStarting
+        isStarting: data.isStarting,
+        currentState: {
+          selectedOrgId: state.selectedOrgId,
+          selectedProjectId: state.selectedProjectId,
+          selectedBranchId: state.selectedBranchId,
+          selectedBranchName: state.selectedBranchName,
+          currentlyConnectedBranch: state.currentlyConnectedBranch,
+          connectionType: state.connectionType
+        },
+        incomingData: {
+          selectedOrgId: data.selectedOrgId,
+          selectedProjectId: data.selectedProjectId,
+          selectedBranchId: data.selectedBranchId,
+          selectedBranchName: data.selectedBranchName,
+          currentlyConnectedBranch: data.currentlyConnectedBranch,
+          connectionType: data.connectionType
+        }
       });
 
-      // Ensure arrays are initialized and properly typed
-      const orgs = Array.isArray(data.orgs) ? data.orgs : [];
-      const projects = Array.isArray(data.projects) ? data.projects : [];
-      const branches = Array.isArray(data.branches) ? data.branches : [];
-      
-      // Use the proxy running state directly from the backend
-      const isConnected = data.connected;
-      
-      // Reset dependent fields when parent selection changes
-      let updatedData = { ...data };
-      if (data.selectedOrgId !== state.selectedOrgId) {
-        console.log('Redux store: Organization selection changed:', {
-          from: state.selectedOrgId,
-          to: data.selectedOrgId,
-          orgsAvailable: orgs.length,
-          orgs: orgs
-        });
-        updatedData = {
-          ...updatedData,
-          selectedProjectId: '',
-          selectedProjectName: '',
-          selectedBranchId: '',
-          selectedBranchName: '',
-          projects: [],
-          branches: [],
-          orgs: orgs // Preserve the organizations array
-        };
-      }
-      
-      if (data.selectedProjectId !== state.selectedProjectId) {
-        updatedData = {
-          ...updatedData,
-          selectedBranchId: '',
-          selectedBranchName: '',
-          branches: []
-        };
-      }
-
-      // Preserve connectionType if not explicitly set in the update
-      const connectionType = data.connectionType !== undefined ? data.connectionType : state.connectionType;
-
-      // Preserve connection info if not explicitly changed
-      const connectionInfo = data.connectionInfo !== undefined ? data.connectionInfo : state.connectionInfo;
-
+      // Create new state object, preserving existing values if not in new data
       const newState = {
         ...state,
-        ...updatedData,
-        orgs, // Always ensure orgs is preserved
-        projects,
-        branches,
-        connected: isConnected,
+        // Only update arrays if they are non-empty in the new data
+        orgs: Array.isArray(data.orgs) && data.orgs.length > 0 ? data.orgs : state.orgs,
+        projects: Array.isArray(data.projects) && data.projects.length > 0 ? data.projects : state.projects,
+        branches: Array.isArray(data.branches) && data.branches.length > 0 ? data.branches : state.branches,
+        databases: Array.isArray(data.databases) ? data.databases : state.databases,
+        roles: Array.isArray(data.roles) ? data.roles : state.roles,
+        connected: data.connected,
+        connectionInfo: data.connectionInfo ?? state.connectionInfo,
+        // Preserve selection state unless explicitly provided in new data
+        selectedOrgId: data.selectedOrgId ?? state.selectedOrgId,
+        selectedOrgName: data.selectedOrgName ?? state.selectedOrgName,
+        selectedProjectId: data.selectedProjectId ?? state.selectedProjectId,
+        selectedProjectName: data.selectedProjectName ?? state.selectedProjectName,
+        // For new connections, always use currentlyConnectedBranch if available
+        selectedBranchId: data.selectedBranchId ?? state.selectedBranchId,
+        selectedBranchName: data.selectedBranchName ?? state.selectedBranchName,
+        currentlyConnectedBranch: data.currentlyConnectedBranch ?? state.currentlyConnectedBranch,
+        parentBranchId: data.parentBranchId ?? state.parentBranchId,
+        parentBranchName: data.parentBranchName ?? state.parentBranchName,
+        selectedDriver: data.selectedDriver ?? state.selectedDriver,
+        selectedDatabase: data.selectedDatabase ?? state.selectedDatabase,
+        selectedRole: data.selectedRole ?? state.selectedRole,
+        isStarting: data.isStarting || false,
+        loadingStates: {
+          orgs: false,
+          projects: Boolean(data.selectedOrgId) && (!data.projects || data.projects.length === 0),
+          branches: Boolean(data.selectedProjectId) && (!data.branches || data.branches.length === 0)
+        },
         isLoading: false,
-        connectionType, // Ensure connectionType is always set
-        connectionInfo // Preserve connection info
+        // Ensure we preserve the connection type
+        connectionType: data.connectionType ?? state.connectionType
       };
 
-      console.log('Redux store: Final state:', {
-        orgsCount: newState.orgs.length,
-        orgs: newState.orgs,
-        selectedOrgId: newState.selectedOrgId,
-        selectedOrgName: newState.selectedOrgName,
+      // Log the final state update
+      console.log('Redux store: Final state after update:', {
         connectionType: newState.connectionType,
-        connected: newState.connected,
-        connectionInfo: newState.connectionInfo
+        selectedOrgId: newState.selectedOrgId,
+        selectedProjectId: newState.selectedProjectId,
+        selectedBranchId: newState.selectedBranchId,
+        selectedBranchName: newState.selectedBranchName,
+        currentlyConnectedBranch: newState.currentlyConnectedBranch,
+        isExplicitUpdate: data.isExplicitUpdate
       });
 
       return newState;
@@ -132,16 +139,42 @@ const appSlice = createSlice({
       state.selectedBranchId = action.payload;
     },
     updateConnectionType: (state, action: PayloadAction<'existing' | 'new'>) => {
-      console.log('Updating connection type:', action.payload);
+      console.log('Redux store: Updating connection type:', {
+        from: state.connectionType,
+        to: action.payload
+      });
+      
+      // Store current values
+      const currentBranchId = state.selectedBranchId;
+      const currentBranchName = state.selectedBranchName;
+      const currentParentBranchId = state.parentBranchId;
+      const currentParentBranchName = state.parentBranchName;
+      
+      // Update connection type
       state.connectionType = action.payload;
-      state.selectedBranchId = '';
+      
+      // Preserve appropriate branch information based on new connection type
+      if (action.payload === 'new') {
+        state.parentBranchId = currentParentBranchId || currentBranchId || '';
+        state.parentBranchName = currentParentBranchName || currentBranchName || '';
+        state.selectedBranchId = '';
+        state.selectedBranchName = '';
+      } else {
+        state.selectedBranchId = currentBranchId || currentParentBranchId || '';
+        state.selectedBranchName = currentBranchName || currentParentBranchName || '';
+        state.parentBranchId = '';
+        state.parentBranchName = '';
+      }
     },
     updateDriver: (state, action: PayloadAction<'serverless' | 'postgres'>) => {
       console.log('Updating driver:', action.payload);
       state.selectedDriver = action.payload;
     },
-    setLoading: (state, action: PayloadAction<boolean>) => {
-      state.isLoading = action.payload;
+    setLoading: (state, action: PayloadAction<{ type: 'orgs' | 'projects' | 'branches'; loading: boolean }>) => {
+      state.loadingStates[action.payload.type] = action.payload.loading;
+    },
+    updateParentBranch: (state, action: PayloadAction<string>) => {
+      state.parentBranchId = action.payload;
     }
   }
 });
@@ -160,5 +193,6 @@ export const {
   selectBranch,
   updateConnectionType,
   updateDriver,
-  setLoading
+  setLoading,
+  updateParentBranch
 } = appSlice.actions; 

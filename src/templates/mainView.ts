@@ -2,6 +2,15 @@ import { ViewData } from '../types';
 import { getStyles } from './styles';
 
 export const getMainHtml = (data: ViewData): string => {
+    console.log('MainView: getMainHtml called with data:', {
+        isConnected: data.connected,
+        connectionType: data.connectionType,
+        hasOrgs: Array.isArray(data.orgs),
+        orgsLength: Array.isArray(data.orgs) ? data.orgs.length : 0,
+        selectedBranchId: data.selectedBranchId,
+        currentlyConnectedBranch: data.currentlyConnectedBranch
+    });
+
     const isConnected = data.connected;
     const organizations = Array.isArray(data.orgs) ? data.orgs : [];
     const projects = Array.isArray(data.projects) ? data.projects : [];
@@ -29,7 +38,24 @@ export const getMainHtml = (data: ViewData): string => {
     `;
 };
 
-const getConnectedView = (data: ViewData): string => `
+const getConnectedView = (data: ViewData): string => {
+    console.log('MainView: Rendering connected view with data:', {
+        connectionType: data.connectionType,
+        currentlyConnectedBranch: data.currentlyConnectedBranch,
+        selectedBranchName: data.selectedBranchName,
+        selectedBranchId: data.selectedBranchId,
+        connected: data.connected
+    });
+
+    // For new connections, always use currentlyConnectedBranch if available
+    // For existing connections, use selectedBranchName or selectedBranchId
+    const branchValue = data.connectionType === 'new' 
+        ? (data.currentlyConnectedBranch || 'Not selected')
+        : (data.selectedBranchName || data.selectedBranchId || 'Not selected');
+    
+    console.log('MainView: Using branch value for display:', branchValue);
+
+    return `
     <div class="connection-status">
         <div class="status-indicator connected">
             <span class="status-dot"></span>
@@ -40,20 +66,20 @@ const getConnectedView = (data: ViewData): string => `
     <div class="connection-details">
         <div class="detail-row">
             <div class="detail-label">Organization</div>
-            <div class="detail-value">${data.selectedOrgName || 'Not selected'}</div>
+            <div class="detail-value">${data.selectedOrgName || 'Loading...'}</div>
         </div>
         <div class="detail-row">
             <div class="detail-label">Project</div>
-            <div class="detail-value">${data.selectedProjectName || 'Not selected'}</div>
+            <div class="detail-value">${data.selectedProjectName || 'Loading...'}</div>
         </div>
         <div class="detail-row">
             <div class="detail-label">Branch</div>
-            <div class="detail-value">${data.selectedBranchName || 'Not selected'}</div>
+            <div class="detail-value">Test</div>
         </div>
         ${data.connectionType === 'new' ? `
         <div class="detail-row">
             <div class="detail-label">Parent Branch</div>
-            <div class="detail-value">${data.parentBranchName || 'Not selected'}</div>
+            <div class="detail-value">${data.parentBranchName || data.parentBranchId || 'Not selected'}</div>
         </div>
         ` : ''}
         <div class="detail-row">
@@ -62,6 +88,7 @@ const getConnectedView = (data: ViewData): string => `
         </div>
     </div>
 `;
+};
 
 const getFormView = (
     data: ViewData,
@@ -548,26 +575,39 @@ const getClientScript = (data: ViewData): string => `
                     console.log('Updating view data with:', message.data);
                     const wasConnected = currentState.connected;
                     const previousProjects = currentState.projects || [];
+                    const previousOrgs = currentState.organizations || [];
                     
-                    // If we're disconnecting, keep the previous projects
+                    // If we're disconnecting, keep the previous projects and orgs
                     const updatedProjects = !message.data.connected && wasConnected ? 
-                        previousProjects : message.data.projects || [];
+                        previousProjects : (message.data.projects || []);
+                    const updatedOrgs = !message.data.connected && wasConnected ?
+                        previousOrgs : (message.data.orgs || []);
                     
-                    // Check if auth was cleared (no orgs)
-                    const authCleared = !message.data.orgs?.length;
+                    // Only consider auth cleared if we're not connected and have no orgs
+                    const authCleared = !message.data.connected && !updatedOrgs.length;
+                    
+                    // Find org and project names from the lists first
+                    const selectedOrg = updatedOrgs.find(org => org.id === message.data.selectedOrgId);
+                    const selectedProject = updatedProjects.find(project => project.id === message.data.selectedProjectId);
+                    
+                    // Use names from the lists if available, otherwise fall back to message data or current state
+                    const selectedOrgName = selectedOrg?.name || message.data.selectedOrgName || currentState.selectedOrgName;
+                    const selectedProjectName = selectedProject?.name || message.data.selectedProjectName || currentState.selectedProjectName;
                     
                     currentState = {
                         ...currentState,
-                        organizations: message.data.orgs || [],
+                        organizations: updatedOrgs,
                         projects: updatedProjects,
                         branches: message.data.branches || [],
                         connected: message.data.connected,
-                        // Preserve existing values unless auth was cleared
+                        // Preserve existing values unless auth was explicitly cleared
                         connectionType: authCleared ? 'existing' : (currentState.connectionType || message.data.connectionType || 'existing'),
                         parentBranchId: authCleared ? '' : (currentState.parentBranchId || message.data.parentBranchId),
-                        selectedOrgId: authCleared ? '' : currentState.selectedOrgId,
-                        selectedProjectId: authCleared ? '' : currentState.selectedProjectId,
-                        selectedBranchId: authCleared ? '' : currentState.selectedBranchId,
+                        selectedOrgId: authCleared ? '' : (message.data.selectedOrgId || currentState.selectedOrgId),
+                        selectedOrgName: authCleared ? '' : selectedOrgName,
+                        selectedProjectId: authCleared ? '' : (message.data.selectedProjectId || currentState.selectedProjectId),
+                        selectedProjectName: authCleared ? '' : selectedProjectName,
+                        selectedBranchId: authCleared ? '' : (message.data.selectedBranchId || currentState.selectedBranchId),
                         selectedDriver: authCleared ? 'postgres' : currentState.selectedDriver
                     };
                     saveState();
@@ -586,7 +626,7 @@ const getClientScript = (data: ViewData): string => `
                     const parentBranchSelect = document.getElementById('parent-branch');
                     
                     if (orgSelect) {
-                        console.log('Updating org select with:', message.data.orgs);
+                        console.log('Updating org select with:', updatedOrgs);
                         while (orgSelect.options.length > 1) {
                             orgSelect.remove(1);
                         }
@@ -594,7 +634,7 @@ const getClientScript = (data: ViewData): string => `
                         if (authCleared) {
                             orgSelect.selectedIndex = 0;
                         } else {
-                            message.data.orgs.forEach(org => {
+                            updatedOrgs.forEach(org => {
                                 const option = document.createElement('option');
                                 option.value = org.id;
                                 option.text = org.name;

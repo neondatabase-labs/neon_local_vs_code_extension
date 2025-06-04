@@ -1,11 +1,12 @@
 import * as vscode from 'vscode';
 import { VIEW_TYPES } from './constants';
-import { NeonLocalManager, WebviewMessage } from './types';
+import { NeonLocalManager, ViewData, WebviewMessage } from './types';
 import { getDatabaseHtml } from './templates/databaseView';
 
 export class DatabaseViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = VIEW_TYPES.DATABASE;
     private _view?: vscode.WebviewView;
+    private _lastUpdateData?: ViewData;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -24,7 +25,21 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
             localResourceRoots: [this._extensionUri]
         };
 
-        // Initialize view with empty state to show not connected message
+        // Set up message handler first
+        webviewView.webview.onDidReceiveMessage(this.handleWebviewMessage.bind(this));
+        
+        // Handle visibility changes
+        webviewView.onDidChangeVisibility(() => {
+            if (webviewView.visible) {
+                // Force update when becoming visible
+                this._lastUpdateData = undefined;
+                this.updateView().catch(error => {
+                    console.error('Error updating database view on visibility change:', error);
+                });
+            }
+        });
+
+        // Initialize view with empty state
         webviewView.webview.html = getDatabaseHtml({
             orgs: [],
             projects: [],
@@ -39,15 +54,15 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
             isStarting: false
         });
 
+        // Register this view with the manager
         this._neonLocal.setWebviewView(webviewView);
-        this.updateView();
 
-        webviewView.webview.onDidReceiveMessage(this.handleWebviewMessage.bind(this));
-        webviewView.onDidChangeVisibility(() => {
-            if (webviewView.visible) {
-                this.updateView();
-            }
-        });
+        // Initial update with a small delay to ensure proper registration
+        setTimeout(() => {
+            this.updateView().catch(error => {
+                console.error('Error during initial database view update:', error);
+            });
+        }, 100);
     }
 
     private async handleWebviewMessage(message: WebviewMessage): Promise<void> {
@@ -57,11 +72,9 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
             switch (message.command) {
                 case 'selectDatabase':
                     await this._neonLocal.handleDatabaseSelection(message.database);
-                    await this.updateView();
                     break;
                 case 'selectRole':
                     await this._neonLocal.handleRoleSelection(message.role);
-                    await this.updateView();
                     break;
                 case 'openSqlEditor':
                     await vscode.commands.executeCommand('neon-local.openSqlEditor');
@@ -87,10 +100,50 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
 
         try {
             const data = await this._neonLocal.getViewData();
-            this._view.webview.html = getDatabaseHtml(data);
+            
+            // Always update on any connection state changes
+            const needsUpdate = !this._lastUpdateData || 
+                this._lastUpdateData.connected !== data.connected ||
+                this._lastUpdateData.isStarting !== data.isStarting ||
+                this._lastUpdateData.connectionInfo !== data.connectionInfo ||
+                // Only check database-specific fields if we're connected
+                (data.connected && (
+                    JSON.stringify(this._lastUpdateData.databases) !== JSON.stringify(data.databases) ||
+                    JSON.stringify(this._lastUpdateData.roles) !== JSON.stringify(data.roles) ||
+                    this._lastUpdateData.selectedDatabase !== data.selectedDatabase ||
+                    this._lastUpdateData.selectedRole !== data.selectedRole
+                ));
+
+            if (needsUpdate) {
+                console.log('DatabaseView: Updating view with new data:', {
+                    connected: data.connected,
+                    databasesCount: data.databases?.length,
+                    rolesCount: data.roles?.length,
+                    selectedDatabase: data.selectedDatabase,
+                    selectedRole: data.selectedRole,
+                    isStarting: data.isStarting,
+                    connectionInfo: data.connectionInfo
+                });
+
+                // Store the last update data before sending
+                this._lastUpdateData = {...data};
+
+                // Update the view's HTML first
+                this._view.webview.html = getDatabaseHtml(data);
+
+                // Small delay to ensure HTML is updated
+                await new Promise(resolve => setTimeout(resolve, 50));
+
+                // Send data via postMessage
+                await this._view.webview.postMessage({
+                    command: 'updateViewData',
+                    data: data
+                });
+            }
         } catch (error) {
+            console.error('Error updating database view:', error);
             if (error instanceof Error) {
-                vscode.window.showErrorMessage(error.message);
+                vscode.window.showErrorMessage(`Database view update error: ${error.message}`);
             }
         }
     }

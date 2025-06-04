@@ -101,10 +101,75 @@ const getClientScript = (): string => `
             console.log('DatabaseView received message:', message);
             
             if (message.command === 'updateViewData') {
-                // Reload the entire view with new data
-                vscode.postMessage({ command: 'refresh' });
+                const data = message.data;
+                updateViewContent(data);
             }
         });
+
+        function updateViewContent(data) {
+            try {
+                const container = document.getElementById('app');
+                if (!container) {
+                    console.warn('Container element not found');
+                    return;
+                }
+
+                // Update the container content based on connection status
+                if (data.connected) {
+                    // Update database dropdown
+                    const databaseSelect = document.getElementById('database');
+                    if (databaseSelect) {
+                        const currentValue = databaseSelect.value;
+                        databaseSelect.innerHTML = \`
+                            <option value="">Select Database</option>
+                            \${data.databases.map(db => \`
+                                <option value="\${db.name}" \${db.name === data.selectedDatabase ? 'selected' : ''}>
+                                    \${db.name}
+                                </option>
+                            \`).join('')}
+                        \`;
+                        // Only trigger change if value actually changed
+                        if (currentValue !== databaseSelect.value) {
+                            databaseSelect.dispatchEvent(new Event('change'));
+                        }
+                    }
+
+                    // Update role dropdown
+                    const roleSelect = document.getElementById('role');
+                    if (roleSelect) {
+                        const currentValue = roleSelect.value;
+                        roleSelect.innerHTML = \`
+                            <option value="">Select Role</option>
+                            \${data.roles.map(role => \`
+                                <option value="\${role.name}" \${role.name === data.selectedRole ? 'selected' : ''}>
+                                    \${role.name}
+                                </option>
+                            \`).join('')}
+                        \`;
+                        // Only trigger change if value actually changed
+                        if (currentValue !== roleSelect.value) {
+                            roleSelect.dispatchEvent(new Event('change'));
+                        }
+                    }
+
+                    // Update connection string if it exists
+                    const connectionStringContainer = document.querySelector('.connection-string');
+                    if (connectionStringContainer && data.connectionInfo) {
+                        connectionStringContainer.textContent = data.connectionInfo;
+                    }
+
+                    // Update fetch endpoint if needed
+                    if (data.selectedDriver === 'serverless') {
+                        const fetchEndpointContainer = document.querySelector('.fetch-endpoint .connection-string');
+                        if (fetchEndpointContainer) {
+                            fetchEndpointContainer.innerHTML = 'import { neonConfig } from \'@neondatabase/serverless\';</br></br>neonConfig.fetchEndpoint = \'http://localhost:5432/sql\';';
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error updating view content:', error);
+            }
+        }
 
         document.addEventListener('DOMContentLoaded', () => {
             // Setup database dropdown
@@ -130,9 +195,9 @@ const getClientScript = (): string => `
             }
 
             // Setup copy buttons
-            document.querySelectorAll('.copy-button').forEach(button => {
-                button.addEventListener('click', () => {
-                    // Find the closest detail-row and get its connection-string
+            document.addEventListener('click', (e) => {
+                const button = e.target.closest('.copy-button');
+                if (button) {
                     const detailRow = button.closest('.detail-row');
                     const connectionString = detailRow?.querySelector('.connection-string')?.textContent;
                     if (connectionString) {
@@ -146,7 +211,7 @@ const getClientScript = (): string => `
                             }
                         });
                     }
-                });
+                }
             });
         });
     </script>

@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
-import { NeonLocalManager, ViewData } from './types';
-import { getStyles } from './templates/styles';
+import { VIEW_TYPES } from './constants';
+import { NeonLocalManager, ViewData, WebviewMessage } from './types';
 import { getActionsHtml } from './templates/actionsView';
 
 export class ActionsViewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
+    private _lastUpdateData?: ViewData;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -23,7 +24,21 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             localResourceRoots: [this._extensionUri]
         };
 
-        // Initialize view with empty state to show not connected message
+        // Set up message handler first
+        webviewView.webview.onDidReceiveMessage(this.handleWebviewMessage.bind(this));
+        
+        // Handle visibility changes
+        webviewView.onDidChangeVisibility(() => {
+            if (webviewView.visible) {
+                // Force update when becoming visible
+                this._lastUpdateData = undefined;
+                this.updateView().catch(error => {
+                    console.error('Error updating actions view on visibility change:', error);
+                });
+            }
+        });
+
+        // Initialize view with empty state
         webviewView.webview.html = getActionsHtml({
             orgs: [],
             projects: [],
@@ -35,21 +50,22 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             selectedBranchId: '',
             selectedDriver: 'postgres',
             connected: false,
-            isStarting: false
+            isStarting: false,
+            connectionType: 'existing'
         });
 
+        // Register this view with the manager
         this._manager.setWebviewView(webviewView);
-        this.updateView();
 
-        webviewView.webview.onDidReceiveMessage(this.handleWebviewMessage.bind(this));
-        webviewView.onDidChangeVisibility(() => {
-            if (webviewView.visible) {
-                this.updateView();
-            }
-        });
+        // Initial update with a small delay to ensure proper registration
+        setTimeout(() => {
+            this.updateView().catch(error => {
+                console.error('Error during initial actions view update:', error);
+            });
+        }, 100);
     }
 
-    private async handleWebviewMessage(message: any): Promise<void> {
+    private async handleWebviewMessage(message: WebviewMessage): Promise<void> {
         if (!this._view) return;
 
         try {
@@ -84,10 +100,53 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
 
         try {
             const data = await this._manager.getViewData();
-            this._view.webview.html = getActionsHtml(data);
+            
+            // Always update on any connection state changes
+            const needsUpdate = !this._lastUpdateData || 
+                this._lastUpdateData.connected !== data.connected ||
+                this._lastUpdateData.isStarting !== data.isStarting ||
+                this._lastUpdateData.connectionInfo !== data.connectionInfo ||
+                this._lastUpdateData.connectionType !== data.connectionType ||
+                this._lastUpdateData.selectedBranchId !== data.selectedBranchId ||
+                this._lastUpdateData.parentBranchId !== data.parentBranchId;
+
+            if (needsUpdate) {
+                console.log('ActionsView: Updating view with new data:', {
+                    connected: data.connected,
+                    connectionType: data.connectionType,
+                    selectedBranchId: data.selectedBranchId,
+                    parentBranchId: data.parentBranchId,
+                    isStarting: data.isStarting,
+                    connectionInfo: data.connectionInfo,
+                    lastConnectionType: this._lastUpdateData?.connectionType
+                });
+
+                // Store the last update data before sending
+                this._lastUpdateData = {...data};
+
+                // Update the view's HTML first
+                this._view.webview.html = getActionsHtml(data);
+
+                // Small delay to ensure HTML is updated
+                await new Promise(resolve => setTimeout(resolve, 50));
+
+                // Send data via postMessage
+                await this._view.webview.postMessage({
+                    command: 'updateViewData',
+                    data: data
+                });
+
+                console.log('ActionsView: Update complete, new state:', {
+                    connected: data.connected,
+                    connectionType: data.connectionType,
+                    selectedBranchId: data.selectedBranchId,
+                    parentBranchId: data.parentBranchId
+                });
+            }
         } catch (error) {
+            console.error('Error updating actions view:', error);
             if (error instanceof Error) {
-                vscode.window.showErrorMessage(error.message);
+                vscode.window.showErrorMessage(`Actions view update error: ${error.message}`);
             }
         }
     }

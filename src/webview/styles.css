@@ -34,6 +34,29 @@ h1 {
   font-weight: 600;
 }
 
+.select-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.loading-spinner {
+  position: absolute;
+  right: 30px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top-color: #007acc;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 select {
   width: 100%;
   padding: 8px;

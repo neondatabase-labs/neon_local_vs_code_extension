@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState, updateViewData, setLoading } from '../store';
+import { RootState, updateViewData, setLoading, updateConnectionType, selectBranch, updateDriver, updateParentBranch } from '../store';
 import { ViewData, NeonOrg, NeonProject, NeonBranch } from '../../types';
 
 interface AppProps {
@@ -46,7 +46,6 @@ export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
           selectedOrgId: message.data.selectedOrgId,
           selectedOrgName: message.data.selectedOrgName
         });
-        dispatch(setLoading(true));
         dispatch(updateViewData(message.data));
         // Store state in VS Code's storage
         vscode.setState(message.data);
@@ -68,10 +67,28 @@ export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
   }, [state.orgs, state.selectedOrgId, state.selectedOrgName]);
 
   const handleConnectionTypeChange = (value: 'existing' | 'new') => {
+    console.log('Changing connection type to:', value);
+    
+    // Update local state first
+    dispatch(updateConnectionType(value));
+    
+    // Then notify the extension
     vscode.postMessage({
-      command: 'updateConnectionType',
-      connectionType: value
+        command: 'updateConnectionType',
+        connectionType: value
     });
+
+    // Clear only the relevant branch selection when changing connection type
+    if (value === 'new') {
+        dispatch(selectBranch(''));
+    } else {
+        // Clear parent branch selection when switching to existing
+        vscode.postMessage({
+            command: 'selectParentBranch',
+            parentBranchId: '',
+            branchName: ''
+        });
+    }
   };
 
   const handleOrgChange = (value: string) => {
@@ -80,7 +97,7 @@ export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
       availableOrgs: state.orgs,
       currentOrgs: state.orgs
     });
-    dispatch(setLoading(true));
+    dispatch(setLoading({ type: 'projects', loading: true }));
     const selectedOrg = state.orgs.find((org: NeonOrg) => org.id === value);
     vscode.postMessage({
       command: 'selectOrg',
@@ -90,7 +107,7 @@ export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
   };
 
   const handleProjectChange = (value: string) => {
-    dispatch(setLoading(true));
+    dispatch(setLoading({ type: 'branches', loading: true }));
     const selectedProject = state.projects.find((project: NeonProject) => project.id === value);
     vscode.postMessage({
       command: 'selectProject',
@@ -100,7 +117,6 @@ export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
   };
 
   const handleBranchChange = (value: string) => {
-    dispatch(setLoading(true));
     const selectedBranch = state.branches.find((branch: NeonBranch) => branch.id === value);
     vscode.postMessage({
       command: 'selectBranch',
@@ -109,7 +125,29 @@ export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
     });
   };
 
+  const handleParentBranchChange = (value: string) => {
+    const selectedBranch = state.branches.find((branch: NeonBranch) => branch.id === value);
+    console.log('Selecting parent branch:', {
+      value,
+      selectedBranch,
+      currentState: state
+    });
+    
+    // Update local state first
+    dispatch(updateParentBranch(value));
+    
+    // Then notify the extension
+    vscode.postMessage({
+      command: 'selectParentBranch',
+      parentBranchId: value,
+      branchName: selectedBranch?.name
+    });
+  };
+
   const handleDriverChange = (value: 'serverless' | 'postgres') => {
+    // Update local state first
+    dispatch(updateDriver(value));
+    // Then notify the extension
     vscode.postMessage({
       command: 'selectDriver',
       driver: value
@@ -121,8 +159,8 @@ export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
       command: 'startProxy',
       driver: state.selectedDriver,
       isExisting: state.connectionType === 'existing',
-      branchId: state.selectedBranchId,
-      parentBranchId: state.connectionType === 'new' ? state.selectedBranchId : undefined
+      branchId: state.connectionType === 'existing' ? state.selectedBranchId : undefined,
+      parentBranchId: state.connectionType === 'new' ? state.parentBranchId : undefined
     });
   };
 
@@ -132,16 +170,42 @@ export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
     });
   };
 
-  if (state.isLoading) {
-    return <div className="loading">Loading...</div>;
-  }
-
   // Helper function to check if dropdown should be disabled
   const isDropdownDisabled = (type: 'project' | 'branch') => {
     if (type === 'project') return !state.selectedOrgId || state.orgs.length === 0;
     if (type === 'branch') return !state.selectedProjectId || state.projects.length === 0;
     return false;
   };
+
+  const renderDropdown = (
+    id: string,
+    label: string,
+    value: string,
+    options: Array<{ id: string; name: string }>,
+    onChange: (value: string) => void,
+    disabled: boolean = false,
+    loading: boolean = false
+  ) => (
+    <div className="section">
+      <label htmlFor={id}>{label}</label>
+      <div className="select-container">
+        <select
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled || loading}
+        >
+          <option value="">{loading ? 'Loading...' : `Select ${label}`}</option>
+          {options.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name || 'Unknown'}
+            </option>
+          ))}
+        </select>
+        {loading && <div className="loading-spinner" />}
+      </div>
+    </div>
+  );
 
   return (
     <div className="app">
@@ -165,7 +229,11 @@ export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
             </div>
             <div className="detail-row">
               <div className="detail-label">Branch</div>
-              <div className="detail-value">{state.selectedBranchName || 'Not selected'}</div>
+              <div className="detail-value">
+                {state.connectionType === 'new' 
+                    ? (state.currentlyConnectedBranch || 'Not selected')
+                    : (state.selectedBranchName || state.selectedBranchId || 'Not selected')}
+              </div>
             </div>
             {state.connectionType === 'new' && (
               <div className="detail-row">
@@ -179,10 +247,9 @@ export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
                 {state.selectedDriver === 'serverless' ? 'Neon Serverless' : 'PostgreSQL'}
               </div>
             </div>
-           
           </div>
 
-          <button className="button danger" onClick={handleStopProxy}>
+          <button className="stop-button" onClick={handleStopProxy}>
             Disconnect
           </button>
         </>
@@ -200,76 +267,46 @@ export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
             </select>
           </div>
 
-          <div className="section">
-            <label htmlFor="org">Organization</label>
-            <select
-              id="org"
-              value={state.selectedOrgId || ''}
-              onChange={(e) => {
-                console.log('Organization dropdown changed:', {
-                  newValue: e.target.value,
-                  availableOrgs: state.orgs,
-                  currentOrgs: state.orgs
-                });
-                handleOrgChange(e.target.value);
-              }}
-            >
-              <option value="">Select Organization</option>
-              {Array.isArray(state.orgs) && state.orgs.length > 0 ? (
-                state.orgs.map((org: NeonOrg) => (
-                  <option key={org.id} value={org.id}>{org.name || 'Unknown Organization'}</option>
-                ))
-              ) : (
-                <option value="" disabled>No organizations available</option>
-              )}
-            </select>
-          </div>
+          {renderDropdown(
+            'org',
+            'Organization',
+            state.selectedOrgId || '',
+            state.orgs,
+            handleOrgChange,
+            false,
+            state.loadingStates.orgs
+          )}
 
-          <div className="section">
-            <label htmlFor="project">Project</label>
-            <select
-              id="project"
-              value={state.selectedProjectId || ''}
-              onChange={(e) => handleProjectChange(e.target.value)}
-              disabled={isDropdownDisabled('project')}
-            >
-              <option value="">Select Project</option>
-              {state.projects && state.projects.map((project: NeonProject) => (
-                <option key={project.id} value={project.id}>{project.name}</option>
-              ))}
-            </select>
-          </div>
+          {renderDropdown(
+            'project',
+            'Project',
+            state.selectedProjectId || '',
+            state.projects,
+            handleProjectChange,
+            isDropdownDisabled('project'),
+            state.loadingStates.projects
+          )}
 
-          {state.connectionType === 'existing' ? (
-            <div className="section">
-              <label htmlFor="branch">Branch</label>
-              <select
-                id="branch"
-                value={state.selectedBranchId || ''}
-                onChange={(e) => handleBranchChange(e.target.value)}
-                disabled={isDropdownDisabled('branch')}
-              >
-                <option value="">Select Branch</option>
-                {state.branches && state.branches.map((branch: NeonBranch) => (
-                  <option key={branch.id} value={branch.id}>{branch.name}</option>
-                ))}
-              </select>
-            </div>
+          {state.connectionType === 'new' ? (
+            renderDropdown(
+              'parent-branch',
+              'Parent Branch',
+              state.parentBranchId || '',
+              state.branches,
+              handleParentBranchChange,
+              isDropdownDisabled('branch'),
+              state.loadingStates.branches
+            )
           ) : (
-            <div className="section">
-              <label htmlFor="parent-branch">Parent Branch</label>
-              <select
-                id="parent-branch"
-                value={state.selectedBranchId || ''}
-                onChange={(e) => handleBranchChange(e.target.value)}
-                disabled={isDropdownDisabled('branch')}
-              >
-                <option value="">Select Parent Branch</option>
-                {state.branches && state.branches.map((branch: NeonBranch) => (
-                  <option key={branch.id} value={branch.id}>{branch.name}</option>
-                ))}
-              </select>
-            </div>
+            renderDropdown(
+              'branch',
+              'Branch',
+              state.selectedBranchId || '',
+              state.branches,
+              handleBranchChange,
+              isDropdownDisabled('branch'),
+              state.loadingStates.branches
+            )
           )}
 
           <div className="section">
@@ -285,9 +322,8 @@ export const App: React.FC<AppProps> = ({ vscode, initialState }) => {
           </div>
 
           <button
-            className="button primary"
             onClick={handleStartProxy}
-            disabled={!state.selectedBranchId}
+            disabled={state.connectionType === 'existing' ? !state.selectedBranchId : !state.parentBranchId}
           >
             {state.connectionType === 'existing' ? 'Connect' : 'Create'}
           </button>
