@@ -522,12 +522,16 @@ export class NeonLocalExtension implements NeonLocalManager {
             throw new Error('No branch selected');
         }
 
-        const currentProject = this.stateService.currentProject;
-        if (!currentProject) {
-            throw new Error('No project selected');
-        }
-
         try {
+            // Show notification that we're starting
+            vscode.window.showInformationMessage('Connecting to Neon database...');
+
+            // Store current project before starting
+            const currentProject = this.stateService.currentProject;
+            if (!currentProject) {
+                throw new Error('No project selected');
+            }
+
             await this.stateService.setIsStarting(true);
             
             // Store current state before starting

@@ -61,7 +61,7 @@ select {
   width: 100%;
   padding: 8px;
   padding-right: 32px;
-  margin: 4px 0 8px 0;
+  margin: 4px 0 0 0;
   background-color: var(--vscode-dropdown-background);
   color: var(--vscode-dropdown-foreground);
   border: 1px solid var(--vscode-dropdown-border);
@@ -201,11 +201,7 @@ button:disabled {
 }
 
 .stop-button {
-  background-color: var(--vscode-errorForeground, #F44336);
-}
-
-.stop-button:hover:not(:disabled) {
-  background-color: var(--vscode-errorForeground, #D32F2F);
+  background-color: var(--vscode-button-background);
 }
 
 .branch-dropdown {
