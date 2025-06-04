@@ -263,7 +263,7 @@ export class NeonLocalExtension implements NeonLocalManager {
                     ]);
 
                     // Create the psql connection string
-                    const connectionString = `postgresql://neon:npg@${endpoint}/${selectedDatabase}?sslmode=require`;
+                    const connectionString = `postgresql://${selectedRole}:${password}@${endpoint}/${selectedDatabase}?sslmode=require`;
 
                     // Create a new terminal and run the psql command
                     const terminal = vscode.window.createTerminal('Neon PSQL');
