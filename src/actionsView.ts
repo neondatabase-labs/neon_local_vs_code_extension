@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { VIEW_TYPES } from './constants';
 import { NeonLocalManager, ViewData, WebviewMessage } from './types';
-import { getActionsHtml } from './templates/actionsView';
 
 export class ActionsViewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
@@ -38,21 +37,8 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             }
         });
 
-        // Initialize view with empty state
-        webviewView.webview.html = getActionsHtml({
-            orgs: [],
-            projects: [],
-            branches: [],
-            databases: [],
-            roles: [],
-            selectedOrgId: '',
-            selectedOrgName: '',
-            selectedBranchId: '',
-            selectedDriver: 'postgres',
-            connected: false,
-            isStarting: false,
-            connectionType: 'existing'
-        });
+        // Initialize view with React app
+        webviewView.webview.html = this.getWebviewContent(webviewView.webview);
 
         // Register this view with the manager
         this._manager.setWebviewView(webviewView);
@@ -93,6 +79,36 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
+    private getWebviewContent(webview: vscode.Webview): string {
+        const scriptUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview.js')
+        );
+
+        const styleUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'dist', 'styles.css')
+        );
+
+        const nonce = getNonce();
+
+        return `<!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval'; img-src ${webview.cspSource} data: https:; font-src ${webview.cspSource}; frame-src 'self';">
+                <link href="${styleUri}" rel="stylesheet" />
+                <title>Neon Local Actions</title>
+            </head>
+            <body data-view-type="${VIEW_TYPES.ACTIONS}">
+                <div id="root"></div>
+                <script nonce="${nonce}">
+                    window.vscodeApi = acquireVsCodeApi();
+                </script>
+                <script nonce="${nonce}" src="${scriptUri}"></script>
+            </body>
+            </html>`;
+    }
+
     public async updateView(): Promise<void> {
         if (!this._view) {
             return;
@@ -124,23 +140,10 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
                 // Store the last update data before sending
                 this._lastUpdateData = {...data};
 
-                // Update the view's HTML first
-                this._view.webview.html = getActionsHtml(data);
-
-                // Small delay to ensure HTML is updated
-                await new Promise(resolve => setTimeout(resolve, 50));
-
                 // Send data via postMessage
                 await this._view.webview.postMessage({
                     command: 'updateViewData',
                     data: data
-                });
-
-                console.log('ActionsView: Update complete, new state:', {
-                    connected: data.connected,
-                    connectionType: data.connectionType,
-                    selectedBranchId: data.selectedBranchId,
-                    parentBranchId: data.parentBranchId
                 });
             }
         } catch (error) {
@@ -150,4 +153,13 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             }
         }
     }
+}
+
+function getNonce() {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
 } 

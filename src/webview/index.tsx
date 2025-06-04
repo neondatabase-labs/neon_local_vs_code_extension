@@ -1,16 +1,18 @@
-import * as React from 'react';
-import { Provider } from 'react-redux';
-import { store } from './store';
-import { App } from './components/App';
-import './styles.css';
+import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { ViewData } from '../types';
+import { Provider } from 'react-redux';
+import { App } from './components/App';
+import { ActionsView } from './components/ActionsView';
+import { DatabaseView } from './components/DatabaseView';
+import { store } from './store';
+import './styles.css';
 
 // Get VS Code API using singleton pattern
 declare global {
   interface Window {
     acquireVsCodeApi(): any;
     vscodeApi?: any;
+    initialState?: any;
   }
 }
 
@@ -25,35 +27,43 @@ const getVSCodeApi = () => {
 // Get VS Code API instance
 const vscode = getVSCodeApi();
 
-// Initialize React app
-const root = createRoot(document.getElementById('root')!);
+// Get the view type from the HTML
+const viewType = document.body.dataset.viewType;
 
-// Get initial state from VS Code's stored state
-const initialState: ViewData = vscode.getState() || {
-  orgs: [],
-  projects: [],
-  branches: [],
-  databases: [],
-  roles: [],
-  selectedOrgId: '',
-  selectedOrgName: '',
-  selectedProjectId: '',
-  selectedProjectName: '',
-  selectedBranchId: '',
-  selectedBranchName: '',
-  parentBranchId: '',
-  parentBranchName: '',
-  selectedDriver: 'postgres',
-  selectedDatabase: '',
-  selectedRole: '',
-  connected: false,
-  isStarting: false,
-  connectionType: 'existing',
-  connectionInfo: ''
+// Create the root element
+const container = document.getElementById('root');
+if (!container) {
+  throw new Error('Root element not found');
+}
+const root = createRoot(container);
+
+// Set up message handler for view data updates
+window.addEventListener('message', event => {
+  const message = event.data;
+  if (message.command === 'updateViewData') {
+    store.dispatch({ type: 'app/updateViewData', payload: message.data });
+  }
+});
+
+// Render the appropriate component based on view type
+const renderComponent = () => {
+  const component = (() => {
+    switch (viewType) {
+      case 'neonLocalActions':
+        return <ActionsView vscode={window.vscodeApi} />;
+      case 'neonLocalDatabase':
+        return <DatabaseView vscode={window.vscodeApi} />;
+      default:
+        return <App vscode={window.vscodeApi} initialState={window.initialState} />;
+    }
+  })();
+
+  return (
+    <Provider store={store}>
+      {component}
+    </Provider>
+  );
 };
 
-root.render(
-  <Provider store={store}>
-    <App vscode={vscode} initialState={initialState} />
-  </Provider>
-); 
+// Render the component
+root.render(renderComponent()); 

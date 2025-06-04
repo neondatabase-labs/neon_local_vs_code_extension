@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { StateService } from './services/state.service';
+import { IStateService } from './services/state.service';
 
 export interface NeonBranch {
     id: string;
@@ -34,32 +34,32 @@ export interface NeonRole {
 }
 
 export interface ViewData {
-    orgs: NeonOrg[];
-    projects: NeonProject[];
-    branches: NeonBranch[];
-    databases: NeonDatabase[];
-    roles: NeonRole[];
+    orgs: Array<{ id: string; name: string }>;
+    projects: Array<{ id: string; name: string }>;
+    branches: Array<{ id: string; name: string }>;
+    databases: Array<{ name: string }>;
+    roles: Array<{ name: string }>;
     selectedOrgId: string;
     selectedOrgName: string;
     selectedProjectId?: string;
     selectedProjectName?: string;
-    selectedBranchId: string;
+    selectedBranchId?: string;
     selectedBranchName?: string;
     parentBranchId?: string;
     parentBranchName?: string;
-    selectedDriver: string;
+    selectedDriver: 'serverless' | 'postgres';
     selectedDatabase?: string;
     selectedRole?: string;
     connected: boolean;
     isStarting: boolean;
-    connectionType?: 'existing' | 'new';
+    connectionType: 'existing' | 'new';
     connectionInfo?: string;
     isExplicitUpdate?: boolean;
     currentlyConnectedBranch?: string;
 }
 
 export interface WebviewMessage {
-    command: WebviewCommand;
+    command: string;
     [key: string]: any;
 }
 
@@ -84,25 +84,25 @@ export type WebviewCommand =
     | 'openTableView';
 
 export interface NeonLocalManager {
-    stateService: {
-        setConnectionType(value: 'existing' | 'new'): Promise<void>;
-        getConnectionType(): 'existing' | 'new';
-        currentProject?: string;
-        currentOrg?: string;
-        isProxyRunning: boolean;
-        isStarting: boolean;
-        selectedDriver: string;
-        connectionType: 'existing' | 'new';
-        currentBranch?: string;
-        parentBranchId?: string;
-    };
-    setWebviewView(view: vscode.WebviewView): void;
+    getViewData(): Promise<ViewData>;
+    setWebviewView(view: any): void;
+    stateService: IStateService;
+    handleDatabaseSelection(database: string): Promise<void>;
+    handleRoleSelection(role: string): Promise<void>;
+    handleStartProxy(driver: string, isExisting: boolean, branchId?: string, parentBranchId?: string): Promise<void>;
+    handleError(error: any): void;
+    clearAuth(): Promise<void>;
+    handleBranchSelection(branchId: string, restartProxy: boolean, driver: string): Promise<void>;
     handleOrgSelection(orgId: string): Promise<void>;
     handleProjectSelection(projectId: string): Promise<void>;
-    handleBranchSelection(branchId: string, restartProxy: boolean, driver: string): Promise<void>;
-    handleStartProxy(driver: string, isExisting: boolean, branchId?: string, parentBranchId?: string): Promise<void>;
+    handleParentBranchSelection(parentBranchId: string): Promise<void>;
+    handleConnectionTypeChange(connectionType: 'existing' | 'new'): Promise<void>;
     handleStopProxy(): Promise<void>;
-    getViewData(): Promise<ViewData>;
+    activate(): Promise<void>;
+    deactivate(): void;
+    configure(): Promise<void>;
+    showPanel(): void;
+    stopProxy(): Promise<void>;
 }
 
 export interface NeonConfiguration {
@@ -110,6 +110,16 @@ export interface NeonConfiguration {
     refreshToken?: string;
     projectId?: string;
     driver?: 'postgres' | 'serverless';
+    deleteOnStop?: boolean;
+    connectionType?: 'existing' | 'new';
+}
+
+export interface DockerConfig {
+    image: string;
+    containerName: string;
+    ports: { [key: string]: string };
+    environment: { [key: string]: string };
+    volumes?: { [key: string]: string };
     deleteOnStop?: boolean;
     connectionType?: 'existing' | 'new';
 } 

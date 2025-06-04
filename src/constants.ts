@@ -21,5 +21,6 @@ export const DOCKER = {
 export const VIEW_TYPES = {
     CONNECT: 'neonLocalConnect',
     DATABASE: 'neonLocalDatabase',
-    ACTIONS: 'neonLocalActions'
+    ACTIONS: 'neonLocalActions',
+    SIGN_IN: 'neonLocal.signIn'
 } as const; 

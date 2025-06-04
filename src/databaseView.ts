@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { VIEW_TYPES } from './constants';
 import { NeonLocalManager, ViewData, WebviewMessage } from './types';
-import { getDatabaseHtml } from './templates/databaseView';
 
 export class DatabaseViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = VIEW_TYPES.DATABASE;
@@ -39,20 +38,8 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
             }
         });
 
-        // Initialize view with empty state
-        webviewView.webview.html = getDatabaseHtml({
-            orgs: [],
-            projects: [],
-            branches: [],
-            databases: [],
-            roles: [],
-            selectedOrgId: '',
-            selectedOrgName: '',
-            selectedBranchId: '',
-            selectedDriver: 'postgres',
-            connected: false,
-            isStarting: false
-        });
+        // Initialize view with React app
+        webviewView.webview.html = this.getWebviewContent(webviewView.webview);
 
         // Register this view with the manager
         this._neonLocal.setWebviewView(webviewView);
@@ -72,17 +59,10 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
             switch (message.command) {
                 case 'selectDatabase':
                     await this._neonLocal.handleDatabaseSelection(message.database);
+                    await this.updateView();
                     break;
                 case 'selectRole':
                     await this._neonLocal.handleRoleSelection(message.role);
-                    break;
-                case 'openSqlEditor':
-                    await vscode.commands.executeCommand('neon-local.openSqlEditor');
-                    break;
-                case 'launchPsql':
-                    await vscode.commands.executeCommand('neon-local.launchPsql');
-                    break;
-                case 'refresh':
                     await this.updateView();
                     break;
             }
@@ -91,6 +71,36 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
                 vscode.window.showErrorMessage(error.message);
             }
         }
+    }
+
+    private getWebviewContent(webview: vscode.Webview): string {
+        const scriptUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview.js')
+        );
+
+        const styleUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'dist', 'styles.css')
+        );
+
+        const nonce = getNonce();
+
+        return `<!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval'; img-src ${webview.cspSource} data: https:; font-src ${webview.cspSource}; frame-src 'self';">
+                <link href="${styleUri}" rel="stylesheet" />
+                <title>Neon Local Database</title>
+            </head>
+            <body data-view-type="${VIEW_TYPES.DATABASE}">
+                <div id="root"></div>
+                <script nonce="${nonce}">
+                    window.vscodeApi = acquireVsCodeApi();
+                </script>
+                <script nonce="${nonce}" src="${scriptUri}"></script>
+            </body>
+            </html>`;
     }
 
     public async updateView(): Promise<void> {
@@ -128,12 +138,6 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
                 // Store the last update data before sending
                 this._lastUpdateData = {...data};
 
-                // Update the view's HTML first
-                this._view.webview.html = getDatabaseHtml(data);
-
-                // Small delay to ensure HTML is updated
-                await new Promise(resolve => setTimeout(resolve, 50));
-
                 // Send data via postMessage
                 await this._view.webview.postMessage({
                     command: 'updateViewData',
@@ -147,4 +151,13 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
             }
         }
     }
+}
+
+function getNonce() {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
 } 

@@ -47,7 +47,9 @@ export class WebViewService {
             console.log(`WebView service: Sending initial data to newly registered view ${view.viewType}`, {
                 connected: latestData.connected,
                 isStarting: latestData.isStarting,
-                connectionType: latestData.connectionType
+                connectionType: latestData.connectionType,
+                databases: latestData.databases?.length,
+                roles: latestData.roles?.length
             });
             try {
                 void view.webview.postMessage({
@@ -68,7 +70,7 @@ export class WebViewService {
         const processedOrgs = Array.isArray(data.orgs) ? data.orgs : [];
 
         // Get the last view data for comparison
-        const lastData = this.lastViewData.get('connect');
+        const lastData = this.lastViewData.get(VIEW_TYPES.CONNECT);
 
         // Determine if we should preserve the connection type
         const connectionType = data.isExplicitUpdate ? data.connectionType : (lastData?.connectionType || data.connectionType);
@@ -96,7 +98,7 @@ export class WebViewService {
             connectionInfo: data.connectionInfo || '',
             connectionType: connectionType,
             isStarting: Boolean(data.isStarting),
-            isExplicitUpdate: data.isExplicitUpdate // Preserve the isExplicitUpdate flag
+            isExplicitUpdate: data.isExplicitUpdate
         };
 
         // Log the data being sent to views
@@ -106,10 +108,12 @@ export class WebViewService {
             selectedDatabase: viewData.selectedDatabase,
             selectedRole: viewData.selectedRole,
             databases: viewData.databases?.length,
+            roles: viewData.roles?.length,
             connectionType: viewData.connectionType,
             isStarting: viewData.isStarting,
             isExplicitUpdate: viewData.isExplicitUpdate,
-            preservedConnectionType: connectionType === lastData?.connectionType
+            preservedConnectionType: connectionType === lastData?.connectionType,
+            registeredViews: Array.from(this.views.keys())
         });
 
         // First update the lastViewData for all views to ensure consistent state
@@ -119,11 +123,52 @@ export class WebViewService {
 
         // Then send the update to all views
         for (const [viewType, view] of this.views) {
-            if (view.visible) {
-                view.webview.postMessage({
-                    command: 'updateViewData',
-                    data: viewData
-                });
+            try {
+                const lastViewState = this.lastViewData.get(viewType);
+                const connectionStateChanged = lastViewState?.connected !== viewData.connected || 
+                                            lastViewState?.isStarting !== viewData.isStarting;
+                const isDatabaseOrActionsView = viewType === VIEW_TYPES.DATABASE || viewType === VIEW_TYPES.ACTIONS;
+                
+                // Update if:
+                // 1. The view is the connect view (always update)
+                // 2. The connection state has changed
+                // 3. The view is database/actions view AND we're connected
+                // 4. The view is database/actions view AND we have databases/roles
+                // 5. The view is visible
+                const shouldUpdate = viewType === VIEW_TYPES.CONNECT ||
+                                   connectionStateChanged ||
+                                   (isDatabaseOrActionsView && viewData.connected) ||
+                                   (isDatabaseOrActionsView && (viewData.databases?.length > 0 || viewData.roles?.length > 0)) ||
+                                   view.visible;
+
+                if (shouldUpdate) {
+                    console.log(`WebView service: Updating view ${viewType}`, {
+                        connected: viewData.connected,
+                        isStarting: viewData.isStarting,
+                        databases: viewData.databases?.length,
+                        roles: viewData.roles?.length,
+                        connectionStateChanged,
+                        isDatabaseOrActionsView,
+                        viewType,
+                        visible: view.visible
+                    });
+
+                    await view.webview.postMessage({
+                        command: 'updateViewData',
+                        data: viewData
+                    });
+                } else {
+                    console.log(`WebView service: Skipping update for view ${viewType}`, {
+                        visible: view.visible,
+                        connectionStateChanged,
+                        isDatabaseOrActionsView,
+                        connected: viewData.connected,
+                        databasesLength: viewData.databases?.length,
+                        rolesLength: viewData.roles?.length
+                    });
+                }
+            } catch (error) {
+                console.error(`Error updating view ${viewType}:`, error);
             }
         }
     }

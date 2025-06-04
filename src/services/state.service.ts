@@ -12,18 +12,69 @@ interface NeonLocalState {
     connectionType: 'existing' | 'new';
     isProxyRunning: boolean;
     isStarting: boolean;
-    selectedDriver: string;
+    selectedDriver: 'postgres' | 'serverless';
     selectedDatabase: string;
     selectedRole: string;
     currentlyConnectedBranch: string;
     connectionInfo: string;
 }
 
-export class StateService {
+export interface IStateService {
+    setConnectionType(value: 'existing' | 'new'): Promise<void>;
+    getConnectionType(): 'existing' | 'new';
+    currentProject: string;
+    currentOrg: string;
+    currentBranch: string;
+    currentlyConnectedBranch: Promise<string>;
+    parentBranchId: string;
+    setSelectedDatabase(value: string): Promise<void>;
+    setSelectedRole(value: string): Promise<void>;
+    isProxyRunning: boolean;
+    isStarting: boolean;
+    selectedDriver: 'postgres' | 'serverless';
+    selectedDatabase: string;
+    selectedRole: string;
+    connectionType: 'existing' | 'new';
+    setSelectedDriver(value: 'postgres' | 'serverless'): Promise<void>;
+    setIsProxyRunning(value: boolean): Promise<void>;
+    setIsStarting(value: boolean): Promise<void>;
+    setCurrentBranch(value: string): Promise<void>;
+    setCurrentOrg(value: string): Promise<void>;
+    setCurrentProject(value: string): Promise<void>;
+    setParentBranchId(value: string): Promise<void>;
+    setCurrentlyConnectedBranch(value: string): Promise<void>;
+    setConnectionInfo(value: string): Promise<void>;
+    clearState(): Promise<void>;
+    getViewData(
+        orgs: NeonOrg[],
+        projects: NeonProject[],
+        branches: NeonBranch[],
+        isProxyRunning: boolean,
+        isStarting: boolean,
+        driver?: string,
+        databases?: NeonDatabase[],
+        roles?: NeonRole[],
+        isExplicitUpdate?: boolean
+    ): Promise<ViewData>;
+    getBranchIdFromFile(): Promise<string>;
+}
+
+export class StateService implements IStateService {
     private context: vscode.ExtensionContext;
     private state: vscode.Memento;
     private fileService: FileService;
     private _state: NeonLocalState;
+    private _connectionType: 'existing' | 'new' = 'existing';
+    private _isProxyRunning = false;
+    private _isStarting = false;
+    private _selectedDriver: 'postgres' | 'serverless' = 'postgres';
+    private _currentOrg?: string;
+    private _currentProject?: string;
+    private _currentBranch?: string;
+    private _currentlyConnectedBranch?: string;
+    private _parentBranchId?: string;
+    private _selectedDatabase?: string;
+    private _selectedRole?: string;
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
@@ -134,7 +185,7 @@ export class StateService {
     get connectionType(): 'existing' | 'new' { return this._state.connectionType; }
     get isProxyRunning(): boolean { return this._state.isProxyRunning; }
     get isStarting(): boolean { return this._state.isStarting; }
-    get selectedDriver(): string { return this._state.selectedDriver; }
+    get selectedDriver(): 'postgres' | 'serverless' { return this._state.selectedDriver; }
     get selectedDatabase(): string { return this._state.selectedDatabase; }
     get selectedRole(): string { return this._state.selectedRole; }
     get connectionInfo(): string { return this._state.connectionInfo; }
@@ -264,7 +315,7 @@ export class StateService {
         });
     }
 
-    async setSelectedDriver(value: string) {
+    async setSelectedDriver(value: 'postgres' | 'serverless') {
         await this.updateState({
             selectedDriver: value || 'postgres'
         });
@@ -390,7 +441,7 @@ export class StateService {
 
         // Update the selected driver if one is provided and we're running
         if (driver && isProxyRunning) {
-            await this.setSelectedDriver(driver);
+            await this.setSelectedDriver(driver as 'postgres' | 'serverless');
         }
 
         // Create view data with explicit update flag and ensure org/project info is included
