@@ -1,5 +1,5 @@
 export const DEBOUNCE_DELAY = 100; // ms
-export const VIEW_RETRY_DELAY = 1000; // ms
+export const VIEW_RETRY_DELAY = 500; // ms
 export const SUCCESS_MESSAGE_DELAY = 1500; // ms
 
 export const CONFIG = {

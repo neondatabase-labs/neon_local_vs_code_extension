@@ -34,44 +34,40 @@ export class NeonApiService {
                 const config = vscode.workspace.getConfiguration('neonLocal');
                 const refreshTokenStr = config.get<string>('refreshToken');
                 
-                if (refreshTokenStr) {
-                    try {
-                        console.log('Token expired, attempting refresh...');
-                        // Get new access token
-                        const newAccessToken = await refreshToken(refreshTokenStr);
-                        console.log('Successfully refreshed token');
-                        
-                        // Update the failed request's authorization header
-                        error.config.headers['Authorization'] = `Bearer ${newAccessToken}`;
-                        
-                        // Update the API client's default authorization header
-                        instance.defaults.headers['Authorization'] = `Bearer ${newAccessToken}`;
-                        
-                        // Update stored API key
-                        await config.update('apiKey', newAccessToken, true);
-                        
-                        // Create a new request with the updated token
-                        const retryConfig = {
-                            ...error.config,
-                            headers: {
-                                ...error.config.headers,
-                                'Authorization': `Bearer ${newAccessToken}`
-                            }
-                        };
-                        
-                        // Retry the failed request with the new token
-                        return instance(retryConfig);
-                    } catch (refreshError) {
-                        console.error('Token refresh failed:', refreshError);
-                        // If refresh fails, clear tokens and require re-authentication
-                        await config.update('apiKey', undefined, true);
-                        await config.update('refreshToken', undefined, true);
-                        this.clearApiClient();
-                        throw new Error('Session expired. Please sign in again.');
-                    }
-                } else {
-                    // No refresh token available
+                if (!refreshTokenStr) {
                     await config.update('apiKey', undefined, true);
+                    this.clearApiClient();
+                    throw new Error('Session expired. Please sign in again.');
+                }
+
+                try {
+                    console.log('Token expired, attempting refresh...');
+                    // Get new access token
+                    const newAccessToken = await refreshToken(refreshTokenStr);
+                    console.log('Successfully refreshed token');
+                    
+                    // Update stored API key
+                    await config.update('apiKey', newAccessToken, true);
+                    
+                    // Create a new request with the updated token
+                    const retryConfig = {
+                        ...error.config,
+                        headers: {
+                            ...error.config.headers,
+                            'Authorization': `Bearer ${newAccessToken}`
+                        }
+                    };
+                    
+                    // Create a new instance with the updated token
+                    this.apiClient = await this.createApiClient(newAccessToken);
+                    
+                    // Retry the failed request with the new token
+                    return this.apiClient(retryConfig);
+                } catch (refreshError) {
+                    console.error('Token refresh failed:', refreshError);
+                    // If refresh fails, clear tokens and require re-authentication
+                    await config.update('apiKey', undefined, true);
+                    await config.update('refreshToken', undefined, true);
                     this.clearApiClient();
                     throw new Error('Session expired. Please sign in again.');
                 }
@@ -132,7 +128,7 @@ export class NeonApiService {
             const client = await this.ensureApiClient();
             // For personal account (empty or undefined orgId), don't include the org_id parameter
             const url = orgId && orgId.length > 0 ? `/projects?org_id=${orgId}` : '/projects';
-            console.log('Fetching projects from URL:', url);
+            console.log('Fetching projects from URL:', url, 'for orgId:', orgId || 'personal account');
 
             // Add retry logic
             let retryCount = 0;
@@ -143,6 +139,10 @@ export class NeonApiService {
                 try {
                     const response = await client.get(url);
                     console.log('Raw API response:', response.data);
+                    console.log('Response data type:', typeof response.data);
+                    console.log('Is array?', Array.isArray(response.data));
+                    console.log('Has projects array?', response.data.projects && Array.isArray(response.data.projects));
+                    console.log('Has single project?', response.data.project);
 
                     // Handle both array and object responses
                     let projects: NeonProject[] = [];
@@ -150,10 +150,19 @@ export class NeonApiService {
                         projects = response.data;
                     } else if (response.data.projects && Array.isArray(response.data.projects)) {
                         projects = response.data.projects;
-                    } else if (typeof response.data === 'object') {
-                        // If it's a single project object, wrap it in an array
+                    } else if (response.data.project) {
+                        // Handle case where response has a single project under 'project' key
+                        projects = [response.data.project];
+                    } else if (typeof response.data === 'object' && !Array.isArray(response.data)) {
+                        // If it's a single project object at the root level
                         projects = [response.data];
                     }
+
+                    // Ensure each project has the correct org_id
+                    projects = projects.map(project => ({
+                        ...project,
+                        org_id: orgId || ''  // Use empty string for personal account
+                    }));
 
                     // If we got an empty array but we know there should be projects, retry
                     if (projects.length === 0 && retryCount < maxRetries - 1) {
@@ -163,7 +172,7 @@ export class NeonApiService {
                         continue;
                     }
 
-                    console.log('Processed projects:', projects);
+                    console.log('Final processed projects:', JSON.stringify(projects, null, 2));
                     return projects;
                 } catch (error) {
                     lastError = error;

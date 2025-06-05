@@ -1,15 +1,25 @@
 import * as vscode from 'vscode';
 import { VIEW_TYPES } from './constants';
 import { NeonLocalManager, ViewData, WebviewMessage } from './types';
+import { WebViewService } from './services/webview.service';
+import { StateService } from './services/state.service';
 
 export class ActionsViewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     private _lastUpdateData?: ViewData;
+    private readonly _extensionUri: vscode.Uri;
+    private readonly _webviewService: WebViewService;
+    private readonly _stateService: StateService;
 
     constructor(
-        private readonly _extensionUri: vscode.Uri,
-        private readonly _manager: NeonLocalManager
-    ) {}
+        extensionUri: vscode.Uri,
+        webviewService: WebViewService,
+        stateService: StateService
+    ) {
+        this._extensionUri = extensionUri;
+        this._webviewService = webviewService;
+        this._stateService = stateService;
+    }
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
@@ -41,7 +51,7 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
         webviewView.webview.html = this.getWebviewContent(webviewView.webview);
 
         // Register this view with the manager
-        this._manager.setWebviewView(webviewView);
+        this._webviewService.registerWebview(webviewView.webview);
 
         // Initial update with a small delay to ensure proper registration
         setTimeout(() => {
@@ -95,15 +105,12 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval'; img-src ${webview.cspSource} data: https:; font-src ${webview.cspSource}; frame-src 'self';">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval'; img-src ${webview.cspSource} data: https:; font-src ${webview.cspSource}; connect-src 'self';">
                 <link href="${styleUri}" rel="stylesheet" />
                 <title>Neon Local Actions</title>
             </head>
             <body data-view-type="${VIEW_TYPES.ACTIONS}">
                 <div id="root"></div>
-                <script nonce="${nonce}">
-                    window.vscodeApi = acquireVsCodeApi();
-                </script>
                 <script nonce="${nonce}" src="${scriptUri}"></script>
             </body>
             </html>`;
@@ -115,7 +122,7 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
         }
 
         try {
-            const data = await this._manager.getViewData();
+            const data = await this._webviewService.getViewData();
             
             // Always update on any connection state changes
             const needsUpdate = !this._lastUpdateData || 
@@ -124,7 +131,9 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
                 this._lastUpdateData.connectionInfo !== data.connectionInfo ||
                 this._lastUpdateData.connectionType !== data.connectionType ||
                 this._lastUpdateData.selectedBranchId !== data.selectedBranchId ||
-                this._lastUpdateData.parentBranchId !== data.parentBranchId;
+                this._lastUpdateData.parentBranchId !== data.parentBranchId ||
+                this._lastUpdateData.currentlyConnectedBranch !== data.currentlyConnectedBranch ||
+                this._lastUpdateData.isExplicitUpdate;
 
             if (needsUpdate) {
                 console.log('ActionsView: Updating view with new data:', {
@@ -134,7 +143,9 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
                     parentBranchId: data.parentBranchId,
                     isStarting: data.isStarting,
                     connectionInfo: data.connectionInfo,
-                    lastConnectionType: this._lastUpdateData?.connectionType
+                    lastConnectionType: this._lastUpdateData?.connectionType,
+                    currentlyConnectedBranch: data.currentlyConnectedBranch,
+                    isExplicitUpdate: data.isExplicitUpdate
                 });
 
                 // Store the last update data before sending

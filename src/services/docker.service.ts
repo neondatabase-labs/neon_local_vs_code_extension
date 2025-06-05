@@ -2,15 +2,19 @@ import * as vscode from 'vscode';
 import Dockerode from 'dockerode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { StateService } from './state.service';
 
 export class DockerService {
     private docker: Dockerode;
     private containerName = 'neon_local_vscode';
     private context: vscode.ExtensionContext;
+    private stateService: StateService;
+    private statusCheckInterval: NodeJS.Timeout | null = null;
 
-    constructor(context: vscode.ExtensionContext) {
+    constructor(context: vscode.ExtensionContext, stateService: StateService) {
         this.docker = new Dockerode();
         this.context = context;
+        this.stateService = stateService;
     }
 
     async checkContainerStatus(): Promise<boolean> {
@@ -23,19 +27,50 @@ export class DockerService {
         }
     }
 
-    async getCurrentDriver(): Promise<string> {
+    async getCurrentDriver(): Promise<'postgres' | 'serverless'> {
         try {
             const container = await this.docker.getContainer(this.containerName);
             const containerInfo = await container.inspect();
-            const envVars = containerInfo.Config.Env;
-            const driverVar = envVars.find(env => env.startsWith('DRIVER='));
-            const driver = driverVar ? driverVar.split('=')[1] : 'postgres';
-            console.log('Current container driver:', driver);
-            return driver;
+            
+            // Find the DRIVER environment variable
+            const driverEnv = containerInfo.Config.Env.find((env: string) => env.startsWith('DRIVER='));
+            if (!driverEnv) {
+                return 'postgres'; // Default to postgres if not found
+            }
+            
+            const driver = driverEnv.split('=')[1];
+            return driver === 'serverless' ? 'serverless' : 'postgres';
         } catch (error) {
-            console.log('Error getting container driver:', error);
-            // If container doesn't exist or can't be inspected, return default
-            return 'postgres';
+            console.error('Error getting current driver:', error);
+            return 'postgres'; // Default to postgres on error
+        }
+    }
+
+    public async startStatusCheck(): Promise<void> {
+        // Clear any existing interval
+        if (this.statusCheckInterval) {
+            clearInterval(this.statusCheckInterval);
+        }
+
+        // Start periodic status check every 5 seconds
+        this.statusCheckInterval = setInterval(async () => {
+            try {
+                const isRunning = await this.checkContainerStatus();
+                if (!isRunning) {
+                    console.log('Container is no longer running, updating state...');
+                    await this.stateService.setIsProxyRunning(false);
+                    this.stopStatusCheck();
+                }
+            } catch (error) {
+                console.error('Error checking container status:', error);
+            }
+        }, 5000);
+    }
+
+    private stopStatusCheck(): void {
+        if (this.statusCheckInterval) {
+            clearInterval(this.statusCheckInterval);
+            this.statusCheckInterval = null;
         }
     }
 
@@ -58,6 +93,10 @@ export class DockerService {
                 throw new Error('API key not found. Please sign in first.');
             }
 
+            if (!refreshToken) {
+                throw new Error('Refresh token not found. Please sign in again.');
+            }
+
             // Pull the latest image
             await this.pullImage();
 
@@ -69,10 +108,9 @@ export class DockerService {
                     // Ensure driver is exactly 'postgres' or 'serverless'
                     `DRIVER=${driver === 'serverless' ? 'serverless' : 'postgres'}`,
                     `NEON_API_KEY=${apiKey}`,
+                    `NEON_REFRESH_TOKEN=${refreshToken}`,
                     `NEON_PROJECT_ID=${projectId}`,
                     'CLIENT=vscode',
-                    // Add refresh token if available
-                    ...(refreshToken ? [`NEON_REFRESH_TOKEN=${refreshToken}`] : []),
                     // Conditionally add either BRANCH_ID or PARENT_BRANCH_ID
                     ...(isExisting ? [`BRANCH_ID=${branchId}`] : [`PARENT_BRANCH_ID=${branchId}`])
                 ],
@@ -92,29 +130,82 @@ export class DockerService {
             // Add volume binding using global storage path
             containerConfig.HostConfig.Binds = [`${neonLocalPath}:/tmp/.neon_local`];
 
-            // Create and start the container
+            const containerName = containerConfig.name;
+
+            // Try to find and remove existing container
+            try {
+            const containers = await this.docker.listContainers({ all: true });
+            const existing = containers.find(c => c.Names.includes(`/${containerName}`));
+
+            if (existing) {
+                const oldContainer = this.docker.getContainer(existing.Id);
+                try {
+                await oldContainer.stop(); // May throw if already stopped
+                } catch (_) {
+                // ignore
+                }
+                await oldContainer.remove({ force: true });
+                console.log(`Removed existing container: ${containerName}`);
+            }
+            } catch (err) {
+            console.error('Error checking for existing container:', err);
+            }
+
+            // Create and start new container
             const container = await this.docker.createContainer(containerConfig);
             await container.start();
+            console.log(`Started new container: ${containerName}`);
 
-            // Wait for container to be running
+
+            // Wait for container to be running and ready
             await this.waitForContainer();
+
+            // Get container info to update state
+            const containerInfo = await this.getContainerInfo();
+            if (containerInfo) {
+                // Update state with the correct branch information
+                await this.stateService.setCurrentlyConnectedBranch(containerInfo.branchId);
+            }
+            
+            // Update state to indicate proxy is running
+            await this.stateService.setIsProxyRunning(true);
+            
+            // Start periodic status check
+            await this.startStatusCheck();
+            
+            console.log('Container started successfully');
         } catch (error) {
             console.error('Error starting container:', error);
+            // Ensure we set proxy state to not running if there was an error
+            await this.stateService.setIsProxyRunning(false);
+            this.stopStatusCheck();
             throw error;
         }
     }
 
-    async stopContainer(deleteOnStop: boolean = false): Promise<void> {
+    async stopContainer(): Promise<void> {
         try {
             const container = await this.docker.getContainer(this.containerName);
             await container.stop();
             await container.remove();
+
+            
+            // Update state to indicate proxy is stopped
+            await this.stateService.setIsProxyRunning(false);
+            
+            // Stop periodic status check
+            this.stopStatusCheck();
+            
+            console.log('Container stopped successfully');
         } catch (error) {
-            if (error instanceof Error && error.message.includes('no such container')) {
-                // Container doesn't exist, which is fine when stopping
+            // If the container doesn't exist, that's fine - just update the state
+            if ((error as any).statusCode === 404) {
+                await this.stateService.setIsProxyRunning(false);
+                this.stopStatusCheck();
                 return;
             }
-            throw new Error(`Failed to stop container: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            console.error('Error stopping container:', error);
+            throw error;
         }
     }
 
@@ -252,9 +343,48 @@ export class DockerService {
                 await new Promise(resolve => setTimeout(resolve, 1000));
             } else {
                 console.error('Container failed to become ready after', maxAttempts, 'seconds');
+                throw new Error('Timeout waiting for container to be ready');
             }
         }
-        
-        throw new Error('Timeout waiting for container to be ready');
+    }
+
+    async getContainerInfo(): Promise<{
+        branchId: string;
+        projectId: string;
+        driver: string;
+        isParentBranch: boolean;
+    } | null> {
+        try {
+            const container = await this.docker.getContainer(this.containerName);
+            const containerInfo = await container.inspect();
+            
+            // Extract environment variables
+            const envVars = containerInfo.Config.Env;
+            const getEnvValue = (key: string) => {
+                const envVar = envVars.find((env: string) => env.startsWith(`${key}=`));
+                return envVar ? envVar.split('=')[1] : '';
+            };
+            
+            // Get branch ID (either from BRANCH_ID or PARENT_BRANCH_ID)
+            const branchId = getEnvValue('BRANCH_ID') || getEnvValue('PARENT_BRANCH_ID');
+            const projectId = getEnvValue('NEON_PROJECT_ID');
+            const driver = getEnvValue('DRIVER');
+            const isParentBranch = Boolean(getEnvValue('PARENT_BRANCH_ID'));
+            
+            if (!branchId || !projectId) {
+                console.error('Missing required environment variables in container');
+                return null;
+            }
+            
+            return {
+                branchId,
+                projectId,
+                driver: driver || 'postgres',
+                isParentBranch
+            };
+        } catch (error) {
+            console.error('Error getting container info:', error);
+            return null;
+        }
     }
 } 

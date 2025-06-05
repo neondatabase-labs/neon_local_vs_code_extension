@@ -1,16 +1,26 @@
 import * as vscode from 'vscode';
 import { VIEW_TYPES } from './constants';
 import { NeonLocalManager, ViewData, WebviewMessage } from './types';
+import { WebViewService } from './services/webview.service';
+import { StateService } from './services/state.service';
 
 export class DatabaseViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = VIEW_TYPES.DATABASE;
     private _view?: vscode.WebviewView;
     private _lastUpdateData?: ViewData;
+    private readonly _extensionUri: vscode.Uri;
+    private readonly _webviewService: WebViewService;
+    private readonly _stateService: StateService;
 
     constructor(
-        private readonly _extensionUri: vscode.Uri,
-        private readonly _neonLocal: NeonLocalManager
-    ) {}
+        extensionUri: vscode.Uri,
+        webviewService: WebViewService,
+        stateService: StateService
+    ) {
+        this._extensionUri = extensionUri;
+        this._webviewService = webviewService;
+        this._stateService = stateService;
+    }
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
@@ -42,7 +52,7 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
         webviewView.webview.html = this.getWebviewContent(webviewView.webview);
 
         // Register this view with the manager
-        this._neonLocal.setWebviewView(webviewView);
+        this._webviewService.registerWebview(webviewView.webview);
 
         // Initial update with a small delay to ensure proper registration
         setTimeout(() => {
@@ -58,11 +68,11 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
         try {
             switch (message.command) {
                 case 'selectDatabase':
-                    await this._neonLocal.handleDatabaseSelection(message.database);
+                    await this._webviewService.handleDatabaseSelection(message.database);
                     await this.updateView();
                     break;
                 case 'selectRole':
-                    await this._neonLocal.handleRoleSelection(message.role);
+                    await this._webviewService.handleRoleSelection(message.role);
                     await this.updateView();
                     break;
             }
@@ -89,15 +99,12 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval'; img-src ${webview.cspSource} data: https:; font-src ${webview.cspSource}; frame-src 'self';">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval'; img-src ${webview.cspSource} data: https:; font-src ${webview.cspSource}; connect-src 'self';">
                 <link href="${styleUri}" rel="stylesheet" />
                 <title>Neon Local Database</title>
             </head>
             <body data-view-type="${VIEW_TYPES.DATABASE}">
                 <div id="root"></div>
-                <script nonce="${nonce}">
-                    window.vscodeApi = acquireVsCodeApi();
-                </script>
                 <script nonce="${nonce}" src="${scriptUri}"></script>
             </body>
             </html>`;
@@ -109,20 +116,18 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
         }
 
         try {
-            const data = await this._neonLocal.getViewData();
+            const data = await this._webviewService.getViewData();
             
             // Always update on any connection state changes
             const needsUpdate = !this._lastUpdateData || 
                 this._lastUpdateData.connected !== data.connected ||
                 this._lastUpdateData.isStarting !== data.isStarting ||
                 this._lastUpdateData.connectionInfo !== data.connectionInfo ||
-                // Only check database-specific fields if we're connected
-                (data.connected && (
-                    JSON.stringify(this._lastUpdateData.databases) !== JSON.stringify(data.databases) ||
-                    JSON.stringify(this._lastUpdateData.roles) !== JSON.stringify(data.roles) ||
-                    this._lastUpdateData.selectedDatabase !== data.selectedDatabase ||
-                    this._lastUpdateData.selectedRole !== data.selectedRole
-                ));
+                this._lastUpdateData.selectedDatabase !== data.selectedDatabase ||
+                this._lastUpdateData.selectedRole !== data.selectedRole ||
+                this._lastUpdateData.currentlyConnectedBranch !== data.currentlyConnectedBranch ||
+                JSON.stringify(this._lastUpdateData.databases) !== JSON.stringify(data.databases) ||
+                JSON.stringify(this._lastUpdateData.roles) !== JSON.stringify(data.roles);
 
             if (needsUpdate) {
                 console.log('DatabaseView: Updating view with new data:', {
@@ -132,7 +137,8 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
                     selectedDatabase: data.selectedDatabase,
                     selectedRole: data.selectedRole,
                     isStarting: data.isStarting,
-                    connectionInfo: data.connectionInfo
+                    connectionInfo: data.connectionInfo,
+                    currentlyConnectedBranch: data.currentlyConnectedBranch
                 });
 
                 // Store the last update data before sending

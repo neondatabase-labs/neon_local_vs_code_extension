@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { useSelector } from 'react-redux';
-import { RootState } from '../store';
+import { useStateService } from '../context/StateContext';
+import { NeonDatabase, NeonRole } from '../../types';
 
 interface DatabaseViewProps {
   vscode: any;
 }
 
 export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
-  const state = useSelector((state: RootState) => state);
+  const { state } = useStateService();
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
 
   const handleDatabaseChange = (value: string) => {
@@ -26,7 +26,6 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
 
   const handleCopy = async (text: string | undefined, type: string) => {
     try {
-      // Always copy the actual connection string, not the display version
       const textToCopy = type === 'connection' ? (state.connectionInfo || '') : (text || '');
       await navigator.clipboard.writeText(textToCopy);
       setCopySuccess(type);
@@ -57,8 +56,8 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
           value={state.selectedDatabase || ''}
           onChange={(e) => handleDatabaseChange(e.target.value)}
         >
-          <option value="">Select Database</option>
-          {state.databases.map((db) => (
+          <option value="">Select a database</option>
+          {state.databases?.map((db: NeonDatabase) => (
             <option key={db.name} value={db.name}>
               {db.name}
             </option>
@@ -73,8 +72,8 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
           value={state.selectedRole || ''}
           onChange={(e) => handleRoleChange(e.target.value)}
         >
-          <option value="">Select Role</option>
-          {state.roles.map((role) => (
+          <option value="">Select a role</option>
+          {state.roles?.map((role: NeonRole) => (
             <option key={role.name} value={role.name}>
               {role.name}
             </option>
@@ -82,26 +81,27 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
         </select>
       </div>
 
-      {state.displayConnectionInfo && (
+      {state.connectionInfo && (
         <div className="detail-row">
           <div className="detail-label-container">
             <div className="detail-label">Local Connection String</div>
             <button
               className="copy-button"
               title="Copy connection string"
-              onClick={() => handleCopy(state.displayConnectionInfo || '', 'connection')}
+              onClick={() => handleCopy(state.connectionInfo, 'connection')}
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M10.75 1.75H4.25C3.97386 1.75 3.75 1.97386 3.75 2.25V11.25C3.75 11.5261 3.97386 11.75 4.25 11.75H10.75C11.0261 11.75 11.25 11.5261 11.25 11.25V2.25C11.25 1.97386 11.0261 1.75 10.75 1.75Z" stroke="currentColor" strokeWidth="1.5"/>
-                <path d="M12.25 4.25H13.75V13.75H5.75V12.25" stroke="currentColor" strokeWidth="1.5"/>
-              </svg>
-              <span className={`copy-success ${copySuccess === 'connection' ? 'visible' : ''}`}>
-                Copied!
-              </span>
+              {copySuccess === 'connection' ? (
+                <span>✓</span>
+              ) : (
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M5.75 4.75h5.5v6.5h-5.5z"/>
+                  <path d="M9.75 4.75h1.5v8.5h-5.5v-1.5"/>
+                </svg>
+              )}
             </button>
           </div>
           <div className="detail-value connection-string-container">
-            <div className="connection-string">{state.displayConnectionInfo}</div>
+            <div className="connection-string">{state.connectionInfo}</div>
           </div>
         </div>
       )}

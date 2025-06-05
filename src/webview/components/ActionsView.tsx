@@ -1,13 +1,12 @@
 import React from 'react';
-import { useSelector } from 'react-redux';
-import { RootState } from '../store';
+import { useStateService } from '../context/StateContext';
 
 interface ActionsViewProps {
   vscode: any;
 }
 
 export const ActionsView: React.FC<ActionsViewProps> = ({ vscode }) => {
-  const state = useSelector((state: RootState) => state);
+  const { state } = useStateService();
 
   const handleAction = (command: string) => {
     vscode.postMessage({ command });
@@ -17,6 +16,9 @@ export const ActionsView: React.FC<ActionsViewProps> = ({ vscode }) => {
     return (
       <div className="not-connected">
         <p>Connect to a Neon database to see available actions.</p>
+        {state.isStarting && (
+          <p>Connection is being established...</p>
+        )}
       </div>
     );
   }

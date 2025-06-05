@@ -207,7 +207,7 @@ describe('Extension Test Suite', () => {
         });
 
         it('should update UI state correctly when starting proxy', async () => {
-            let webviewMessages: any[] = [];
+            const webviewMessages: any[] = [];
             const mockWebview = {
                 postMessage: (message: any) => {
                     webviewMessages.push(message);
@@ -314,7 +314,7 @@ describe('Extension Test Suite', () => {
         });
 
         it('should create a new branch and start proxy', async () => {
-            let webviewMessages: any[] = [];
+            const webviewMessages: any[] = [];
             const mockWebview = {
                 postMessage: (message: any) => {
                     webviewMessages.push(message);
@@ -431,7 +431,7 @@ describe('Extension Test Suite', () => {
             vscode.window.showInputBox = async () => 'feature/test-branch';
 
             // Mock showInformationMessage
-            let infoMessages: string[] = [];
+            const infoMessages: string[] = [];
             const originalShowInformationMessage = vscode.window.showInformationMessage;
             vscode.window.showInformationMessage = (msg: string) => {
                 infoMessages.push(msg);

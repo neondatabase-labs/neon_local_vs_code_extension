@@ -1,203 +1,98 @@
 import * as vscode from 'vscode';
 import { VIEW_TYPES } from '../constants';
 import { ViewData } from '../types';
+import { StateService } from './state.service';
+import axios from 'axios';
 
 export class WebViewService {
-    private views: Map<string, vscode.WebviewView> = new Map();
+    private panels: Set<vscode.WebviewPanel> = new Set();
+    private views: Set<vscode.Webview> = new Set();
     private lastViewData: Map<string, ViewData> = new Map();
+    private readonly stateService: StateService;
+    private context: vscode.ExtensionContext;
 
-    public setWebviewView(view: vscode.WebviewView): void {
-        console.log(`WebView service: Registering view ${view.viewType}`);
-        this.views.set(view.viewType, view);
-        
-        // Initialize last view data for this view
-        if (!this.lastViewData.has(view.viewType)) {
-            this.lastViewData.set(view.viewType, {
-                orgs: [],
-                projects: [],
-                branches: [],
-                databases: [],
-                roles: [],
-                selectedOrgId: '',
-                selectedOrgName: '',
-                selectedBranchId: '',
-                selectedDriver: 'postgres',
-                connected: false,
-                isStarting: false,
-                connectionType: 'existing'
-            });
-        }
-
-        // Get the most up-to-date data from any existing view
-        const latestData = Array.from(this.lastViewData.values())
-            .reduce((latest, current) => {
-                // Prefer data that shows a connection
-                if (current.connected && !latest.connected) {
-                    return current;
-                }
-                // Prefer data with more complete state
-                if (current.orgs?.length > (latest.orgs?.length || 0)) {
-                    return current;
-                }
-                return latest;
-            }, this.lastViewData.get(view.viewType)!);
-
-        // Force an immediate update for this view with the latest data
-        if (latestData) {
-            console.log(`WebView service: Sending initial data to newly registered view ${view.viewType}`, {
-                connected: latestData.connected,
-                isStarting: latestData.isStarting,
-                connectionType: latestData.connectionType,
-                databases: latestData.databases?.length,
-                roles: latestData.roles?.length
-            });
-            try {
-                void view.webview.postMessage({
-                    command: 'updateViewData',
-                    data: latestData
-                });
-                console.log(`Initial data sent to view ${view.viewType}`);
-            } catch (err) {
-                if (err instanceof Error) {
-                    console.error(`Error sending initial data to view ${view.viewType}:`, err);
-                }
-            }
-        }
+    constructor(context: vscode.ExtensionContext, stateService: StateService) {
+        this.context = context;
+        this.stateService = stateService;
     }
 
-    public async updateViewData(data: ViewData): Promise<void> {
-        // Process orgs to ensure they are properly initialized
-        const processedOrgs = Array.isArray(data.orgs) ? data.orgs : [];
+    public async initialize(): Promise<void> {
+        // Initialize with empty state
+        await this.updateAllViews();
+    }
 
-        // Get the last view data for comparison
-        const lastData = this.lastViewData.get(VIEW_TYPES.CONNECT);
-
-        // Determine if we should preserve the connection type
-        const connectionType = data.isExplicitUpdate ? data.connectionType : (lastData?.connectionType || data.connectionType);
-
-        // Ensure all arrays are properly initialized and connection state is valid
-        const viewData: ViewData = {
-            ...data,
-            orgs: processedOrgs,
-            projects: Array.isArray(data.projects) ? data.projects : [],
-            branches: Array.isArray(data.branches) ? data.branches : [],
-            databases: Array.isArray(data.databases) ? data.databases : [],
-            roles: Array.isArray(data.roles) ? data.roles : [],
-            selectedOrgId: data.selectedOrgId || '',
-            selectedOrgName: data.selectedOrgName || '',
-            selectedProjectId: data.selectedProjectId || '',
-            selectedProjectName: data.selectedProjectName || '',
-            selectedBranchId: data.selectedBranchId || '',
-            selectedBranchName: data.selectedBranchName || '',
-            parentBranchId: data.parentBranchId || '',
-            parentBranchName: data.parentBranchName || '',
-            selectedDriver: data.selectedDriver || 'postgres',
-            selectedDatabase: data.selectedDatabase || '',
-            selectedRole: data.selectedRole || '',
-            connected: Boolean(data.connected),
-            connectionInfo: data.connectionInfo || '',
-            connectionType: connectionType,
-            isStarting: Boolean(data.isStarting),
-            isExplicitUpdate: data.isExplicitUpdate
-        };
-
-        // Log the data being sent to views
-        console.log('WebView service: Updating views with data:', {
-            connected: viewData.connected,
-            connectionInfo: viewData.connectionInfo,
-            selectedDatabase: viewData.selectedDatabase,
-            selectedRole: viewData.selectedRole,
-            databases: viewData.databases?.length,
-            roles: viewData.roles?.length,
-            connectionType: viewData.connectionType,
-            isStarting: viewData.isStarting,
-            isExplicitUpdate: viewData.isExplicitUpdate,
-            preservedConnectionType: connectionType === lastData?.connectionType,
-            registeredViews: Array.from(this.views.keys())
+    public registerPanel(panel: vscode.WebviewPanel) {
+        this.panels.add(panel);
+        
+        // Remove panel from registry when it's disposed
+        panel.onDidDispose(() => {
+            this.panels.delete(panel);
         });
 
-        // First update the lastViewData for all views to ensure consistent state
-        for (const [viewType] of this.views) {
-            this.lastViewData.set(viewType, {...viewData});
+        // Setup the webview
+        this.setupWebview(panel.webview);
+    }
+
+    public registerWebview(webview: vscode.Webview) {
+        this.views.add(webview);
+        this.setupWebview(webview);
+    }
+
+    public unregisterWebview(webview: vscode.Webview) {
+        this.views.delete(webview);
+    }
+
+    private setupWebview(webview: vscode.Webview) {
+        webview.options = {
+            enableScripts: true,
+            localResourceRoots: [
+                vscode.Uri.joinPath(this.context.extensionUri, 'dist')
+            ]
+        };
+    }
+
+    public postMessageToAll(message: any) {
+        // Post to all panels
+        for (const panel of this.panels) {
+            try {
+                panel.webview.postMessage(message);
+            } catch (err) {
+                console.error('Failed to post message to panel:', err);
+                // Remove panel if it's no longer valid
+                this.panels.delete(panel);
+            }
         }
 
-        // Then send the update to all views
-        for (const [viewType, view] of this.views) {
+        // Post to all views
+        for (const view of this.views) {
             try {
-                const lastViewState = this.lastViewData.get(viewType);
-                const connectionStateChanged = lastViewState?.connected !== viewData.connected || 
-                                            lastViewState?.isStarting !== viewData.isStarting;
-                const isDatabaseOrActionsView = viewType === VIEW_TYPES.DATABASE || viewType === VIEW_TYPES.ACTIONS;
-                
-                // Update if:
-                // 1. The view is the connect view (always update)
-                // 2. The connection state has changed
-                // 3. The view is database/actions view AND we're connected
-                // 4. The view is database/actions view AND we have databases/roles
-                // 5. The view is visible
-                const shouldUpdate = viewType === VIEW_TYPES.CONNECT ||
-                                   connectionStateChanged ||
-                                   (isDatabaseOrActionsView && viewData.connected) ||
-                                   (isDatabaseOrActionsView && (viewData.databases?.length > 0 || viewData.roles?.length > 0)) ||
-                                   view.visible;
-
-                if (shouldUpdate) {
-                    console.log(`WebView service: Updating view ${viewType}`, {
-                        connected: viewData.connected,
-                        isStarting: viewData.isStarting,
-                        databases: viewData.databases?.length,
-                        roles: viewData.roles?.length,
-                        connectionStateChanged,
-                        isDatabaseOrActionsView,
-                        viewType,
-                        visible: view.visible
-                    });
-
-                    await view.webview.postMessage({
-                        command: 'updateViewData',
-                        data: viewData
-                    });
-                } else {
-                    console.log(`WebView service: Skipping update for view ${viewType}`, {
-                        visible: view.visible,
-                        connectionStateChanged,
-                        isDatabaseOrActionsView,
-                        connected: viewData.connected,
-                        databasesLength: viewData.databases?.length,
-                        rolesLength: viewData.roles?.length
-                    });
-                }
-            } catch (error) {
-                console.error(`Error updating view ${viewType}:`, error);
+                view.postMessage(message);
+            } catch (err) {
+                console.error('Failed to post message to view:', err);
+                // Remove view if it's no longer valid
+                this.views.delete(view);
             }
         }
     }
 
-    public showError(message: string): void {
-        for (const view of this.views.values()) {
-            if (!view.visible) {
-                continue;
-            }
-
-            view.webview.postMessage({
-                command: 'showError',
-                message
-            });
-        }
-    }
-
-    public postMessage(message: { command: string; [key: string]: any }): void {
-        for (const view of this.views.values()) {
-            if (!view.visible) {
-                continue;
-            }
-
-            try {
-                view.webview.postMessage(message);
-            } catch (error) {
-                console.error('Failed to post message to view:', error);
-            }
-        }
+    public updateViewData(viewType: string, data: ViewData): void {
+        console.log(`WebView service: Updating view ${viewType} with data:`, {
+            connected: data.connected,
+            isStarting: data.isStarting,
+            connectionType: data.connectionType,
+            selectedBranchId: data.selectedBranchId,
+            currentlyConnectedBranch: data.currentlyConnectedBranch,
+            databases: data.databases?.length,
+            roles: data.roles?.length,
+            isExplicitUpdate: data.isExplicitUpdate
+        });
+        
+        // Store the latest data
+        this.lastViewData.set(viewType, data);
+        
+        // Send to all views
+        this.postMessageToAll({ command: 'updateViewData', data });
+        console.log('View data sent to', viewType);
     }
 
     public showPanel(context: vscode.ExtensionContext): void {
@@ -227,5 +122,71 @@ export class WebViewService {
                 <p>Please use the Neon Local view in the Activity Bar.</p>
             </body>
             </html>`;
+    }
+
+    public async handleDatabaseSelection(database: string) {
+        await this.stateService.updateDatabase(database);
+        await this.updateAllViews();
+    }
+
+    public async handleRoleSelection(role: string) {
+        await this.stateService.updateRole(role);
+        await this.updateAllViews();
+    }
+
+    public async getViewData(): Promise<ViewData> {
+        return this.stateService.getViewData();
+    }
+
+    private async updateAllViews() {
+        const viewData = await this.getViewData();
+        this.updateViewData('neonLocal', viewData);
+    }
+
+    private getNonce(): string {
+        let text = '';
+        const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        for (let i = 0; i < 32; i++) {
+            text += possible.charAt(Math.floor(Math.random() * possible.length));
+        }
+        return text;
+    }
+
+    private getScriptUri(): string {
+        // Implement the logic to get the script URI based on the context
+        // This is a placeholder and should be replaced with the actual implementation
+        return '';
+    }
+
+    public async configure(): Promise<void> {
+        const apiKey = await vscode.window.showInputBox({
+            prompt: 'Enter your Neon API Key',
+            password: true,
+            ignoreFocusOut: true
+        });
+
+        if (apiKey) {
+            const config = vscode.workspace.getConfiguration('neonLocal');
+            await config.update('apiKey', apiKey, true);
+            await this.showPanel(this.context);
+        }
+    }
+
+    public async getNeonApiClient() {
+        const config = vscode.workspace.getConfiguration('neonLocal');
+        const apiKey = config.get<string>('apiKey');
+        
+        if (!apiKey) {
+            throw new Error('Neon API key not configured');
+        }
+
+        return axios.create({
+            baseURL: 'https://console.neon.tech/api/v2',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+        });
     }
 } 

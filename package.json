@@ -5,7 +5,7 @@
   "version": "0.0.1",
   "publisher": "neon",
   "engines": {
-    "vscode": "^1.96.0"
+    "vscode": "^1.85.0"
   },
   "categories": [
     "Other"
@@ -16,7 +16,9 @@
     "onCommand:neon-local.showPanel",
     "onCommand:neon-local.stopProxy",
     "onCommand:neon-local.clearAuth",
-    "onView:neonLocalView"
+    "onView:neonLocalConnect",
+    "onView:neonLocalDatabase",
+    "onView:neonLocalActions"
   ],
   "main": "./dist/extension.js",
   "icon": "resources/neon_logo.svg",
@@ -184,14 +186,12 @@
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
-    "@reduxjs/toolkit": "^2.2.1",
-    "axios": "^1.6.2",
-    "docker-compose": "^0.24.2",
-    "dockerode": "^4.0.0",
-    "open": "^10.1.1",
+    "@types/vscode": "^1.87.0",
+    "@vscode/codicons": "^0.0.35",
+    "@vscode/webview-ui-toolkit": "^1.4.0",
+    "dockerode": "^4.0.2",
     "opener": "^1.5.2",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-redux": "^9.1.0"
+    "react-dom": "^18.2.0"
   }
 }

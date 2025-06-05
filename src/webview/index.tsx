@@ -1,69 +1,48 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { Provider } from 'react-redux';
-import { App } from './components/App';
-import { ActionsView } from './components/ActionsView';
+import { MainApp } from './components/App';
 import { DatabaseView } from './components/DatabaseView';
-import { store } from './store';
+import { ActionsView } from './components/ActionsView';
+import { StateProvider } from './context/StateContext';
 import './styles.css';
 
-// Get VS Code API using singleton pattern
-declare global {
-  interface Window {
-    acquireVsCodeApi(): any;
-    vscodeApi?: any;
-    initialState?: any;
-  }
-}
+// Get VS Code API
+declare const acquireVsCodeApi: any;
+const vscode = acquireVsCodeApi();
 
-// Only acquire the API once and store it on the window object
-const getVSCodeApi = () => {
-  if (!window.vscodeApi) {
-    window.vscodeApi = window.acquireVsCodeApi();
-  }
-  return window.vscodeApi;
-};
-
-// Get VS Code API instance
-const vscode = getVSCodeApi();
-
-// Get the view type from the HTML
-const viewType = document.body.dataset.viewType;
-
-// Create the root element
-const container = document.getElementById('root');
-if (!container) {
+// Get root element
+const rootElement = document.getElementById('root');
+if (!rootElement) {
   throw new Error('Root element not found');
 }
-const root = createRoot(container);
 
-// Set up message handler for view data updates
-window.addEventListener('message', event => {
-  const message = event.data;
-  if (message.command === 'updateViewData') {
-    store.dispatch({ type: 'app/updateViewData', payload: message.data });
-  }
-});
+// Create root
+const root = createRoot(rootElement);
 
-// Render the appropriate component based on view type
-const renderComponent = () => {
-  const component = (() => {
-    switch (viewType) {
-      case 'neonLocalActions':
-        return <ActionsView vscode={window.vscodeApi} />;
-      case 'neonLocalDatabase':
-        return <DatabaseView vscode={window.vscodeApi} />;
-      default:
-        return <App vscode={window.vscodeApi} initialState={window.initialState} />;
-    }
-  })();
+// Determine which component to render based on the view type
+const viewType = document.body.getAttribute('data-view-type');
+let Component;
 
-  return (
-    <Provider store={store}>
-      {component}
-    </Provider>
-  );
-};
+switch (viewType) {
+  case 'neonLocalConnect':
+    Component = MainApp;
+    break;
+  case 'neonLocalDatabase':
+    Component = DatabaseView;
+    break;
+  case 'neonLocalActions':
+    Component = ActionsView;
+    break;
+  default:
+    console.error('Unknown view type:', viewType);
+    Component = () => <div>Unknown view type</div>;
+}
 
-// Render the component
-root.render(renderComponent()); 
+// Render the app
+root.render(
+  <React.StrictMode>
+    <StateProvider vscode={vscode}>
+      <Component vscode={vscode} />
+    </StateProvider>
+  </React.StrictMode>
+); 

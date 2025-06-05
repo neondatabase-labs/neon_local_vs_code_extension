@@ -1,14 +1,25 @@
 import * as vscode from 'vscode';
 import { authenticate } from './auth';
 import { ConfigurationManager } from './utils';
+import { WebViewService } from './services/webview.service';
+import { StateService } from './services/state.service';
 
 export class SignInWebviewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'neonLocal.signIn';
     private _view?: vscode.WebviewView;
+    private readonly _extensionUri: vscode.Uri;
+    private readonly _webviewService: WebViewService;
+    private readonly _stateService: StateService;
 
     constructor(
-        private readonly _extensionUri: vscode.Uri,
-    ) {}
+        extensionUri: vscode.Uri,
+        webviewService: WebViewService,
+        stateService: StateService
+    ) {
+        this._extensionUri = extensionUri;
+        this._webviewService = webviewService;
+        this._stateService = stateService;
+    }
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,

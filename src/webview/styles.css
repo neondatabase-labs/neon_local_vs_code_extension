@@ -266,4 +266,107 @@ button:disabled {
 
 .copy-success.visible {
   opacity: 1;
+}
+
+.database-content {
+  padding: 16px;
+}
+
+.database-content .description {
+  margin-bottom: 16px;
+  color: var(--vscode-foreground);
+  font-size: 13px;
+}
+
+.database-content .section {
+  margin-bottom: 16px;
+}
+
+.database-content label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--vscode-foreground);
+  font-size: 13px;
+}
+
+.database-content select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--vscode-input-border);
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-size: 13px;
+  border-radius: 2px;
+}
+
+.database-content select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.database-content .detail-row {
+  margin-top: 16px;
+  padding: 12px;
+  background-color: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 4px;
+}
+
+.database-content .detail-label-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.database-content .detail-label {
+  color: var(--vscode-foreground);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.database-content .copy-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+  border: none;
+  background: none;
+  color: var(--vscode-button-foreground);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.database-content .copy-button:hover {
+  opacity: 1;
+}
+
+.database-content .copy-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.database-content .connection-string-container {
+  padding: 8px;
+  background-color: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 2px;
+}
+
+.database-content .connection-string {
+  color: var(--vscode-input-foreground);
+  font-family: var(--vscode-editor-font-family);
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.not-connected {
+  padding: 16px;
+  color: var(--vscode-foreground);
+  font-size: 13px;
+  text-align: center;
 } 
