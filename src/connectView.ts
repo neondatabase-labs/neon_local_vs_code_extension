@@ -80,8 +80,18 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         // Initial update with a small delay to ensure proper registration
         setTimeout(async () => {
             try {
-                if (this._view) {
-                    this._view.webview.html = getSignInHtml();
+                const apiKey = ConfigurationManager.getConfigValue('apiKey');
+                const refreshToken = ConfigurationManager.getConfigValue('refreshToken');
+                console.log('ConnectViewProvider: Initial token check', { 
+                    hasApiKey: !!apiKey, 
+                    hasRefreshToken: !!refreshToken 
+                });
+
+                if (!apiKey && !refreshToken) {
+                    console.log('ConnectViewProvider: No tokens found, showing sign-in HTML');
+                    if (this._view) {
+                        this._view.webview.html = getSignInHtml();
+                    }
                     return;
                 }
 
