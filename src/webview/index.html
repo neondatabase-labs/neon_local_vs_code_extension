@@ -264,11 +264,24 @@
                     orgId: select.value
                 });
                 
-                // Reset project and branch selections
+                // Reset project and branch selections with default options
                 projectSelect.innerHTML = '';
                 projectSelect.disabled = true;
+                const defaultProjectOption = document.createElement('option');
+                defaultProjectOption.value = '';
+                defaultProjectOption.disabled = true;
+                defaultProjectOption.selected = true;
+                defaultProjectOption.textContent = 'Select a project';
+                projectSelect.appendChild(defaultProjectOption);
+
                 branchSelect.innerHTML = '';
                 branchSelect.disabled = true;
+                const defaultBranchOption = document.createElement('option');
+                defaultBranchOption.value = '';
+                defaultBranchOption.disabled = true;
+                defaultBranchOption.selected = true;
+                defaultBranchOption.textContent = 'Select a branch';
+                branchSelect.appendChild(defaultBranchOption);
             }
         });
 
@@ -288,6 +301,13 @@
                 // Reset branch selection
                 branchSelect.innerHTML = '';
                 branchSelect.disabled = true;
+                // Add default option to branch select
+                const defaultBranchOption = document.createElement('option');
+                defaultBranchOption.value = '';
+                defaultBranchOption.disabled = true;
+                defaultBranchOption.selected = true;
+                defaultBranchOption.textContent = 'Select a branch';
+                branchSelect.appendChild(defaultBranchOption);
             }
         });
 
@@ -478,7 +498,8 @@
                     select.appendChild(defaultOption);
                     break;
                 case 'branch':
-                    defaultOption.textContent = 'Select a branch';
+                case 'parent-branch':
+                    defaultOption.textContent = selectId === 'parent-branch' ? 'Select a parent branch' : 'Select a branch';
                     select.appendChild(defaultOption);
                     break;
             }

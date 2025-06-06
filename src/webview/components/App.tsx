@@ -313,11 +313,11 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
               <label htmlFor="project">Project</label>
               <select
                 id="project"
-                value={state.connection.selectedProjectId}
+                value={state.connection.selectedProjectId || ""}
                 onChange={handleProjectSelection}
                 disabled={state.connection.selectedOrgId === undefined}
               >
-                <option value="">Select Project</option>
+                <option value="" disabled>Select a project</option>
                 {state.projects.map((project) => (
                   <option key={project.id} value={project.id}>
                     {project.name}
@@ -331,11 +331,11 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
                 <label htmlFor="branch">Branch</label>
                 <select
                   id="branch"
-                  value={state.connection.selectedBranchId}
+                  value={state.connection.selectedBranchId || ""}
                   onChange={handleBranchSelection}
                   disabled={!state.connection.selectedProjectId}
                 >
-                  <option value="">Select Branch</option>
+                  <option value="" disabled>Select a branch</option>
                   {state.branches.map((branch) => (
                     <option key={branch.id} value={branch.id}>
                       {branch.name}
@@ -348,11 +348,11 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
                 <label htmlFor="parent-branch">Parent Branch</label>
                 <select
                   id="parent-branch"
-                  value={state.connection.parentBranchId}
+                  value={state.connection.parentBranchId || ""}
                   onChange={handleBranchSelection}
                   disabled={!state.connection.selectedProjectId}
                 >
-                  <option value="">Select Parent Branch</option>
+                  <option value="" disabled>Select a parent branch</option>
                   {state.branches.map((branch) => (
                     <option key={branch.id} value={branch.id}>
                       {branch.name}
