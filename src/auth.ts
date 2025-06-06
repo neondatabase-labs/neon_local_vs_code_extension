@@ -222,25 +222,29 @@ export async function authenticate(): Promise<string> {
 
 export async function refreshToken(refreshTokenStr: string): Promise<string> {
     try {
+        const tokenData = new URLSearchParams({
+            grant_type: 'refresh_token',
+            client_id: CLIENT_ID,
+            refresh_token: refreshTokenStr
+        });
+
+        console.log('Attempting token refresh with data:', tokenData.toString());
+        
         const response = await axios.post(
             `${OAUTH_HOST}/oauth2/token`,
-            {
-                grant_type: 'refresh_token',
-                client_id: CLIENT_ID,
-                refresh_token: refreshTokenStr
-            },
+            tokenData,
             {
                 headers: {
                     'Accept': 'application/json',
                     'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                transformRequest: [(data: Record<string, string>) => {
-                    return Object.entries(data)
-                        .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
-                        .join('&');
-                }]
+                }
             }
         );
+
+        console.log('Token refresh response:', {
+            status: response.status,
+            data: response.data
+        });
 
         // Update stored refresh token if a new one is provided
         if (response.data.refresh_token) {
@@ -249,7 +253,12 @@ export async function refreshToken(refreshTokenStr: string): Promise<string> {
 
         return response.data.access_token;
     } catch (error: any) {
-        console.error('Refresh token error:', error);
+        console.error('Token refresh error:', {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data,
+            error: error.message
+        });
         throw new Error('Failed to refresh token');
     }
 } 

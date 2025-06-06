@@ -165,6 +165,15 @@ export class DockerService {
             if (containerInfo) {
                 // Update state with the correct branch information
                 await this.stateService.setCurrentlyConnectedBranch(containerInfo.branchId);
+
+                // Set the connection string based on the driver
+                const connectionString = containerInfo.driver === 'serverless'
+                    ? 'http://localhost:5432/sql'
+                    : 'postgres://neon:npg@localhost:5432/neondb?sslmode=require';
+                await this.stateService.setConnectionInfo({
+                    connectionInfo: connectionString,
+                    selectedDatabase: 'neondb'
+                });
             }
             
             // Update state to indicate proxy is running
@@ -189,9 +198,17 @@ export class DockerService {
             await container.stop();
             await container.remove();
 
-            
-            // Update state to indicate proxy is stopped
+            // Clear all branch-related state
             await this.stateService.setIsProxyRunning(false);
+            await this.stateService.setConnectionInfo({
+                connectionInfo: '',
+                selectedDatabase: ''
+            });
+            await this.stateService.setCurrentlyConnectedBranch('');
+            await this.stateService.setCurrentBranch('');
+            await this.stateService.setParentBranchId('');
+            await this.stateService.setDatabases([]);
+            await this.stateService.setRoles([]);
             
             // Stop periodic status check
             this.stopStatusCheck();
@@ -201,6 +218,15 @@ export class DockerService {
             // If the container doesn't exist, that's fine - just update the state
             if ((error as any).statusCode === 404) {
                 await this.stateService.setIsProxyRunning(false);
+                await this.stateService.setConnectionInfo({
+                    connectionInfo: '',
+                    selectedDatabase: ''
+                });
+                await this.stateService.setCurrentlyConnectedBranch('');
+                await this.stateService.setCurrentBranch('');
+                await this.stateService.setParentBranchId('');
+                await this.stateService.setDatabases([]);
+                await this.stateService.setRoles([]);
                 this.stopStatusCheck();
                 return;
             }

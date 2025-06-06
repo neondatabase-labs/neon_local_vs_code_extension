@@ -16,9 +16,6 @@ export const ActionsView: React.FC<ActionsViewProps> = ({ vscode }) => {
     return (
       <div className="not-connected">
         <p>Connect to a Neon database to see available actions.</p>
-        {state.isStarting && (
-          <p>Connection is being established...</p>
-        )}
       </div>
     );
   }

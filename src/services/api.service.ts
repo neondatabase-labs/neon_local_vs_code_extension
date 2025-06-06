@@ -58,11 +58,12 @@ export class NeonApiService {
                         }
                     };
                     
-                    // Create a new instance with the updated token
+                    // Create a new instance with the updated token and update the current instance
                     this.apiClient = await this.createApiClient(newAccessToken);
+                    instance.defaults.headers['Authorization'] = `Bearer ${newAccessToken}`;
                     
                     // Retry the failed request with the new token
-                    return this.apiClient(retryConfig);
+                    return axios(retryConfig);
                 } catch (refreshError) {
                     console.error('Token refresh failed:', refreshError);
                     // If refresh fails, clear tokens and require re-authentication
