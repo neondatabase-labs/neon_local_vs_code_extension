@@ -1,7 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import * as vscode from 'vscode';
 import { NeonBranch, NeonOrg, NeonProject, NeonDatabase, NeonRole } from '../types';
-import { refreshToken } from '../auth';
+import { refreshToken } from './auth.service';
 
 export class NeonApiService {
     private apiClient: AxiosInstance | null = null;

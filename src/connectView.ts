@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { authenticate } from './auth';
+import { authenticate } from './services/auth.service';
 import { ConfigurationManager, Logger } from './utils';
 import { DEBOUNCE_DELAY, VIEW_TYPES } from './constants';
 import { ViewData, WebviewMessage, NeonOrg, NeonProject, NeonBranch } from './types';
@@ -295,70 +295,87 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 case 'startProxy':
                     await this._stateService.setIsStarting(true);
                     try {
-                        // Get the current state before starting the proxy
-                        const currentState = await this._stateService.getViewData();
-                        
-                        // Start the container
-                        await this._dockerService.startContainer({
-                            branchId: message.branchId || message.parentBranchId,
-                            driver: message.driver,
-                            isExisting: message.isExisting,
-                            context: this._extensionContext,
-                            projectId: this._stateService.currentProject
+                        // Show notification that we're connecting
+                        await vscode.window.withProgress({
+                            location: vscode.ProgressLocation.Notification,
+                            title: "Connecting to your Neon database",
+                            cancellable: false
+                        }, async (progress) => {
+                            // Get the current state before starting the proxy
+                            const currentState = await this._stateService.getViewData();
+                            
+                            progress.report({ message: "Starting local proxy..." });
+                            
+                            // Start the container
+                            await this._dockerService.startContainer({
+                                branchId: message.branchId || message.parentBranchId,
+                                driver: message.driver,
+                                isExisting: message.isExisting,
+                                context: this._extensionContext,
+                                projectId: this._stateService.currentProject
+                            });
+
+                            progress.report({ message: "Updating connection state..." });
+
+                            // Update the state with the current branch information
+                            if (message.isExisting) {
+                                await this._stateService.setCurrentBranch(message.branchId);
+                                await this._stateService.setCurrentlyConnectedBranch(message.branchId);
+                            } else {
+                                await this._stateService.setParentBranchId(message.parentBranchId);
+                                await this._stateService.setCurrentlyConnectedBranch(message.parentBranchId);
+                            }
+
+                            // Preserve the current state
+                            const currentFullState = await this._stateService.getViewData();
+                            await this._stateService.updateState({
+                                selection: {
+                                    orgs: currentState.orgs,
+                                    projects: currentState.projects,
+                                    branches: currentState.branches,
+                                    selectedOrgId: currentState.selectedOrgId || '',
+                                    selectedOrgName: currentState.selectedOrgName || '',
+                                    selectedProjectId: currentState.selectedProjectId,
+                                    selectedProjectName: currentState.selectedProjectName,
+                                    selectedBranchId: currentState.selectedBranchId,
+                                    selectedBranchName: currentState.selectedBranchName,
+                                    parentBranchId: currentState.parentBranchId,
+                                    parentBranchName: currentState.parentBranchName
+                                },
+                                connection: {
+                                    connected: currentFullState.connected,
+                                    isStarting: currentFullState.isStarting,
+                                    type: currentFullState.connectionType,
+                                    driver: currentFullState.selectedDriver,
+                                    connectionInfo: currentFullState.connectionInfo,
+                                    currentlyConnectedBranch: currentFullState.currentlyConnectedBranch,
+                                    selectedDatabase: currentFullState.selectedDatabase,
+                                    selectedRole: currentFullState.selectedRole,
+                                    databases: currentFullState.databases,
+                                    roles: currentFullState.roles,
+                                    connectedOrgId: currentState.selectedOrgId || '',
+                                    connectedOrgName: currentState.selectedOrgName || '',
+                                    connectedProjectId: currentState.selectedProjectId || '',
+                                    connectedProjectName: currentState.selectedProjectName || ''
+                                },
+                                loading: currentFullState.loading
+                            });
+
+                            progress.report({ message: "Fetching database information..." });
+
+                            // Fetch and update databases and roles
+                            const apiService = new NeonApiService();
+                            const projectId = this._stateService.currentProject;
+                            const branchId = message.branchId || message.parentBranchId;
+                            const [databases, roles] = await Promise.all([
+                                apiService.getDatabases(projectId, branchId),
+                                apiService.getRoles(projectId, branchId)
+                            ]);
+                            await Promise.all([
+                                this._stateService.setDatabases(databases),
+                                this._stateService.setRoles(roles)
+                            ]);
                         });
-
-                        // Update the state with the current branch information
-                        if (message.isExisting) {
-                            await this._stateService.setCurrentBranch(message.branchId);
-                            await this._stateService.setCurrentlyConnectedBranch(message.branchId);
-                        } else {
-                            await this._stateService.setParentBranchId(message.parentBranchId);
-                            await this._stateService.setCurrentlyConnectedBranch(message.parentBranchId);
-                        }
-
-                        // Preserve the current state
-                        const currentFullState = await this._stateService.getViewData();
-                        await this._stateService.updateState({
-                            selection: {
-                                orgs: currentState.orgs,
-                                projects: currentState.projects,
-                                branches: currentState.branches,
-                                selectedOrgId: currentState.selectedOrgId || '',
-                                selectedOrgName: currentState.selectedOrgName || '',
-                                selectedProjectId: currentState.selectedProjectId,
-                                selectedProjectName: currentState.selectedProjectName,
-                                selectedBranchId: currentState.selectedBranchId,
-                                selectedBranchName: currentState.selectedBranchName,
-                                parentBranchId: currentState.parentBranchId,
-                                parentBranchName: currentState.parentBranchName
-                            },
-                            connection: {
-                                connected: currentFullState.connected,
-                                isStarting: currentFullState.isStarting,
-                                type: currentFullState.connectionType,
-                                driver: currentFullState.selectedDriver,
-                                connectionInfo: currentFullState.connectionInfo,
-                                currentlyConnectedBranch: currentFullState.currentlyConnectedBranch,
-                                selectedDatabase: currentFullState.selectedDatabase,
-                                selectedRole: currentFullState.selectedRole,
-                                databases: currentFullState.databases,
-                                roles: currentFullState.roles
-                            },
-                            loading: currentFullState.loading
-                        });
-
-                        // Fetch and update databases and roles
-                        const apiService = new NeonApiService();
-                        const projectId = this._stateService.currentProject;
-                        const branchId = message.branchId || message.parentBranchId;
-                        const [databases, roles] = await Promise.all([
-                            apiService.getDatabases(projectId, branchId),
-                            apiService.getRoles(projectId, branchId)
-                        ]);
-                        await Promise.all([
-                            this._stateService.setDatabases(databases),
-                            this._stateService.setRoles(roles)
-                        ]);
                     } catch (error) {
                         console.error('Error starting proxy:', error);
                         if (error instanceof Error) {
