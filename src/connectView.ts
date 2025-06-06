@@ -80,6 +80,11 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         // Initial update with a small delay to ensure proper registration
         setTimeout(async () => {
             try {
+                if (this._view) {
+                    this._view.webview.html = getSignInHtml();
+                    return;
+                }
+
                 const apiService = new NeonApiService();
 
                 // Start loading organizations
@@ -106,7 +111,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                             projects: false
                         });
 
-                        // If there's a pre-selected project, fetch its branches
+                        // If there's a pre-selected project, fetch
                         const currentProjectId = this._stateService.currentProject;
                         if (currentProjectId) {
                             try {
@@ -553,7 +558,11 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     selectedDatabase: '',
                     selectedRole: '',
                     databases: [],
-                    roles: []
+                    roles: [],
+                    connectedOrgId: '',
+                    connectedOrgName: '',
+                    connectedProjectId: '',
+                    connectedProjectName: ''
                 },
                 selection: {
                     orgs: [],
