@@ -436,24 +436,47 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
     }
 
     public async updateView(): Promise<void> {
+        console.log('ConnectViewProvider: Starting updateView');
         if (!this._view || this._isUpdating) {
+            console.log('ConnectViewProvider: Skipping update - view not ready or already updating');
             return;
         }
 
         this._isUpdating = true;
+        console.log('ConnectViewProvider: Set _isUpdating flag');
 
         try {
             const apiKey = ConfigurationManager.getConfigValue('apiKey');
             const refreshToken = ConfigurationManager.getConfigValue('refreshToken');
+            console.log('ConnectViewProvider: Checked tokens', { 
+                hasApiKey: !!apiKey, 
+                hasRefreshToken: !!refreshToken 
+            });
 
             if (!apiKey && !refreshToken) {
+                console.log('ConnectViewProvider: No tokens found, showing sign-in HTML');
                 this._view.webview.html = getSignInHtml();
                 this._isUpdating = false;
                 return;
             }
 
+            // If we're transitioning from sign-in to connect view, update the HTML
+            if (this._view.webview.html.includes('sign-in-button')) {
+                console.log('ConnectViewProvider: Transitioning from sign-in to connect view');
+                this._view.webview.html = this.getWebviewContent(this._view.webview);
+            }
+
             // Get the current view data
+            console.log('ConnectViewProvider: Getting view data');
             const viewData = await this._stateService.getViewData();
+            console.log('ConnectViewProvider: Got view data', {
+                connected: viewData.connected,
+                isStarting: viewData.isStarting,
+                connectionType: viewData.connectionType,
+                hasOrgs: viewData.orgs?.length > 0,
+                hasProjects: viewData.projects?.length > 0,
+                hasBranches: viewData.branches?.length > 0
+            });
 
             // If we have a pending connection type change, ensure it's respected
             if (this._lastRequestedConnectionType && viewData.connectionType !== this._lastRequestedConnectionType) {
@@ -466,26 +489,106 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             }
 
             // Send data via postMessage
+            console.log('ConnectViewProvider: Sending updateViewData message');
             await this._view.webview.postMessage({
                 command: 'updateViewData',
                 data: viewData
             });
+            console.log('ConnectViewProvider: View update complete');
         } catch (error) {
-            Logger.error('Error updating connect view:', error);
+            console.error('ConnectViewProvider: Error updating view:', error);
             if (error instanceof Error) {
                 vscode.window.showErrorMessage(`Connect view update error: ${error.message}`);
             }
         } finally {
             this._isUpdating = false;
+            console.log('ConnectViewProvider: Cleared _isUpdating flag');
         }
     }
 
     private async handleSignIn(): Promise<void> {
         try {
+            // Show loading state
+            if (this._view) {
+                this._view.webview.postMessage({ command: 'showLoading' });
+            }
+
+            // Attempt authentication
             await authenticate();
+
+            // Show success message briefly
+            if (this._view) {
+                this._view.webview.postMessage({ command: 'signInSuccess' });
+            }
+
+            // Wait a moment to show the success message
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Update state service with authenticated state
+            await this._stateService.updateState({
+                connection: {
+                    connected: false,
+                    isStarting: false,
+                    type: 'existing',
+                    driver: 'postgres',
+                    connectionInfo: '',
+                    currentlyConnectedBranch: '',
+                    selectedDatabase: '',
+                    selectedRole: '',
+                    databases: [],
+                    roles: []
+                },
+                selection: {
+                    orgs: [],
+                    projects: [],
+                    branches: [],
+                    selectedOrgId: '',
+                    selectedOrgName: '',
+                    selectedProjectId: undefined,
+                    selectedProjectName: undefined,
+                    selectedBranchId: undefined,
+                    selectedBranchName: undefined,
+                    parentBranchId: undefined,
+                    parentBranchName: undefined
+                },
+                loading: {
+                    orgs: false,
+                    projects: false,
+                    branches: false
+                }
+            });
+
+            // Update the view to show the connect interface
             await this.updateView();
+
+            // Start loading organizations
+            const apiService = new NeonApiService();
+            await this._stateService.updateLoadingState({
+                orgs: true,
+                projects: false,
+                branches: false
+            });
+
+            // Fetch organizations
+            const orgs = await apiService.getOrgs();
+            await this._stateService.setOrganizations(orgs);
+            await this._stateService.updateLoadingState({
+                orgs: false,
+                projects: false,
+                branches: false
+            });
+
+            // Update view again with organizations
+            await this.updateView();
+
         } catch (error) {
             Logger.error('Error during sign in:', error);
+            if (this._view) {
+                this._view.webview.postMessage({ 
+                    command: 'showError',
+                    text: error instanceof Error ? error.message : 'Unknown error'
+                });
+            }
             if (error instanceof Error) {
                 vscode.window.showErrorMessage(`Sign in error: ${error.message}`);
             }

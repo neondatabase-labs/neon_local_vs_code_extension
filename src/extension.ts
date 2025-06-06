@@ -127,9 +127,44 @@ export async function activate(context: vscode.ExtensionContext) {
       }
             }),
             vscode.commands.registerCommand('neon-local.openTableView', async () => {
-      // Open the database view
-      await vscode.commands.executeCommand('workbench.view.extension.neon-local');
-      await vscode.commands.executeCommand('neonLocalDatabase.focus');
+                try {
+                    // Get the current project and branch IDs
+                    const projectId = await stateService.getCurrentProjectId();
+                    const branchId = await stateService.getCurrentBranchId();
+                    
+                    if (!projectId || !branchId) {
+                        throw new Error('Project ID or Branch ID not found');
+                    }
+
+                    // Get available databases
+                    const databases = await stateService.getDatabases();
+                    if (!databases || databases.length === 0) {
+                        throw new Error('No databases available');
+                    }
+
+                    // Prompt user to select a database
+                    const selectedDatabase = await vscode.window.showQuickPick(
+                        databases.map(db => ({
+                            label: db.name,
+                            description: `Owner: ${db.owner_name}`,
+                            detail: db.created_at ? `Created: ${new Date(db.created_at).toLocaleString()}` : undefined
+                        })),
+                        {
+                            placeHolder: 'Select a database to view tables',
+                            ignoreFocusOut: true
+                        }
+                    );
+
+                if (!selectedDatabase) {
+                    return; // User cancelled
+                }
+
+                    // Open the Table View URL in the browser with the selected database
+                    const tableViewUrl = `https://console.neon.tech/app/projects/${projectId}/branches/${branchId}/tables?database=${selectedDatabase.label}`;
+                    await vscode.env.openExternal(vscode.Uri.parse(tableViewUrl));
+                } catch (error) {
+                    vscode.window.showErrorMessage(`Failed to open Table View: ${error}`);
+                }
             }),
             vscode.commands.registerCommand('neon-local.launchPsql', async () => {
                     const terminal = vscode.window.createTerminal('Neon PSQL');

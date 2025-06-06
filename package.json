@@ -25,6 +25,10 @@
   "contributes": {
     "commands": [
       {
+        "command": "neonLocal.signIn.triggerSignIn",
+        "title": "Neon Local: Trigger Sign In"
+      },
+      {
         "command": "neon-local.configure",
         "title": "Neon Local: Configure"
       },

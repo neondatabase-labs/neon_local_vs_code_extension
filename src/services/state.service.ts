@@ -9,6 +9,10 @@ interface ConnectionState {
     driver: 'serverless' | 'postgres';
     connectionInfo: string;
     currentlyConnectedBranch: string;
+    connectedOrgId: string;
+    connectedOrgName: string;
+    connectedProjectId: string;
+    connectedProjectName: string;
     selectedDatabase: string;
     selectedRole: string;
     databases: NeonDatabase[];
@@ -94,6 +98,10 @@ export class StateService implements IStateService {
             driver: 'postgres',
             connectionInfo: '',
             currentlyConnectedBranch: '',
+            connectedOrgId: '',
+            connectedOrgName: '',
+            connectedProjectId: '',
+            connectedProjectName: '',
             selectedDatabase: '',
             selectedRole: '',
             databases: [],
@@ -142,9 +150,15 @@ export class StateService implements IStateService {
         const currentlyConnectedBranch = this.state.get('neonLocal.currentlyConnectedBranch', '');
         const connectionInfo = this.state.get('neonLocal.connectionInfo', '');
         const selectedOrgId = this.state.get('neonLocal.currentOrg', '');
+        const selectedOrgName = this.state.get('neonLocal.selectedOrgName', '');
         const selectedProjectId = this.state.get('neonLocal.currentProject', '');
+        const selectedProjectName = this.state.get('neonLocal.selectedProjectName', '');
         const selectedBranchId = this.state.get('neonLocal.currentBranch', '');
         const parentBranchId = this.state.get('neonLocal.parentBranchId', '');
+        const connectedOrgId = this.state.get('neonLocal.connectedOrgId', '');
+        const connectedOrgName = this.state.get('neonLocal.connectedOrgName', '');
+        const connectedProjectId = this.state.get('neonLocal.connectedProjectId', '');
+        const connectedProjectName = this.state.get('neonLocal.connectedProjectName', '');
 
         this._state = {
             connection: {
@@ -154,6 +168,10 @@ export class StateService implements IStateService {
                 driver: selectedDriver as 'postgres' | 'serverless',
                 connectionInfo,
                 currentlyConnectedBranch,
+                connectedOrgId,
+                connectedOrgName,
+                connectedProjectId,
+                connectedProjectName,
                 selectedDatabase,
                 selectedRole,
                 databases: [],
@@ -164,9 +182,9 @@ export class StateService implements IStateService {
                 projects: [],
                 branches: [],
                 selectedOrgId,
-                selectedOrgName: this.state.get('selectedOrgName') || '',
+                selectedOrgName: selectedOrgName || '',
                 selectedProjectId: selectedProjectId || undefined,
-                selectedProjectName: this.state.get('selectedProjectName') || undefined,
+                selectedProjectName: selectedProjectName || undefined,
                 selectedBranchId: selectedBranchId || undefined,
                 selectedBranchName: undefined,
                 parentBranchId: parentBranchId || undefined,
@@ -185,7 +203,9 @@ export class StateService implements IStateService {
     private async saveState() {
         await Promise.all([
             this.state.update('neonLocal.currentOrg', this._state.selection.selectedOrgId),
+            this.state.update('neonLocal.selectedOrgName', this._state.selection.selectedOrgName),
             this.state.update('neonLocal.currentProject', this._state.selection.selectedProjectId),
+            this.state.update('neonLocal.selectedProjectName', this._state.selection.selectedProjectName),
             this.state.update('neonLocal.currentBranch', this._state.selection.selectedBranchId),
             this.state.update('neonLocal.parentBranchId', this._state.selection.parentBranchId),
             this.state.update('neonLocal.connectionType', this._state.connection.type),
@@ -193,6 +213,7 @@ export class StateService implements IStateService {
             this.state.update('neonLocal.selectedDatabase', this._state.connection.selectedDatabase),
             this.state.update('neonLocal.selectedRole', this._state.connection.selectedRole),
             this.state.update('neonLocal.currentlyConnectedBranch', this._state.connection.currentlyConnectedBranch),
+           
             this.state.update('neonLocal.connectionInfo', this._state.connection.connectionInfo)
         ]);
     }
