@@ -32,7 +32,7 @@ export class StorageService {
                 orgs: [],
                 projects: [],
                 branches: [],
-                selectedOrgId: await this.get('neonLocal.currentOrg', ''),
+                selectedOrgId: await this.get('neonLocal.currentOrg', 'personal_account'),
                 selectedOrgName: '',
                 selectedProjectId: await this.get('neonLocal.currentProject', ''),
                 selectedProjectName: '',

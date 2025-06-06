@@ -297,9 +297,10 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
               <label htmlFor="org">Organization</label>
               <select
                 id="org"
-                value={state.connection.selectedOrgId ?? ''}
+                value={state.connection.selectedOrgId ?? 'personal_account'}
                 onChange={handleOrgSelection}
               >
+                <option value="" disabled>Select an organization</option>
                 {state.orgs.map((org) => (
                   <option key={org.id} value={org.id}>
                     {org.name}

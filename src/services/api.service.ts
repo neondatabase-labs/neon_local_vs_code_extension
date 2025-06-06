@@ -112,7 +112,7 @@ export class NeonApiService {
             
             // Add Personal account as the first option
             orgs = [
-                { id: '', name: 'Personal account' },
+                { id: 'personal_account', name: 'Personal account' },
                 ...orgs
             ];
 
@@ -127,8 +127,8 @@ export class NeonApiService {
     public async getProjects(orgId?: string): Promise<NeonProject[]> {
         try {
             const client = await this.ensureApiClient();
-            // For personal account (empty or undefined orgId), don't include the org_id parameter
-            const url = orgId && orgId.length > 0 ? `/projects?org_id=${orgId}` : '/projects';
+            // For personal account (empty, undefined, or personal_account), don't include the org_id parameter
+            const url = orgId && orgId.length > 0 && orgId !== 'personal_account' ? `/projects?org_id=${orgId}` : '/projects';
             console.log('Fetching projects from URL:', url, 'for orgId:', orgId || 'personal account');
 
             // Add retry logic
