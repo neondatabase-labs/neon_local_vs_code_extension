@@ -225,7 +225,8 @@ export async function refreshToken(refreshTokenStr: string): Promise<string> {
         const tokenData = new URLSearchParams({
             grant_type: 'refresh_token',
             client_id: CLIENT_ID,
-            refresh_token: refreshTokenStr
+            refresh_token: refreshTokenStr,
+            scope: REQUIRED_SCOPES.join(' ')
         });
 
         console.log('Attempting token refresh with data:', tokenData.toString());
