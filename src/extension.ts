@@ -90,7 +90,8 @@ export async function activate(context: vscode.ExtensionContext) {
       try {
         // Get the current project and branch IDs
         const projectId = await stateService.getCurrentProjectId();
-        const branchId = await stateService.getCurrentBranchId();
+        const viewData = await stateService.getViewData();
+        const branchId = viewData.connectionType === 'new' ? viewData.currentlyConnectedBranch : await stateService.getCurrentBranchId();
         
         if (!projectId || !branchId) {
           throw new Error('Project ID or Branch ID not found');
@@ -115,9 +116,9 @@ export async function activate(context: vscode.ExtensionContext) {
           }
         );
 
-                if (!selectedDatabase) {
-                    return; // User cancelled
-                }
+        if (!selectedDatabase) {
+            return; // User cancelled
+        }
 
         // Open the SQL Editor URL in the browser with the selected database
         const sqlEditorUrl = `https://console.neon.tech/app/projects/${projectId}/branches/${branchId}/databases/${selectedDatabase.label}/sql-editor`;
@@ -125,48 +126,49 @@ export async function activate(context: vscode.ExtensionContext) {
       } catch (error) {
         vscode.window.showErrorMessage(`Failed to open SQL Editor: ${error}`);
       }
-            }),
-            vscode.commands.registerCommand('neon-local.openTableView', async () => {
-                try {
-                    // Get the current project and branch IDs
-                    const projectId = await stateService.getCurrentProjectId();
-                    const branchId = await stateService.getCurrentBranchId();
-                    
-                    if (!projectId || !branchId) {
-                        throw new Error('Project ID or Branch ID not found');
-                    }
+    }),
+    vscode.commands.registerCommand('neon-local.openTableView', async () => {
+      try {
+        // Get the current project and branch IDs
+        const projectId = await stateService.getCurrentProjectId();
+        const viewData = await stateService.getViewData();
+        const branchId = viewData.connectionType === 'new' ? viewData.currentlyConnectedBranch : await stateService.getCurrentBranchId();
+        
+        if (!projectId || !branchId) {
+          throw new Error('Project ID or Branch ID not found');
+        }
 
-                    // Get available databases
-                    const databases = await stateService.getDatabases();
-                    if (!databases || databases.length === 0) {
-                        throw new Error('No databases available');
-                    }
+        // Get available databases
+        const databases = await stateService.getDatabases();
+        if (!databases || databases.length === 0) {
+          throw new Error('No databases available');
+        }
 
-                    // Prompt user to select a database
-                    const selectedDatabase = await vscode.window.showQuickPick(
-                        databases.map(db => ({
-                            label: db.name,
-                            description: `Owner: ${db.owner_name}`,
-                            detail: db.created_at ? `Created: ${new Date(db.created_at).toLocaleString()}` : undefined
-                        })),
-                        {
-                            placeHolder: 'Select a database to view tables',
-                            ignoreFocusOut: true
-                        }
-                    );
+        // Prompt user to select a database
+        const selectedDatabase = await vscode.window.showQuickPick(
+          databases.map(db => ({
+            label: db.name,
+            description: `Owner: ${db.owner_name}`,
+            detail: db.created_at ? `Created: ${new Date(db.created_at).toLocaleString()}` : undefined
+          })),
+          {
+            placeHolder: 'Select a database to view tables',
+            ignoreFocusOut: true
+          }
+        );
 
-                if (!selectedDatabase) {
-                    return; // User cancelled
-                }
+        if (!selectedDatabase) {
+            return; // User cancelled
+        }
 
-                    // Open the Table View URL in the browser with the selected database
-                    const tableViewUrl = `https://console.neon.tech/app/projects/${projectId}/branches/${branchId}/tables?database=${selectedDatabase.label}`;
-                    await vscode.env.openExternal(vscode.Uri.parse(tableViewUrl));
-                } catch (error) {
-                    vscode.window.showErrorMessage(`Failed to open Table View: ${error}`);
-                }
-            }),
-            vscode.commands.registerCommand('neon-local.launchPsql', async () => {
+        // Open the Table View URL in the browser with the selected database
+        const tableViewUrl = `https://console.neon.tech/app/projects/${projectId}/branches/${branchId}/tables?database=${selectedDatabase.label}`;
+        await vscode.env.openExternal(vscode.Uri.parse(tableViewUrl));
+      } catch (error) {
+        vscode.window.showErrorMessage(`Failed to open Table View: ${error}`);
+      }
+    }),
+    vscode.commands.registerCommand('neon-local.launchPsql', async () => {
                     const terminal = vscode.window.createTerminal('Neon PSQL');
                     terminal.show();
       terminal.sendText('psql "postgres://neon:npg@localhost:5432/neondb?sslmode=require"');
