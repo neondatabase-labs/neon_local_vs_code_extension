@@ -132,15 +132,13 @@ export class DockerService {
             await container.stop();
             await container.remove();
 
-            // Clear all branch-related state
+            // Clear connection-related state but preserve branch selection
             await this.stateService.setIsProxyRunning(false);
             await this.stateService.setConnectionInfo({
                 connectionInfo: '',
                 selectedDatabase: ''
             });
             await this.stateService.setCurrentlyConnectedBranch('');
-            await this.stateService.setCurrentBranch('');
-            await this.stateService.setParentBranchId('');
             await this.stateService.setDatabases([]);
             await this.stateService.setRoles([]);
             
@@ -157,8 +155,6 @@ export class DockerService {
                     selectedDatabase: ''
                 });
                 await this.stateService.setCurrentlyConnectedBranch('');
-                await this.stateService.setCurrentBranch('');
-                await this.stateService.setParentBranchId('');
                 await this.stateService.setDatabases([]);
                 await this.stateService.setRoles([]);
                 this.stopStatusCheck();
