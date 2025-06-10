@@ -394,9 +394,10 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                                     connectedOrgId: currentState.selectedOrgId || '',
                                     connectedOrgName: currentState.selectedOrgName || '',
                                     connectedProjectId: currentState.selectedProjectId || '',
-                                    connectedProjectName: currentState.selectedProjectName || ''
-                                },
-                                loading: currentFullState.loading
+                                    connectedProjectName: currentState.selectedProjectName || '',
+                                    databases: currentFullState.connection.databases || [],
+                                    roles: currentFullState.connection.roles || []
+                                }
                             });
 
                             progress.report({ message: "Fetching database information..." });
@@ -409,10 +410,22 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                                 apiService.getDatabases(projectId, branchId),
                                 apiService.getRoles(projectId, branchId)
                             ]);
-                            await Promise.all([
-                                this._stateService.setDatabases(databases),
-                                this._stateService.setRoles(roles)
-                            ]);
+
+                            // Update the connection state with databases and roles
+                            await this._stateService.updateState({
+                                connection: {
+                                    ...currentFullState.connection,
+                                    databases,
+                                    roles,
+                                    connectedOrgId: currentState.selectedOrgId || '',
+                                    connectedOrgName: currentState.selectedOrgName || '',
+                                    connectedProjectId: currentState.selectedProjectId || '',
+                                    connectedProjectName: currentState.selectedProjectName || ''
+                                }
+                            });
+
+                            // Update the view to reflect the new databases and roles
+                            await this.updateView();
                         });
                     } catch (error) {
                         console.error('Error starting proxy:', error);
@@ -428,6 +441,18 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     await this._dockerService.stopContainer();
                     await this._stateService.setIsProxyRunning(false);
                     await this.updateView();
+                    break;
+                case 'resetFromParent':
+                    await vscode.commands.executeCommand('neon-local.resetFromParent');
+                    break;
+                case 'openSqlEditor':
+                    await vscode.commands.executeCommand('neon-local.openSqlEditor');
+                    break;
+                case 'openTableView':
+                    await vscode.commands.executeCommand('neon-local.openTableView');
+                    break;
+                case 'launchPsql':
+                    await vscode.commands.executeCommand('neon-local.launchPsql');
                     break;
                 case 'updateConnectionType':
                     console.log('ConnectViewProvider: Handling connection type update:', {

@@ -37,6 +37,25 @@ export async function activate(context: vscode.ExtensionContext) {
         console.log('Using branch ID from .branches file:', branchId);
         await stateService.setIsProxyRunning(true);
         await stateService.setCurrentlyConnectedBranch(branchId);
+
+        // Fetch and update databases and roles
+        try {
+          const apiService = new NeonApiService();
+          const projectId = await stateService.getCurrentProjectId();
+          if (projectId) {
+            const [databases, roles] = await Promise.all([
+              apiService.getDatabases(projectId, branchId),
+              apiService.getRoles(projectId, branchId)
+            ]);
+            await Promise.all([
+              stateService.setDatabases(databases),
+              stateService.setRoles(roles)
+            ]);
+            console.log('Updated databases and roles on startup');
+          }
+        } catch (error) {
+          console.error('Error fetching databases and roles on startup:', error);
+        }
       } else {
         // Fallback to container info if .branches file doesn't have the ID
         console.log('No branch ID in .branches file, falling back to container info...');
@@ -44,6 +63,25 @@ export async function activate(context: vscode.ExtensionContext) {
         if (containerInfo) {
           await stateService.setIsProxyRunning(true);
           await stateService.setCurrentlyConnectedBranch(containerInfo.branchId);
+
+          // Fetch and update databases and roles
+          try {
+            const apiService = new NeonApiService();
+            const projectId = containerInfo.projectId;
+            if (projectId) {
+              const [databases, roles] = await Promise.all([
+                apiService.getDatabases(projectId, containerInfo.branchId),
+                apiService.getRoles(projectId, containerInfo.branchId)
+              ]);
+              await Promise.all([
+                stateService.setDatabases(databases),
+                stateService.setRoles(roles)
+              ]);
+              console.log('Updated databases and roles on startup (from container info)');
+            }
+          } catch (error) {
+            console.error('Error fetching databases and roles on startup:', error);
+          }
         }
       }
       
@@ -182,9 +220,76 @@ export async function activate(context: vscode.ExtensionContext) {
       }
     }),
     vscode.commands.registerCommand('neon-local.launchPsql', async () => {
-                    const terminal = vscode.window.createTerminal('Neon PSQL');
-                    terminal.show();
-      terminal.sendText('psql "postgres://neon:npg@localhost:5432/neondb?sslmode=require"');
+      try {
+        // Get the current project and branch IDs
+        const projectId = await stateService.getCurrentProjectId();
+        const viewData = await stateService.getViewData();
+        const branchId = viewData.connectionType === 'new' ? viewData.currentlyConnectedBranch : await stateService.getCurrentBranchId();
+        
+        if (!projectId || !branchId) {
+          throw new Error('Project ID or Branch ID not found');
+        }
+
+        // Get available databases and roles
+        const databases = await stateService.getDatabases();
+        const roles = await stateService.getRoles();
+        if (!databases || databases.length === 0) {
+          throw new Error('No databases available');
+        }
+        if (!roles || roles.length === 0) {
+          throw new Error('No roles available');
+        }
+
+        // Prompt user to select a database
+        const selectedDatabase = await vscode.window.showQuickPick(
+          databases.map(db => ({
+            label: db.name,
+            description: `Owner: ${db.owner_name}`,
+            detail: db.created_at ? `Created: ${new Date(db.created_at).toLocaleString()}` : undefined
+          })),
+          {
+            placeHolder: 'Select a database to connect to',
+            ignoreFocusOut: true
+          }
+        );
+
+        if (!selectedDatabase) {
+          return; // User cancelled
+        }
+
+        // Prompt user to select a role
+        const selectedRole = await vscode.window.showQuickPick(
+          roles.map(role => ({
+            label: role.name,
+            description: role.protected ? 'Protected' : undefined
+          })),
+          {
+            placeHolder: 'Select a role to connect as',
+            ignoreFocusOut: true
+          }
+        );
+
+        if (!selectedRole) {
+          return; // User cancelled
+        }
+
+        // Get the role password and compute endpoint
+        const apiService = new NeonApiService();
+        const [password, endpoint] = await Promise.all([
+          apiService.getRolePassword(projectId, branchId, selectedRole.label),
+          apiService.getBranchEndpoint(projectId, branchId)
+        ]);
+
+        // Create the connection string
+        const connectionString = `postgres://${selectedRole.label}:${password}@${endpoint}/${selectedDatabase.label}?sslmode=require`;
+
+        // Launch PSQL with the connection string
+        const terminal = vscode.window.createTerminal('Neon PSQL');
+        terminal.show();
+        terminal.sendText(`psql "${connectionString}"`);
+      } catch (error) {
+        vscode.window.showErrorMessage(`Failed to launch PSQL: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }),
     vscode.commands.registerCommand('neon-local.resetFromParent', async () => {
         try {

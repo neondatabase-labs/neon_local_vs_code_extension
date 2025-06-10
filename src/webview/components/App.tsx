@@ -59,7 +59,14 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
         switch (message.command) {
           case 'updateViewData':
             console.log('Handling updateViewData:', message.data);
-            updateState(message.data);
+            updateState({
+              ...message.data,
+              connection: {
+                ...message.data.connection,
+                databases: message.data.databases || [],
+                roles: message.data.roles || []
+              }
+            });
             break;
             
           case 'clearState':
@@ -264,6 +271,10 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
     });
   };
 
+  const handleAction = (action: string) => {
+    vscode.postMessage({ command: action });
+  };
+
   console.log('state', state.connection);
   return (
     <div className="app">
@@ -307,6 +318,33 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
 
           <div className="section proxy-buttons">
             <button onClick={handleStopProxy} className="stop-button">Disconnect</button>
+            <div className="action-group">
+              <button
+                className="action-button"
+                onClick={() => handleAction('resetFromParent')}
+                style={{ display: state.connection.type === 'new' ? 'block' : 'none' }}
+              >
+                Reset from Parent Branch
+              </button>
+              <button
+                className="action-button"
+                onClick={() => handleAction('openSqlEditor')}
+              >
+                Open SQL Editor
+              </button>
+              <button
+                className="action-button"
+                onClick={() => handleAction('openTableView')}
+              >
+                Open Table View
+              </button>
+              <button
+                className="action-button"
+                onClick={() => handleAction('launchPsql')}
+              >
+                Launch PSQL
+              </button>
+            </div>
           </div>
         </>
       ) : (

@@ -88,6 +88,7 @@ export interface IStateService {
     getDatabases(): Promise<NeonDatabase[]>;
     setDatabases(databases: NeonDatabase[]): Promise<void>;
     setRoles(roles: NeonRole[]): Promise<void>;
+    getRoles(): Promise<NeonRole[]>;
 }
 
 export class StateService implements IStateService {
@@ -552,6 +553,10 @@ export class StateService implements IStateService {
 
     public async getDatabases(): Promise<NeonDatabase[]> {
         return this._state.connection.databases;
+    }
+
+    public async getRoles(): Promise<NeonRole[]> {
+        return this._state.connection.roles;
     }
 
     private async updateViewData(): Promise<void> {

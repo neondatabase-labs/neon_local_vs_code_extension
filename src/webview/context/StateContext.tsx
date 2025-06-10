@@ -41,7 +41,8 @@ export function StateProvider({ children, vscode }: StateProviderProps) {
       selectedBranchId: undefined,
       selectedBranchName: undefined,
       parentBranchId: undefined,
-      parentBranchName: undefined
+      parentBranchName: undefined,
+      persistentApiToken: undefined
     },
     connected: false,
     isStarting: false,
@@ -111,7 +112,9 @@ export function StateProvider({ children, vscode }: StateProviderProps) {
       ...newState,
       connection: {
         ...prevState.connection,
-        ...(newState.connection || {})
+        ...(newState.connection || {}),
+        databases: newState.databases || prevState.connection.databases || [],
+        roles: newState.roles || prevState.connection.roles || []
       }
     }));
   };
