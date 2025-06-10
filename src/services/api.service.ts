@@ -79,19 +79,25 @@ export class NeonApiService {
         return instance;
     }
 
-    private async ensureApiClient(): Promise<AxiosInstance> {
-        if (this.apiClient) {
+    private async ensureApiClient(forNewBranch: boolean = false): Promise<AxiosInstance> {
+        if (this.apiClient && !forNewBranch) {
             return this.apiClient;
         }
 
         const config = vscode.workspace.getConfiguration('neonLocal');
         const apiKey = config.get<string>('apiKey');
+        const persistentApiToken = forNewBranch ? config.get<string>('persistentApiToken') : undefined;
         
-        if (!apiKey) {
+        if (forNewBranch && !persistentApiToken) {
+            throw new Error('Persistent API token required for creating new branches.');
+        }
+
+        if (!apiKey && !persistentApiToken) {
             throw new Error('Authentication required. Please sign in.');
         }
 
-        this.apiClient = await this.createApiClient(apiKey);
+        const token = forNewBranch ? persistentApiToken : apiKey;
+        this.apiClient = await this.createApiClient(token!);
         return this.apiClient;
     }
 
@@ -203,22 +209,12 @@ export class NeonApiService {
         }
     }
 
-    public async createBranch(projectId: string, options: {
-        name: string;
-        parentId?: string;
-    }): Promise<NeonBranch> {
-        try {
-            const client = await this.ensureApiClient();
-            const response = await client.post(`/projects/${projectId}/branches`, {
-                branch: {
-                    name: options.name,
-                    parent_id: options.parentId
-                }
-            });
-            return response.data;
-        } catch (error) {
-            throw new Error(`Failed to create branch: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
+    public async createBranch(projectId: string, parentBranchId: string): Promise<NeonBranch> {
+        const client = await this.ensureApiClient(true);
+        const response = await client.post(`/projects/${projectId}/branches`, {
+            parent_id: parentBranchId
+        });
+        return response.data;
     }
 
     public async getDatabases(projectId: string, branchId: string): Promise<NeonDatabase[]> {

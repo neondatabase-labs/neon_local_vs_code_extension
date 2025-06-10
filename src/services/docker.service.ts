@@ -88,6 +88,7 @@ export class DockerService {
             const config = vscode.workspace.getConfiguration('neonLocal');
             const apiKey = config.get<string>('apiKey');
             const refreshToken = config.get<string>('refreshToken');
+            const persistentApiToken = config.get<string>('persistentApiToken');
 
             if (!apiKey) {
                 throw new Error('API key not found. Please sign in first.');
@@ -95,6 +96,10 @@ export class DockerService {
 
             if (!refreshToken) {
                 throw new Error('Refresh token not found. Please sign in again.');
+            }
+
+            if (!isExisting && !persistentApiToken) {
+                throw new Error('Persistent API token required for creating new branches.');
             }
 
             // Pull the latest image
@@ -107,7 +112,7 @@ export class DockerService {
                 Env: [
                     // Ensure driver is exactly 'postgres' or 'serverless'
                     `DRIVER=${driver === 'serverless' ? 'serverless' : 'postgres'}`,
-                    `NEON_API_KEY=${apiKey}`,
+                    `NEON_API_KEY=${isExisting ? apiKey : persistentApiToken}`,
                     `NEON_REFRESH_TOKEN=${refreshToken}`,
                     `NEON_PROJECT_ID=${projectId}`,
                     'CLIENT=vscode',

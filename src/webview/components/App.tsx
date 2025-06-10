@@ -1,9 +1,31 @@
 import React, { useEffect, useRef } from 'react';
-import { ViewData, NeonOrg, NeonProject, NeonBranch } from '../../types';
+import { ViewData, NeonOrg, NeonProject, NeonBranch, NeonDatabase, NeonRole } from '../../types';
 import { useStateService } from '../context/StateContext';
 
 interface MainAppProps {
   vscode: any;
+}
+
+interface ConnectionState {
+    connected: boolean;
+    isStarting: boolean;
+    type: 'existing' | 'new';
+    driver: 'serverless' | 'postgres';
+    connectionInfo: string;
+    currentlyConnectedBranch: string;
+    selectedDatabase: string;
+    selectedRole: string;
+    databases: NeonDatabase[];
+    roles: NeonRole[];
+    selectedOrgId: string;
+    selectedOrgName: string;
+    selectedProjectId?: string;
+    selectedProjectName?: string;
+    selectedBranchId?: string;
+    selectedBranchName?: string;
+    parentBranchId?: string;
+    parentBranchName?: string;
+    persistentApiToken?: string;
 }
 
 export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
@@ -65,10 +87,22 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
 
   const handleConnectionTypeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const type = event.target.value as 'existing' | 'new';
-    updateState({ connection: { ...state.connection, type } });
     vscode.postMessage({
-      command: 'updateConnectionType',
-      connectionType: type
+        command: 'updateConnectionType',
+        connectionType: type
+    });
+  };
+
+  const handleImportToken = async () => {
+    vscode.postMessage({
+      command: 'importToken'
+    });
+  };
+
+  const handleGenerateToken = () => {
+    vscode.postMessage({
+      command: 'openNeonConsole',
+      path: '/app/settings#api-keys',
     });
   };
 
@@ -78,37 +112,34 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
     const selectedOrg = state.orgs.find(org => org.id === orgId);
     console.log('Found org:', selectedOrg);
     
-    // Always update state and notify extension, even for personal account (empty string ID)
+    // Clear all downstream selections and update state
     updateState({
-      connection: {
-        ...state.connection,
-        selectedOrgId: orgId,
-        selectedOrgName: selectedOrg?.name || 'Personal account'
-      },
-      projects: [],
-      branches: [],  // Clear branches
-      selectedProjectId: undefined,
-      selectedProjectName: undefined,
-      selectedBranchId: undefined,
-      selectedBranchName: undefined,
-      parentBranchId: undefined,
-      parentBranchName: undefined,
-      loading: {
-        ...state.loading,
-        projects: true,
-        branches: false  // Reset branches loading state
-      }
+        ...state,
+        connection: {
+            ...state.connection,
+            selectedOrgId: orgId,
+            selectedOrgName: selectedOrg?.name || 'Personal account',
+            selectedProjectId: undefined,
+            selectedProjectName: undefined,
+            selectedBranchId: undefined,
+            selectedBranchName: undefined,
+            parentBranchId: undefined,
+            parentBranchName: undefined
+        },
+        projects: [],
+        branches: [],
+        loading: {
+            ...state.loading,
+            projects: true,
+            branches: false
+        }
     });
     
-    console.log('Sending message to extension:', {
-      command: 'selectOrg',
-      orgId,
-      orgName: selectedOrg?.name || 'Personal account'
-    });
+    // Notify the extension
     vscode.postMessage({
-      command: 'selectOrg',
-      orgId,
-      orgName: selectedOrg?.name || 'Personal account'
+        command: 'selectOrg',
+        orgId,
+        orgName: selectedOrg?.name || 'Personal account'
     });
   };
 
@@ -293,96 +324,112 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
               </select>
             </div>
 
-            <div className="section">
-              <label htmlFor="org">Organization</label>
-              <select
-                id="org"
-                value={state.connection.selectedOrgId ?? 'personal_account'}
-                onChange={handleOrgSelection}
-              >
-                <option value="" disabled>Select an organization</option>
-                {state.orgs.map((org) => (
-                  <option key={org.id} value={org.id}>
-                    {org.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="section">
-              <label htmlFor="project">Project</label>
-              <select
-                id="project"
-                value={state.connection.selectedProjectId || ""}
-                onChange={handleProjectSelection}
-                disabled={state.connection.selectedOrgId === undefined}
-              >
-                <option value="" disabled>Select a project</option>
-                {state.projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {state.connection.type === 'existing' ? (
-              <div className="section">
-                <label htmlFor="branch">Branch</label>
-                <select
-                  id="branch"
-                  value={state.connection.selectedBranchId || ""}
-                  onChange={handleBranchSelection}
-                  disabled={!state.connection.selectedProjectId}
-                >
-                  <option value="" disabled>Select a branch</option>
-                  {state.branches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
-                    </option>
-                  ))}
-                </select>
+            {state.connection.type === 'new' && !state.connection.persistentApiToken ? (
+              <div className="token-requirement">
+                <p>Ephemeral branches require a persistent API token. Generate a persistent API token and import it to connect to ephemeral Neon branches.</p>
+                <div className="token-actions">
+                  <button onClick={handleGenerateToken} className="token-button">
+                    Generate API Token
+                  </button>
+                  <button onClick={handleImportToken} className="token-button">
+                    Import Token
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="section">
-                <label htmlFor="parent-branch">Parent Branch</label>
-                <select
-                  id="parent-branch"
-                  value={state.connection.parentBranchId || ""}
-                  onChange={handleBranchSelection}
-                  disabled={!state.connection.selectedProjectId}
-                >
-                  <option value="" disabled>Select a parent branch</option>
-                  {state.branches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <>
+                <div className="section">
+                  <label htmlFor="org">Organization</label>
+                  <select
+                    id="org"
+                    value={state.connection.selectedOrgId ?? 'personal_account'}
+                    onChange={handleOrgSelection}
+                  >
+                    <option value="" disabled>Select an organization</option>
+                    {state.orgs.map((org) => (
+                      <option key={org.id} value={org.id}>
+                        {org.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="section">
+                  <label htmlFor="project">Project</label>
+                  <select
+                    id="project"
+                    value={state.connection.selectedProjectId || ""}
+                    onChange={handleProjectSelection}
+                    disabled={!state.connection.selectedOrgId || state.connection.selectedOrgId === ""}
+                  >
+                    <option value="" disabled>Select a project</option>
+                    {state.projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {state.connection.type === 'existing' ? (
+                  <div className="section">
+                    <label htmlFor="branch">Branch</label>
+                    <select
+                      id="branch"
+                      value={state.connection.selectedBranchId || ""}
+                      onChange={handleBranchSelection}
+                      disabled={!state.connection.selectedProjectId}
+                    >
+                      <option value="" disabled>Select a branch</option>
+                      {state.branches.map((branch) => (
+                        <option key={branch.id} value={branch.id}>
+                          {branch.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="section">
+                    <label htmlFor="parent-branch">Parent Branch</label>
+                    <select
+                      id="parent-branch"
+                      value={state.connection.parentBranchId || ""}
+                      onChange={handleBranchSelection}
+                      disabled={!state.connection.selectedProjectId}
+                    >
+                      <option value="" disabled>Select a parent branch</option>
+                      {state.branches.map((branch) => (
+                        <option key={branch.id} value={branch.id}>
+                          {branch.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="section">
+                  <label htmlFor="driver">Driver</label>
+                  <select
+                    id="driver"
+                    value={state.connection.driver}
+                    onChange={handleDriverSelect}
+                  >
+                    <option value="serverless">Neon Serverless</option>
+                    <option value="postgres">PostgreSQL</option>
+                  </select>
+                </div>
+
+                <div className="section proxy-buttons">
+                  <button
+                    onClick={handleStartProxy}
+                    disabled={!state.connection.selectedProjectId || (!state.connection.selectedBranchId && !state.connection.parentBranchId)}
+                    className="start-button"
+                  >
+                    Connect
+                  </button>
+                </div>
+              </>
             )}
-
-            <div className="section">
-              <label htmlFor="driver">Driver</label>
-              <select
-                id="driver"
-                value={state.connection.driver}
-                onChange={handleDriverSelect}
-              >
-                <option value="serverless">Neon Serverless</option>
-                <option value="postgres">PostgreSQL</option>
-              </select>
-            </div>
-
-            <div className="section proxy-buttons">
-              <button
-                onClick={handleStartProxy}
-                disabled={!state.connection.selectedProjectId || (!state.connection.selectedBranchId && !state.connection.parentBranchId)}
-                className="start-button"
-              >
-                Connect
-              </button>
-            </div>
           </div>
         </>
       )}

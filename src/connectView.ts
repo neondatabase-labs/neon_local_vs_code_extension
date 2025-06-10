@@ -39,7 +39,9 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         this._dockerService = dockerService;
         this._extensionContext = extensionContext;
         this._configurationChangeListener = vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration('neonLocal.refreshToken') || e.affectsConfiguration('neonLocal.apiKey')) {
+            if (e.affectsConfiguration('neonLocal.refreshToken') || 
+                e.affectsConfiguration('neonLocal.apiKey') ||
+                e.affectsConfiguration('neonLocal.persistentApiToken')) {
                 this.debouncedUpdateView();
             }
         });
@@ -82,9 +84,11 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             try {
                 const apiKey = ConfigurationManager.getConfigValue('apiKey');
                 const refreshToken = ConfigurationManager.getConfigValue('refreshToken');
+                const persistentApiToken = ConfigurationManager.getConfigValue('persistentApiToken');
                 console.log('ConnectViewProvider: Initial token check', { 
                     hasApiKey: !!apiKey, 
-                    hasRefreshToken: !!refreshToken 
+                    hasRefreshToken: !!refreshToken,
+                    hasPersistentApiToken: !!persistentApiToken
                 });
 
                 if (!apiKey && !refreshToken) {
@@ -93,6 +97,11 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                         this._view.webview.html = getSignInHtml();
                     }
                     return;
+                }
+
+                // Update state with persistent API token if it exists
+                if (persistentApiToken) {
+                    await this._stateService.setPersistentApiToken(persistentApiToken);
                 }
 
                 const apiService = new NeonApiService();
@@ -183,6 +192,22 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 case 'signIn':
                     await this.handleSignIn();
                     break;
+                case 'importToken':
+                    const token = await vscode.window.showInputBox({
+                        prompt: 'Enter your Neon persistent API token',
+                        password: true,
+                        ignoreFocusOut: true
+                    });
+
+                    if (token) {
+                        await ConfigurationManager.updateConfig('persistentApiToken', token);
+                        await this._stateService.setPersistentApiToken(token);
+                        await this.updateView();
+                    }
+                    break;
+                case 'openNeonConsole':
+                    await vscode.env.openExternal(vscode.Uri.parse(`https://console.neon.tech${message.path}`));
+                    break;
                 case 'selectOrg':
                     // Get current state data
                     const viewData = await this._stateService.getViewData();
@@ -192,6 +217,8 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                         vscode.window.showErrorMessage('Selected organization not found');
                         return;
                     }
+                    
+                    // Clear all downstream selections
                     await this._stateService.updateState({
                         selection: {
                             orgs: viewData.orgs,
@@ -219,6 +246,8 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                             vscode.window.showErrorMessage(`Failed to fetch projects: ${error.message}`);
                         }
                     }
+                    
+                    // Force UI refresh to clear dropdowns
                     await this.updateView();
                     break;
                 case 'selectProject':
@@ -267,43 +296,42 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                         vscode.window.showErrorMessage('Selected branch not found');
                         return;
                     }
-                    await this._stateService.setCurrentBranch(message.branchId);
-                    await this._stateService.updateState({
-                        selection: {
-                            orgs: branchState.orgs,
-                            projects: branchState.projects,
-                            branches: branchState.branches,
-                            selectedOrgId: branchState.selectedOrgId || '',
-                            selectedOrgName: branchState.selectedOrgName || '',
-                            selectedProjectId: branchState.selectedProjectId,
-                            selectedProjectName: branchState.selectedProjectName,
-                            selectedBranchId: message.branchId,
-                            selectedBranchName: selectedBranch.name,
-                            parentBranchId: branchState.parentBranchId,
-                            parentBranchName: branchState.parentBranchName
-                        }
-                    });
 
-                    // Only fetch databases and roles after branch selection
-                    try {
-                        const apiService = new NeonApiService();
-                        const projectId = branchState.selectedProjectId;
-                        if (!projectId) {
-                            throw new Error('No project selected');
-                        }
-                        const [databases, roles] = await Promise.all([
-                            apiService.getDatabases(projectId, message.branchId),
-                            apiService.getRoles(projectId, message.branchId)
-                        ]);
-                        await Promise.all([
-                            this._stateService.setDatabases(databases),
-                            this._stateService.setRoles(roles)
-                        ]);
-                    } catch (error) {
-                        console.error('Error fetching databases and roles:', error);
-                        if (error instanceof Error) {
-                            vscode.window.showErrorMessage(`Failed to fetch databases and roles: ${error.message}`);
-                        }
+                    // Handle both regular branch and parent branch selection based on connection type
+                    if (branchState.connectionType === 'existing') {
+                        await this._stateService.setCurrentBranch(message.branchId);
+                        await this._stateService.updateState({
+                            selection: {
+                                orgs: branchState.orgs,
+                                projects: branchState.projects,
+                                branches: branchState.branches,
+                                selectedOrgId: branchState.selectedOrgId || '',
+                                selectedOrgName: branchState.selectedOrgName || '',
+                                selectedProjectId: branchState.selectedProjectId,
+                                selectedProjectName: branchState.selectedProjectName,
+                                selectedBranchId: message.branchId,
+                                selectedBranchName: selectedBranch.name,
+                                parentBranchId: branchState.parentBranchId,
+                                parentBranchName: branchState.parentBranchName
+                            }
+                        });
+                    } else {
+                        await this._stateService.setParentBranchId(message.branchId);
+                        await this._stateService.updateState({
+                            selection: {
+                                orgs: branchState.orgs,
+                                projects: branchState.projects,
+                                branches: branchState.branches,
+                                selectedOrgId: branchState.selectedOrgId || '',
+                                selectedOrgName: branchState.selectedOrgName || '',
+                                selectedProjectId: branchState.selectedProjectId,
+                                selectedProjectName: branchState.selectedProjectName,
+                                selectedBranchId: branchState.selectedBranchId,
+                                selectedBranchName: branchState.selectedBranchName,
+                                parentBranchId: message.branchId,
+                                parentBranchName: selectedBranch.name
+                            }
+                        });
                     }
                     await this.updateView();
                     break;
@@ -480,9 +508,11 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         try {
             const apiKey = ConfigurationManager.getConfigValue('apiKey');
             const refreshToken = ConfigurationManager.getConfigValue('refreshToken');
+            const persistentApiToken = ConfigurationManager.getConfigValue('persistentApiToken');
             console.log('ConnectViewProvider: Checked tokens', { 
                 hasApiKey: !!apiKey, 
-                hasRefreshToken: !!refreshToken 
+                hasRefreshToken: !!refreshToken,
+                hasPersistentApiToken: !!persistentApiToken
             });
 
             if (!apiKey && !refreshToken) {
@@ -507,7 +537,8 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 connectionType: viewData.connectionType,
                 hasOrgs: viewData.orgs?.length > 0,
                 hasProjects: viewData.projects?.length > 0,
-                hasBranches: viewData.branches?.length > 0
+                hasBranches: viewData.branches?.length > 0,
+                hasPersistentApiToken: !!viewData.connection.persistentApiToken
             });
 
             // If we have a pending connection type change, ensure it's respected

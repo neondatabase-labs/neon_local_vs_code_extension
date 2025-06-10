@@ -26,7 +26,12 @@ export class StorageService {
                 displayConnectionInfo: '',
                 currentlyConnectedBranch: await this.get('neonLocal.currentlyConnectedBranch', ''),
                 selectedDatabase: await this.get('neonLocal.selectedDatabase', ''),
-                selectedRole: await this.get('neonLocal.selectedRole', '')
+                selectedRole: await this.get('neonLocal.selectedRole', ''),
+                persistentApiToken: await this.get('neonLocal.persistentApiToken', undefined),
+                connectedOrgId: '',
+                connectedOrgName: '',
+                connectedProjectId: '',
+                connectedProjectName: ''
             },
             selection: {
                 orgs: [],
@@ -39,7 +44,9 @@ export class StorageService {
                 selectedBranchId: await this.get('neonLocal.currentBranch', ''),
                 selectedBranchName: '',
                 parentBranchId: await this.get('neonLocal.parentBranchId', ''),
-                parentBranchName: ''
+                parentBranchName: '',
+                selectedConnectionType: await this.get('neonLocal.selectedConnectionType', 'existing'),
+                selectedDriver: await this.get('neonLocal.selectedDriver', 'postgres')
             }
         };
     }

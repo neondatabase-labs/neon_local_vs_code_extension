@@ -53,6 +53,7 @@ export interface ViewData {
         selectedBranchName?: string;
         parentBranchId?: string;
         parentBranchName?: string;
+        persistentApiToken?: string;
     };
     connected: boolean;
     isStarting: boolean;
@@ -135,6 +136,7 @@ export interface NeonConfiguration {
     driver?: 'postgres' | 'serverless';
     deleteOnStop?: boolean;
     connectionType?: 'existing' | 'new';
+    persistentApiToken?: string;
 }
 
 export interface DockerConfig {

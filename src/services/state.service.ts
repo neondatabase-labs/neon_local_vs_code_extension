@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ViewData, NeonBranch, NeonOrg, NeonProject, NeonDatabase, NeonRole } from '../types';
 import { FileService } from './file.service';
+import { ConfigurationManager } from '../utils';
 
 interface ConnectionState {
     connected: boolean;
@@ -17,6 +18,7 @@ interface ConnectionState {
     selectedRole: string;
     databases: NeonDatabase[];
     roles: NeonRole[];
+    persistentApiToken?: string;
 }
 
 interface SelectionState {
@@ -61,6 +63,8 @@ export interface IStateService {
     selectedDatabase: string;
     selectedRole: string;
     connectionType: 'existing' | 'new';
+    persistentApiToken: string | undefined;
+    setPersistentApiToken(value: string): Promise<void>;
     setSelectedDriver(value: 'postgres' | 'serverless'): Promise<void>;
     setIsProxyRunning(value: boolean): Promise<void>;
     setIsStarting(value: boolean): Promise<void>;
@@ -105,7 +109,8 @@ export class StateService implements IStateService {
             selectedDatabase: '',
             selectedRole: '',
             databases: [],
-            roles: []
+            roles: [],
+            persistentApiToken: undefined
         },
         selection: {
             orgs: [],
@@ -137,34 +142,32 @@ export class StateService implements IStateService {
     }
 
     private async loadState() {
-        this._state.loading = {
-            orgs: true,
-            projects: true,
-            branches: true
-        };
-
-        const connectionType = this.state.get('neonLocal.connectionType', 'existing');
-        const selectedDriver = this.state.get('neonLocal.selectedDriver', 'postgres');
-        const selectedDatabase = this.state.get('neonLocal.selectedDatabase', '');
-        const selectedRole = this.state.get('neonLocal.selectedRole', '');
-        const currentlyConnectedBranch = this.state.get('neonLocal.currentlyConnectedBranch', '');
-        const connectionInfo = this.state.get('neonLocal.connectionInfo', '');
-        const selectedOrgId = this.state.get('neonLocal.currentOrg', '');
-        const selectedOrgName = this.state.get('neonLocal.selectedOrgName', '');
-        const selectedProjectId = this.state.get('neonLocal.currentProject', '');
-        const selectedProjectName = this.state.get('neonLocal.selectedProjectName', '');
-        const selectedBranchId = this.state.get('neonLocal.currentBranch', '');
-        const parentBranchId = this.state.get('neonLocal.parentBranchId', '');
-        const connectedOrgId = this.state.get('neonLocal.connectedOrgId', '');
-        const connectedOrgName = this.state.get('neonLocal.connectedOrgName', '');
-        const connectedProjectId = this.state.get('neonLocal.connectedProjectId', '');
-        const connectedProjectName = this.state.get('neonLocal.connectedProjectName', '');
+        const config = vscode.workspace.getConfiguration('neonLocal');
+        const connectionType = await this.state.get<'existing' | 'new'>('neonLocal.connectionType', 'existing');
+        const selectedDriver = config.get<string>('driver', 'postgres');
+        const connectionInfo = await this.state.get<string>('neonLocal.connectionInfo', '');
+        const currentlyConnectedBranch = await this.state.get<string>('neonLocal.currentlyConnectedBranch', '');
+        const selectedDatabase = await this.state.get<string>('neonLocal.selectedDatabase', '');
+        const selectedRole = await this.state.get<string>('neonLocal.selectedRole', '');
+        const selectedOrgId = await this.state.get<string>('neonLocal.selectedOrgId', '');
+        const selectedOrgName = await this.state.get<string>('neonLocal.selectedOrgName', '');
+        const selectedProjectId = await this.state.get<string>('neonLocal.selectedProjectId', '');
+        const selectedProjectName = await this.state.get<string>('neonLocal.selectedProjectName', '');
+        const selectedBranchId = await this.state.get<string>('neonLocal.selectedBranchId', '');
+        const selectedBranchName = await this.state.get<string>('neonLocal.selectedBranchName', '');
+        const parentBranchId = await this.state.get<string>('neonLocal.parentBranchId', '');
+        const parentBranchName = await this.state.get<string>('neonLocal.parentBranchName', '');
+        const connectedOrgId = await this.state.get<string>('neonLocal.connectedOrgId', '');
+        const connectedOrgName = await this.state.get<string>('neonLocal.connectedOrgName', '');
+        const connectedProjectId = await this.state.get<string>('neonLocal.connectedProjectId', '');
+        const connectedProjectName = await this.state.get<string>('neonLocal.connectedProjectName', '');
+        const persistentApiToken = config.get<string>('persistentApiToken');
 
         this._state = {
             connection: {
                 connected: false,
                 isStarting: false,
-                type: connectionType as 'existing' | 'new',
+                type: connectionType,
                 driver: selectedDriver as 'postgres' | 'serverless',
                 connectionInfo,
                 currentlyConnectedBranch,
@@ -175,7 +178,8 @@ export class StateService implements IStateService {
                 selectedDatabase,
                 selectedRole,
                 databases: [],
-                roles: []
+                roles: [],
+                persistentApiToken
             },
             selection: {
                 orgs: [],
@@ -186,9 +190,9 @@ export class StateService implements IStateService {
                 selectedProjectId: selectedProjectId || undefined,
                 selectedProjectName: selectedProjectName || undefined,
                 selectedBranchId: selectedBranchId || undefined,
-                selectedBranchName: undefined,
+                selectedBranchName: selectedBranchName || undefined,
                 parentBranchId: parentBranchId || undefined,
-                parentBranchName: undefined
+                parentBranchName: parentBranchName || undefined
             },
             loading: {
                 orgs: false,
@@ -202,19 +206,24 @@ export class StateService implements IStateService {
 
     private async saveState() {
         await Promise.all([
-            this.state.update('neonLocal.currentOrg', this._state.selection.selectedOrgId),
-            this.state.update('neonLocal.selectedOrgName', this._state.selection.selectedOrgName),
-            this.state.update('neonLocal.currentProject', this._state.selection.selectedProjectId),
-            this.state.update('neonLocal.selectedProjectName', this._state.selection.selectedProjectName),
-            this.state.update('neonLocal.currentBranch', this._state.selection.selectedBranchId),
-            this.state.update('neonLocal.parentBranchId', this._state.selection.parentBranchId),
             this.state.update('neonLocal.connectionType', this._state.connection.type),
+            this.state.update('neonLocal.selectedOrgId', this._state.selection.selectedOrgId),
+            this.state.update('neonLocal.selectedOrgName', this._state.selection.selectedOrgName),
+            this.state.update('neonLocal.selectedProjectId', this._state.selection.selectedProjectId),
+            this.state.update('neonLocal.selectedProjectName', this._state.selection.selectedProjectName),
+            this.state.update('neonLocal.selectedBranchId', this._state.selection.selectedBranchId),
+            this.state.update('neonLocal.selectedBranchName', this._state.selection.selectedBranchName),
+            this.state.update('neonLocal.parentBranchId', this._state.selection.parentBranchId),
+            this.state.update('neonLocal.parentBranchName', this._state.selection.parentBranchName),
             this.state.update('neonLocal.selectedDriver', this._state.connection.driver),
             this.state.update('neonLocal.selectedDatabase', this._state.connection.selectedDatabase),
             this.state.update('neonLocal.selectedRole', this._state.connection.selectedRole),
             this.state.update('neonLocal.currentlyConnectedBranch', this._state.connection.currentlyConnectedBranch),
-           
-            this.state.update('neonLocal.connectionInfo', this._state.connection.connectionInfo)
+            this.state.update('neonLocal.connectionInfo', this._state.connection.connectionInfo),
+            this.state.update('neonLocal.connectedOrgId', this._state.connection.connectedOrgId),
+            this.state.update('neonLocal.connectedOrgName', this._state.connection.connectedOrgName),
+            this.state.update('neonLocal.connectedProjectId', this._state.connection.connectedProjectId),
+            this.state.update('neonLocal.connectedProjectName', this._state.connection.connectedProjectName)
         ]);
     }
 
@@ -327,10 +336,12 @@ export class StateService implements IStateService {
     }
 
     async setParentBranchId(value: string): Promise<void> {
+        const branch = this._state.selection.branches.find(b => b.id === value);
         await this.updateState({
             selection: {
                 ...this._state.selection,
-                parentBranchId: value
+                parentBranchId: value,
+                parentBranchName: branch?.name
             }
         });
     }
@@ -356,7 +367,12 @@ export class StateService implements IStateService {
                 selectedDatabase: '',
                 selectedRole: '',
                 databases: [],
-                roles: []
+                roles: [],
+                connectedOrgId: '',
+                connectedOrgName: '',
+                connectedProjectId: '',
+                connectedProjectName: '',
+                persistentApiToken: undefined
             },
             selection: {
                 orgs: [],
@@ -381,7 +397,28 @@ export class StateService implements IStateService {
     }
 
     public async getViewData(): Promise<ViewData> {
-        const viewData: ViewData = {
+        return {
+            connection: {
+                connected: this._state.connection.connected,
+                isStarting: this._state.connection.isStarting,
+                type: this._state.connection.type,
+                driver: this._state.connection.driver,
+                connectionInfo: this._state.connection.connectionInfo,
+                currentlyConnectedBranch: this._state.connection.currentlyConnectedBranch,
+                selectedDatabase: this._state.connection.selectedDatabase,
+                selectedRole: this._state.connection.selectedRole,
+                databases: this._state.connection.databases,
+                roles: this._state.connection.roles,
+                selectedOrgId: this._state.selection.selectedOrgId || '',
+                selectedOrgName: this._state.selection.selectedOrgName || '',
+                selectedProjectId: this._state.selection.selectedProjectId,
+                selectedProjectName: this._state.selection.selectedProjectName,
+                selectedBranchId: this._state.selection.selectedBranchId,
+                selectedBranchName: this._state.selection.selectedBranchName,
+                parentBranchId: this._state.selection.parentBranchId,
+                parentBranchName: this._state.selection.parentBranchName,
+                persistentApiToken: this._state.connection.persistentApiToken
+            },
             connected: this._state.connection.connected,
             isStarting: this._state.connection.isStarting,
             connectionType: this._state.connection.type,
@@ -403,21 +440,8 @@ export class StateService implements IStateService {
             selectedBranchName: this._state.selection.selectedBranchName,
             parentBranchId: this._state.selection.parentBranchId,
             parentBranchName: this._state.selection.parentBranchName,
-            loading: this._state.loading,
-            isExplicitUpdate: false,
-            connection: {
-                ...this._state.connection,
-                selectedOrgId: this._state.selection.selectedOrgId,
-                selectedOrgName: this._state.selection.selectedOrgName,
-                selectedProjectId: this._state.selection.selectedProjectId,
-                selectedProjectName: this._state.selection.selectedProjectName,
-                selectedBranchId: this._state.selection.selectedBranchId,
-                selectedBranchName: this._state.selection.selectedBranchName,
-                parentBranchId: this._state.selection.parentBranchId,
-                parentBranchName: this._state.selection.parentBranchName
-            }
+            loading: this._state.loading
         };
-        return viewData;
     }
 
     public async getBranchIdFromFile(): Promise<string> {
@@ -535,5 +559,15 @@ export class StateService implements IStateService {
         // Notify any listeners that the view data has changed
         const viewData = await this.getViewData();
         await vscode.commands.executeCommand('neonLocal.viewDataChanged', viewData);
+    }
+
+    public get persistentApiToken(): string | undefined {
+        return this._state.connection.persistentApiToken;
+    }
+
+    public async setPersistentApiToken(value: string): Promise<void> {
+        this._state.connection.persistentApiToken = value;
+        await ConfigurationManager.updateConfig('persistentApiToken', value);
+        await this.updateViewData();
     }
 } 

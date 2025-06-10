@@ -101,6 +101,11 @@
           "description": "Type of connection to create",
           "scope": "application"
         },
+        "neonLocal.persistentApiToken": {
+          "type": "string",
+          "description": "Persistent API token for creating new branches",
+          "scope": "application"
+        },
         "neonLocal.workspacePath": {
           "type": "string",
           "description": "Absolute path to the workspace root directory"

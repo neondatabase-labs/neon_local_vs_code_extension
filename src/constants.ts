@@ -10,7 +10,8 @@ export const CONFIG = {
         PROJECT_ID: 'projectId',
         DRIVER: 'driver',
         DELETE_ON_STOP: 'deleteOnStop',
-        CONNECTION_TYPE: 'connectionType'
+        CONNECTION_TYPE: 'connectionType',
+        PERSISTENT_API_TOKEN: 'persistentApiToken'
     }
 } as const;
 
