@@ -360,13 +360,17 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
 
                             progress.report({ message: "Updating connection state..." });
 
-                            // Update the state with the current branch information
+                            // Only set currentlyConnectedBranch if it's not already set from .branches file
+                            const currentlyConnectedBranch = await this._stateService.currentlyConnectedBranch;
+                            if (!currentlyConnectedBranch) {
+                                const branchToConnect = message.isExisting ? message.branchId : message.parentBranchId;
+                                await this._stateService.setCurrentlyConnectedBranch(branchToConnect);
+                            }
+
                             if (message.isExisting) {
                                 await this._stateService.setCurrentBranch(message.branchId);
-                                await this._stateService.setCurrentlyConnectedBranch(message.branchId);
                             } else {
                                 await this._stateService.setParentBranchId(message.parentBranchId);
-                                await this._stateService.setCurrentlyConnectedBranch(message.parentBranchId);
                             }
 
                             // Preserve the current state
@@ -386,16 +390,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                                     parentBranchName: currentState.parentBranchName
                                 },
                                 connection: {
-                                    connected: currentFullState.connected,
-                                    isStarting: currentFullState.isStarting,
-                                    type: currentFullState.connectionType,
-                                    driver: currentFullState.selectedDriver,
-                                    connectionInfo: currentFullState.connectionInfo,
-                                    currentlyConnectedBranch: currentFullState.currentlyConnectedBranch,
-                                    selectedDatabase: currentFullState.selectedDatabase,
-                                    selectedRole: currentFullState.selectedRole,
-                                    databases: currentFullState.databases,
-                                    roles: currentFullState.roles,
+                                    ...currentFullState.connection,
                                     connectedOrgId: currentState.selectedOrgId || '',
                                     connectedOrgName: currentState.selectedOrgName || '',
                                     connectedProjectId: currentState.selectedProjectId || '',

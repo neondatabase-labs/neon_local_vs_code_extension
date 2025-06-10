@@ -74,125 +74,54 @@ export class DockerService {
         }
     }
 
-    async startContainer(options: {
+    public async startContainer(options: {
         branchId: string;
         driver: string;
         isExisting: boolean;
         context: vscode.ExtensionContext;
         projectId: string;
     }): Promise<void> {
-        const { branchId, driver, isExisting, context, projectId } = options;
-
         try {
-            // Get API key and refresh token from configuration
-            const config = vscode.workspace.getConfiguration('neonLocal');
-            const apiKey = config.get<string>('apiKey');
-            const refreshToken = config.get<string>('refreshToken');
-            const persistentApiToken = config.get<string>('persistentApiToken');
-
-            if (!apiKey) {
-                throw new Error('API key not found. Please sign in first.');
-            }
-
-            if (!refreshToken) {
-                throw new Error('Refresh token not found. Please sign in again.');
-            }
-
-            if (!isExisting && !persistentApiToken) {
-                throw new Error('Persistent API token required for creating new branches.');
-            }
-
-            // Pull the latest image
-            await this.pullImage();
-
-            // Create container configuration
-            const containerConfig: any = {
-                Image: 'neondatabase/neon_local:latest',
-                name: this.containerName,
-                Env: [
-                    // Ensure driver is exactly 'postgres' or 'serverless'
-                    `DRIVER=${driver === 'serverless' ? 'serverless' : 'postgres'}`,
-                    `NEON_API_KEY=${isExisting ? apiKey : persistentApiToken}`,
-                    `NEON_REFRESH_TOKEN=${refreshToken}`,
-                    `NEON_PROJECT_ID=${projectId}`,
-                    'CLIENT=vscode',
-                    // Conditionally add either BRANCH_ID or PARENT_BRANCH_ID
-                    ...(isExisting ? [`BRANCH_ID=${branchId}`] : [`PARENT_BRANCH_ID=${branchId}`])
-                ],
-                HostConfig: {
-                    PortBindings: {
-                        '5432/tcp': [{ HostPort: '5432' }]
-                    }
-                }
-            };
-
-            // Create .neon_local directory in global storage if it doesn't exist
-            const neonLocalPath = path.join(context.globalStorageUri.fsPath, '.neon_local');
-            if (!fs.existsSync(neonLocalPath)) {
-                fs.mkdirSync(neonLocalPath, { recursive: true });
-            }
+            console.log('Starting container with options:', options);
             
-            // Add volume binding using global storage path
-            containerConfig.HostConfig.Binds = [`${neonLocalPath}:/tmp/.neon_local`];
-
-            const containerName = containerConfig.name;
-
-            // Try to find and remove existing container
-            try {
-            const containers = await this.docker.listContainers({ all: true });
-            const existing = containers.find(c => c.Names.includes(`/${containerName}`));
-
-            if (existing) {
-                const oldContainer = this.docker.getContainer(existing.Id);
-                try {
-                await oldContainer.stop(); // May throw if already stopped
-                } catch (_) {
-                // ignore
-                }
-                await oldContainer.remove({ force: true });
-                console.log(`Removed existing container: ${containerName}`);
-            }
-            } catch (err) {
-            console.error('Error checking for existing container:', err);
+            // Create the .neon_local directory if it doesn't exist
+            const neonLocalPath = path.join(options.context.globalStorageUri.fsPath, '.neon_local');
+            if (!fs.existsSync(neonLocalPath)) {
+                await fs.promises.mkdir(neonLocalPath, { recursive: true });
             }
 
-            // Create and start new container
-            const container = await this.docker.createContainer(containerConfig);
-            await container.start();
-            console.log(`Started new container: ${containerName}`);
+            // Start the container
+            await this.startProxy(options);
 
-
-            // Wait for container to be running and ready
+            // Wait for container to be ready
             await this.waitForContainer();
 
-            // Get container info to update state
-            const containerInfo = await this.getContainerInfo();
-            if (containerInfo) {
-                // Update state with the correct branch information
-                await this.stateService.setCurrentlyConnectedBranch(containerInfo.branchId);
-
-                // Set the connection string based on the driver
-                const connectionString = containerInfo.driver === 'serverless'
-                    ? 'http://localhost:5432/sql'
-                    : 'postgres://neon:npg@localhost:5432/neondb?sslmode=require';
-                await this.stateService.setConnectionInfo({
-                    connectionInfo: connectionString,
-                    selectedDatabase: 'neondb'
-                });
+            // For new branches, we need to wait for the .branches file to be populated
+            if (!options.isExisting) {
+                // Give a longer delay for the .branches file to be written
+                await new Promise(resolve => setTimeout(resolve, 5000));
+                
+                // Check if the .branches file is properly populated
+                const branchId = await this.checkBranchesFile(options.context);
+                if (!branchId) {
+                    console.log('Branches file not populated or no branch ID found');
+                }
+            } else {
+                // For existing branches, check if we have a branch ID in the file
+                const branchId = await this.checkBranchesFile(options.context);
+                if (branchId) {
+                    console.log('Using existing branch ID from .branches file:', branchId);
+                }
             }
-            
-            // Update state to indicate proxy is running
+
+            // Set proxy running state
             await this.stateService.setIsProxyRunning(true);
-            
-            // Start periodic status check
-            await this.startStatusCheck();
-            
+            await this.stateService.setIsStarting(false);
+
             console.log('Container started successfully');
         } catch (error) {
             console.error('Error starting container:', error);
-            // Ensure we set proxy state to not running if there was an error
-            await this.stateService.setIsProxyRunning(false);
-            this.stopStatusCheck();
+            await this.stateService.setIsStarting(false);
             throw error;
         }
     }
@@ -262,7 +191,7 @@ export class DockerService {
         }
     }
 
-    private async checkBranchesFile(context: vscode.ExtensionContext): Promise<boolean> {
+    public async checkBranchesFile(context: vscode.ExtensionContext): Promise<string | false> {
         try {
             const neonLocalPath = path.join(context.globalStorageUri.fsPath, '.neon_local');
             const branchesPath = path.join(neonLocalPath, '.branches');
@@ -275,8 +204,18 @@ export class DockerService {
             const content = await fs.promises.readFile(branchesPath, 'utf-8');
             console.log('Read .branches file content:', content);
             
+            if (!content.trim()) {
+                console.log('Branches file is empty');
+                return false;
+            }
+            
             const data = JSON.parse(content);
             console.log('Parsed .branches file data:', JSON.stringify(data, null, 2));
+            
+            if (!data || Object.keys(data).length === 0) {
+                console.log('No data in branches file');
+                return false;
+            }
             
             // Find the first key that has a branch_id
             const branchKey = Object.keys(data).find(key => 
@@ -290,7 +229,11 @@ export class DockerService {
             
             const branchId = data[branchKey].branch_id;
             console.log('Found branch ID in branches file:', branchId);
-            return true;
+            
+            // Update the state with the branch ID from the .branches file
+            await this.stateService.setCurrentlyConnectedBranch(branchId);
+            
+            return branchId;
         } catch (error) {
             console.error('Error checking branches file:', error);
             return false;
@@ -326,57 +269,22 @@ export class DockerService {
                     // Check if the logs indicate the container is ready
                     if (logStr.includes('Neon Local is ready')) {
                         console.log('Container is ready');
-                        
-                        // Get the environment variables to check if this is a new branch
-                        const envVars = containerInfo.Config.Env;
-                        const isNewBranch = envVars.some(env => env.startsWith('PARENT_BRANCH_ID='));
-                        
-                        if (isNewBranch) {
-                            // Only check branches file for new branches
-                            console.log('New branch creation detected, checking branches file...');
-                            // Give a small delay for the .branches file to be written
-                            await new Promise(resolve => setTimeout(resolve, 2000));
-                            
-                            // Check if the .branches file is properly populated
-                            if (await this.checkBranchesFile(this.context)) {
-                                console.log('Container is fully ready with populated branches file');
-                                return;
-                            } else {
-                                console.log('Branches file not yet populated, continuing to wait...');
-                            }
-                        } else {
-                            // For existing branches, we don't need to wait for the .branches file
-                            console.log('Existing branch connection, container is ready');
-                            return;
-                        }
+                        return;
                     } else {
                         console.log('Container not yet ready, waiting for ready message...');
                     }
-                } else if (containerInfo.State.ExitCode !== 0) {
-                    console.error('Container exited with error code:', containerInfo.State.ExitCode);
-                    throw new Error(`Container exited with error code ${containerInfo.State.ExitCode}`);
-                } else {
-                    console.log('Container not yet running...');
                 }
-            } catch (error) {
-                // Log the error but continue waiting unless it's a critical error
-                console.error('Error while waiting for container:', error);
-                if (error instanceof Error && 
-                    (error.message.includes('Container exited with error') || 
-                     error.message.includes('Container reported an error'))) {
-                    throw error;
-                }
-            }
-            
-            // Increment attempts and wait before next try
-            attempts++;
-            if (attempts < maxAttempts) {
+                
+                attempts++;
                 await new Promise(resolve => setTimeout(resolve, 1000));
-            } else {
-                console.error('Container failed to become ready after', maxAttempts, 'seconds');
-                throw new Error('Timeout waiting for container to be ready');
+            } catch (error) {
+                console.error('Error waiting for container:', error);
+                attempts++;
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
+        
+        throw new Error('Container failed to become ready within timeout period');
     }
 
     async getContainerInfo(): Promise<{
@@ -417,5 +325,91 @@ export class DockerService {
             console.error('Error getting container info:', error);
             return null;
         }
+    }
+
+    private async startProxy(options: {
+        branchId: string;
+        driver: string;
+        isExisting: boolean;
+        context: vscode.ExtensionContext;
+        projectId: string;
+    }): Promise<void> {
+        // Get API key from configuration
+        const config = vscode.workspace.getConfiguration('neonLocal');
+        const apiKey = config.get<string>('apiKey');
+        const persistentApiToken = config.get<string>('persistentApiToken');
+
+        if (!apiKey) {
+            throw new Error('API key not found. Please sign in first.');
+        }
+
+        if (!options.isExisting && !persistentApiToken) {
+            throw new Error('Persistent API token required for creating new branches.');
+        }
+
+        // Pull the latest image
+        await this.pullImage();
+
+        // Create container configuration
+        const containerConfig: any = {
+            Image: 'neondatabase/neon_local:latest',
+            name: this.containerName,
+            Env: [
+                // Ensure driver is exactly 'postgres' or 'serverless'
+                `DRIVER=${options.driver === 'serverless' ? 'serverless' : 'postgres'}`,
+                `NEON_API_KEY=${options.isExisting ? apiKey : persistentApiToken}`,
+                `NEON_PROJECT_ID=${options.projectId}`,
+                'CLIENT=vscode',
+                // Conditionally add either BRANCH_ID or PARENT_BRANCH_ID
+                ...(options.isExisting ? [`BRANCH_ID=${options.branchId}`] : [`PARENT_BRANCH_ID=${options.branchId}`])
+            ],
+            HostConfig: {
+                PortBindings: {
+                    '5432/tcp': [{ HostPort: '5432' }]
+                }
+            }
+        };
+
+        // Add volume binding using global storage path
+        const neonLocalPath = path.join(options.context.globalStorageUri.fsPath, '.neon_local');
+        containerConfig.HostConfig.Binds = [`${neonLocalPath}:/tmp/.neon_local`];
+
+        const containerName = containerConfig.name;
+
+        // Try to find and remove existing container
+        try {
+            const containers = await this.docker.listContainers({ all: true });
+            const existing = containers.find(c => c.Names.includes(`/${containerName}`));
+
+            if (existing) {
+                const oldContainer = this.docker.getContainer(existing.Id);
+                try {
+                    await oldContainer.stop(); // May throw if already stopped
+                } catch (_) {
+                    // ignore
+                }
+                await oldContainer.remove({ force: true });
+                console.log(`Removed existing container: ${containerName}`);
+            }
+        } catch (err) {
+            console.error('Error checking for existing container:', err);
+        }
+
+        // Create and start new container
+        const container = await this.docker.createContainer(containerConfig);
+        await container.start();
+        console.log(`Started new container: ${containerName}`);
+
+        // Set the connection string based on the driver
+        const connectionString = options.driver === 'serverless'
+            ? 'http://localhost:5432/sql'
+            : 'postgres://neon:npg@localhost:5432/neondb?sslmode=require';
+        await this.stateService.setConnectionInfo({
+            connectionInfo: connectionString,
+            selectedDatabase: 'neondb'
+        });
+        
+        // Start periodic status check
+        await this.startStatusCheck();
     }
 } 

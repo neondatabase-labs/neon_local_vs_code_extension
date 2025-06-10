@@ -291,8 +291,7 @@ export class StateService implements IStateService {
             connection: {
                 ...this._state.connection,
                 connected: value,
-                selectedDatabase: value ? this._state.connection.selectedDatabase : '',
-                selectedRole: value ? this._state.connection.selectedRole : ''
+                isStarting: false
             }
         });
     }

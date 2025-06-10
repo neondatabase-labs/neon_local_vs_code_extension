@@ -6,6 +6,7 @@ import { DatabaseViewProvider } from './databaseView';
 import { ActionsViewProvider } from './actionsView';
 import { DockerService } from './services/docker.service';
 import { ViewData } from './types';
+import { NeonApiService } from './services/api.service';
 
 export async function activate(context: vscode.ExtensionContext) {
   // Initialize services
@@ -28,15 +29,27 @@ export async function activate(context: vscode.ExtensionContext) {
     const isRunning = await dockerService.checkContainerStatus();
     if (isRunning) {
       console.log('Container is already running, updating state...');
-      // Get container info to update state
-      const containerInfo = await dockerService.getContainerInfo();
-      if (containerInfo) {
+      
+      // First try to get branch ID from .branches file
+      const branchId = await dockerService.checkBranchesFile(context);
+      
+      if (branchId) {
+        console.log('Using branch ID from .branches file:', branchId);
         await stateService.setIsProxyRunning(true);
-        await stateService.setCurrentlyConnectedBranch(containerInfo.branchId);
-        // Start the status check to keep state in sync
-        await dockerService.startStatusCheck();
-        console.log('Started status check for existing container');
+        await stateService.setCurrentlyConnectedBranch(branchId);
+      } else {
+        // Fallback to container info if .branches file doesn't have the ID
+        console.log('No branch ID in .branches file, falling back to container info...');
+        const containerInfo = await dockerService.getContainerInfo();
+        if (containerInfo) {
+          await stateService.setIsProxyRunning(true);
+          await stateService.setCurrentlyConnectedBranch(containerInfo.branchId);
+        }
       }
+      
+      // Start the status check to keep state in sync
+      await dockerService.startStatusCheck();
+      console.log('Started status check for existing container');
     } else {
       console.log('No running container found on startup');
       await stateService.setIsProxyRunning(false);
@@ -175,34 +188,30 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('neon-local.resetFromParent', async () => {
         try {
-            const config = vscode.workspace.getConfiguration('neonLocal');
-        const projectId = config.get<string>('projectId');
-        const branchId = await stateService.getCurrentBranchId();
-        
-        if (!projectId || !branchId) {
-          throw new Error('Project ID or Branch ID not found');
+            const containerInfo = await dockerService.getContainerInfo();
+            
+            if (!containerInfo) {
+                throw new Error('Container info not found. Make sure the container is running.');
+            }
+            
+            const projectId = containerInfo.projectId;
+            const branchId = await stateService.currentlyConnectedBranch;
+            
+            console.log('Reset from parent - Project ID:', projectId);
+            console.log('Reset from parent - Branch ID:', branchId);
+            
+            if (!projectId || !branchId) {
+                throw new Error('Project ID or Branch ID not found');
+            }
+
+            // Reset the branch using the API service
+            const apiService = new NeonApiService();
+            await apiService.resetBranchToParent(projectId, branchId);
+
+            vscode.window.showInformationMessage('Branch has been reset from parent');
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to reset branch: ${error}`);
         }
-
-        // Stop the proxy before resetting
-        await dockerService.stopContainer();
-        
-        // Get the Neon API client and reset the branch
-        const client = await webviewService.getNeonApiClient();
-        await client.post(`/projects/${projectId}/branches/${branchId}/reset`);
-        
-        // Restart the proxy with the reset branch
-        await dockerService.startContainer({
-          branchId,
-          driver: config.get('driver', 'postgres'),
-          isExisting: true,
-          context,
-          projectId
-        });
-
-        vscode.window.showInformationMessage('Branch has been reset from parent');
-            } catch (error) {
-        vscode.window.showErrorMessage(`Failed to reset branch: ${error}`);
-      }
     })
   );
 
