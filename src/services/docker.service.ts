@@ -332,15 +332,48 @@ export class DockerService {
     }): Promise<void> {
         // Get API key from configuration
         const config = vscode.workspace.getConfiguration('neonLocal');
-        const apiKey = config.get<string>('apiKey');
         const persistentApiToken = config.get<string>('persistentApiToken');
+        const apiKey = config.get<string>('apiKey');
 
-        if (!apiKey) {
-            throw new Error('API key not found. Please sign in first.');
+        // If persistent token exists, use it for all operations
+        if (persistentApiToken) {
+            // Pull the latest image
+            await this.pullImage();
+
+            // Create container configuration
+            const containerConfig: any = {
+                Image: 'neondatabase/neon_local:latest',
+                name: this.containerName,
+                Env: [
+                    `DRIVER=${options.driver === 'serverless' ? 'serverless' : 'postgres'}`,
+                    `NEON_API_KEY=${persistentApiToken}`,
+                    `NEON_PROJECT_ID=${options.projectId}`,
+                    'CLIENT=vscode',
+                    options.isExisting ? `BRANCH_ID=${options.branchId}` : `PARENT_BRANCH_ID=${options.branchId}`
+                ],
+                HostConfig: {
+                    PortBindings: {
+                        '5432/tcp': [{ HostPort: '5432' }]
+                    }
+                }
+            };
+
+            // Add volume binding using global storage path
+            const neonLocalPath = path.join(options.context.globalStorageUri.fsPath, '.neon_local');
+            containerConfig.HostConfig.Binds = [`${neonLocalPath}:/tmp/.neon_local`];
+
+            await this.startContainerInternal(containerConfig);
+            return;
         }
 
-        if (!options.isExisting && !persistentApiToken) {
+        // For new branches, require persistent token
+        if (!options.isExisting) {
             throw new Error('Persistent API token required for creating new branches.');
+        }
+
+        // For existing branches, require OAuth token
+        if (!apiKey) {
+            throw new Error('Authentication required. Please sign in.');
         }
 
         // Pull the latest image
@@ -351,13 +384,11 @@ export class DockerService {
             Image: 'neondatabase/neon_local:latest',
             name: this.containerName,
             Env: [
-                // Ensure driver is exactly 'postgres' or 'serverless'
                 `DRIVER=${options.driver === 'serverless' ? 'serverless' : 'postgres'}`,
-                `NEON_API_KEY=${options.isExisting ? apiKey : persistentApiToken}`,
+                `NEON_API_KEY=${apiKey}`,
                 `NEON_PROJECT_ID=${options.projectId}`,
                 'CLIENT=vscode',
-                // Conditionally add either BRANCH_ID or PARENT_BRANCH_ID
-                ...(options.isExisting ? [`BRANCH_ID=${options.branchId}`] : [`PARENT_BRANCH_ID=${options.branchId}`])
+                `BRANCH_ID=${options.branchId}`
             ],
             HostConfig: {
                 PortBindings: {
@@ -370,6 +401,10 @@ export class DockerService {
         const neonLocalPath = path.join(options.context.globalStorageUri.fsPath, '.neon_local');
         containerConfig.HostConfig.Binds = [`${neonLocalPath}:/tmp/.neon_local`];
 
+        await this.startContainerInternal(containerConfig);
+    }
+
+    private async startContainerInternal(containerConfig: any): Promise<void> {
         const containerName = containerConfig.name;
 
         // Try to find and remove existing container
@@ -397,12 +432,10 @@ export class DockerService {
         console.log(`Started new container: ${containerName}`);
 
         // Set the connection string based on the driver
-        const connectionString = options.driver === 'serverless'
-            ? 'http://localhost:5432/sql'
-            : 'postgres://neon:npg@localhost:5432/neondb?sslmode=require';
+        const connectionString = `postgres://neon:npg@localhost:5432`;
         await this.stateService.setConnectionInfo({
             connectionInfo: connectionString,
-            selectedDatabase: 'neondb'
+            selectedDatabase: ''
         });
         
         // Start periodic status check

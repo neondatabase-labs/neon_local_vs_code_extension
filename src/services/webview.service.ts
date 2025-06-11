@@ -3,6 +3,7 @@ import { VIEW_TYPES } from '../constants';
 import { ViewData } from '../types';
 import { StateService } from './state.service';
 import axios from 'axios';
+import { Logger } from '../utils';
 
 export class WebViewService {
     private panels: Set<vscode.WebviewPanel> = new Set();
@@ -188,5 +189,21 @@ export class WebViewService {
                 'Content-Type': 'application/json'
             }
         });
+    }
+
+    public async updateWebview(webview: vscode.WebviewView, viewData: ViewData): Promise<void> {
+        try {
+            console.log('WebViewService: Sending updateViewData message');
+            await webview.webview.postMessage({
+                command: 'updateViewData',
+                data: viewData
+            });
+            console.log('WebViewService: View update complete');
+        } catch (error) {
+            console.error('WebViewService: Error updating webview:', error);
+            if (error instanceof Error) {
+                vscode.window.showErrorMessage(`Webview update error: ${error.message}`);
+            }
+        }
     }
 } 

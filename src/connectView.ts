@@ -56,12 +56,15 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
 
         webviewView.webview.options = {
             enableScripts: true,
-            localResourceRoots: [this._extensionUri]
+            localResourceRoots: [
+                vscode.Uri.joinPath(this._extensionUri, 'media'),
+                vscode.Uri.joinPath(this._extensionUri, 'out')
+            ]
         };
 
         // Set up message handler first
         webviewView.webview.onDidReceiveMessage(this.handleWebviewMessage.bind(this));
-        
+
         // Handle visibility changes
         webviewView.onDidChangeVisibility(() => {
             if (webviewView.visible) {
@@ -73,24 +76,33 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             }
         });
 
-        // Initialize view with React app
-        webviewView.webview.html = this.getWebviewContent(webviewView.webview);
-
         // Register this view with the manager
         this._webviewService.registerWebview(webviewView.webview);
 
         // Initial update with a small delay to ensure proper registration
         setTimeout(async () => {
             try {
+                const persistentApiToken = ConfigurationManager.getConfigValue('persistentApiToken');
                 const apiKey = ConfigurationManager.getConfigValue('apiKey');
                 const refreshToken = ConfigurationManager.getConfigValue('refreshToken');
-                const persistentApiToken = ConfigurationManager.getConfigValue('persistentApiToken');
                 console.log('ConnectViewProvider: Initial token check', { 
+                    hasPersistentApiToken: !!persistentApiToken,
                     hasApiKey: !!apiKey, 
-                    hasRefreshToken: !!refreshToken,
-                    hasPersistentApiToken: !!persistentApiToken
+                    hasRefreshToken: !!refreshToken
                 });
 
+                // If persistent token exists, show connect view and initialize
+                if (persistentApiToken) {
+                    console.log('ConnectViewProvider: Using persistent API token');
+                    if (this._view) {
+                        this._view.webview.html = this.getWebviewContent(this._view.webview);
+                    }
+                    await this._stateService.setPersistentApiToken(persistentApiToken);
+                    await this.initializeViewData();
+                    return;
+                }
+
+                // Otherwise, check for OAuth tokens
                 if (!apiKey && !refreshToken) {
                     console.log('ConnectViewProvider: No tokens found, showing sign-in HTML');
                     if (this._view) {
@@ -99,80 +111,84 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     return;
                 }
 
-                // Update state with persistent API token if it exists
-                if (persistentApiToken) {
-                    await this._stateService.setPersistentApiToken(persistentApiToken);
+                // If we have OAuth tokens, show connect view and initialize
+                if (this._view) {
+                    this._view.webview.html = this.getWebviewContent(this._view.webview);
                 }
-
-                const apiService = new NeonApiService();
-
-                // Start loading organizations
-                await this._stateService.updateLoadingState({
-                    orgs: true,
-                    projects: true,
-                    branches: true
-                });
-
-                // Fetch organizations first
-                const orgs = await apiService.getOrgs();
-                await this._stateService.setOrganizations(orgs);
-                await this._stateService.updateLoadingState({
-                    orgs: false
-                });
-
-                // If there's a pre-selected organization, fetch its projects
-                const currentOrgId = this._stateService.currentOrg;
-                if (currentOrgId) {
-                    try {
-                        const projects = await apiService.getProjects(currentOrgId);
-                        await this._stateService.setProjects(projects);
-                        await this._stateService.updateLoadingState({
-                            projects: false
-                        });
-
-                        // If there's a pre-selected project, fetch
-                        const currentProjectId = this._stateService.currentProject;
-                        if (currentProjectId) {
-                            try {
-                                const branches = await apiService.getBranches(currentProjectId);
-                                await this._stateService.setBranches(branches);
-                            } catch (error) {
-                                console.error('Error fetching branches for pre-selected project:', error);
-                                if (error instanceof Error) {
-                                    vscode.window.showErrorMessage(`Failed to fetch branches: ${error.message}`);
-                                }
-                            }
-                        }
-                    } catch (error) {
-                        console.error('Error fetching projects for pre-selected organization:', error);
-                        if (error instanceof Error) {
-                            vscode.window.showErrorMessage(`Failed to fetch projects: ${error.message}`);
-                        }
-                    }
-                }
-
-                // Clear loading states
-                await this._stateService.updateLoadingState({
-                    orgs: false,
-                    projects: false,
-                    branches: false
-                });
-                
-                // Update view
-                await this.updateView();
+                await this.initializeViewData();
             } catch (error) {
-                console.error('Error during initial connect view update:', error);
-                if (error instanceof Error) {
-                    vscode.window.showErrorMessage(error.message);
+                console.error('ConnectViewProvider: Error during initial setup', error);
+                if (this._view) {
+                    this._view.webview.html = getSignInHtml();
                 }
-                // Clear loading states on error
-                await this._stateService.updateLoadingState({
-                    orgs: false,
-                    projects: false,
-                    branches: false
-                });
             }
         }, 100);
+    }
+
+    private async initializeViewData(): Promise<void> {
+        const apiService = new NeonApiService();
+
+        // Start loading organizations
+        await this._stateService.updateLoadingState({
+            orgs: true,
+            projects: true,
+            branches: true
+        });
+
+        try {
+            // Fetch organizations first
+            const orgs = await apiService.getOrgs();
+            await this._stateService.setOrganizations(orgs);
+            await this._stateService.updateLoadingState({
+                orgs: false
+            });
+
+            // If there's a pre-selected organization, fetch its projects
+            const currentOrgId = this._stateService.currentOrg;
+            if (currentOrgId) {
+                try {
+                    const projects = await apiService.getProjects(currentOrgId);
+                    await this._stateService.setProjects(projects);
+                    await this._stateService.updateLoadingState({
+                        projects: false
+                    });
+
+                    // If there's a pre-selected project, fetch its branches
+                    const currentProjectId = this._stateService.currentProject;
+                    if (currentProjectId) {
+                        try {
+                            const branches = await apiService.getBranches(currentProjectId);
+                            await this._stateService.setBranches(branches);
+                        } catch (error) {
+                            console.error('Error fetching branches for pre-selected project:', error);
+                            if (error instanceof Error) {
+                                vscode.window.showErrorMessage(`Failed to fetch branches: ${error.message}`);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error fetching projects for pre-selected organization:', error);
+                    if (error instanceof Error) {
+                        vscode.window.showErrorMessage(`Failed to fetch projects: ${error.message}`);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching organizations:', error);
+            if (error instanceof Error) {
+                vscode.window.showErrorMessage(`Failed to fetch organizations: ${error.message}`);
+            }
+        }
+
+        // Clear loading states
+        await this._stateService.updateLoadingState({
+            orgs: false,
+            projects: false,
+            branches: false
+        });
+        
+        // Update view
+        await this.updateView();
     }
 
     private debouncedUpdateView = () => {
@@ -434,7 +450,10 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     } catch (error) {
                         console.error('Error starting proxy:', error);
                         if (error instanceof Error) {
-                            vscode.window.showErrorMessage(`Failed to start proxy: ${error.message}`);
+                            const errorMessage = error.message.includes('connect ENOENT /var/run/docker.sock') 
+                                ? 'Make sure that Docker is running.'
+                                : error.message;
+                            vscode.window.showErrorMessage(`Failed to start proxy: ${errorMessage}`);
                         }
                     } finally {
                         await this._stateService.setIsStarting(false);
@@ -530,15 +549,29 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         console.log('ConnectViewProvider: Set _isUpdating flag');
 
         try {
+            const persistentApiToken = ConfigurationManager.getConfigValue('persistentApiToken');
             const apiKey = ConfigurationManager.getConfigValue('apiKey');
             const refreshToken = ConfigurationManager.getConfigValue('refreshToken');
-            const persistentApiToken = ConfigurationManager.getConfigValue('persistentApiToken');
+            
             console.log('ConnectViewProvider: Checked tokens', { 
+                hasPersistentApiToken: !!persistentApiToken,
                 hasApiKey: !!apiKey, 
-                hasRefreshToken: !!refreshToken,
-                hasPersistentApiToken: !!persistentApiToken
+                hasRefreshToken: !!refreshToken
             });
 
+            // If persistent token exists, we can proceed
+            if (persistentApiToken) {
+                console.log('ConnectViewProvider: Using persistent API token');
+                if (this._view.webview.html.includes('sign-in-button')) {
+                    this._view.webview.html = this.getWebviewContent(this._view.webview);
+                }
+                const viewData = await this._stateService.getViewData();
+                await this._webviewService.updateWebview(this._view, viewData);
+                this._isUpdating = false;
+                return;
+            }
+
+            // Otherwise, check for OAuth tokens
             if (!apiKey && !refreshToken) {
                 console.log('ConnectViewProvider: No tokens found, showing sign-in HTML');
                 this._view.webview.html = getSignInHtml();
@@ -555,41 +588,16 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             // Get the current view data
             console.log('ConnectViewProvider: Getting view data');
             const viewData = await this._stateService.getViewData();
-            console.log('ConnectViewProvider: Got view data', {
-                connected: viewData.connected,
-                isStarting: viewData.isStarting,
-                connectionType: viewData.connectionType,
-                hasOrgs: viewData.orgs?.length > 0,
-                hasProjects: viewData.projects?.length > 0,
-                hasBranches: viewData.branches?.length > 0,
-                hasPersistentApiToken: !!viewData.connection.persistentApiToken
-            });
-
-            // If we have a pending connection type change, ensure it's respected
-            if (this._lastRequestedConnectionType && viewData.connectionType !== this._lastRequestedConnectionType) {
-                console.log('ConnectViewProvider: Connection type mismatch, correcting:', {
-                    requested: this._lastRequestedConnectionType,
-                    received: viewData.connectionType
-                });
-                viewData.connectionType = this._lastRequestedConnectionType;
-                viewData.isExplicitUpdate = true;
-            }
-
-            // Send data via postMessage
-            console.log('ConnectViewProvider: Sending updateViewData message');
-            await this._view.webview.postMessage({
-                command: 'updateViewData',
-                data: viewData
-            });
-            console.log('ConnectViewProvider: View update complete');
+            await this._webviewService.updateWebview(this._view, viewData);
         } catch (error) {
-            console.error('ConnectViewProvider: Error updating view:', error);
-            if (error instanceof Error) {
-                vscode.window.showErrorMessage(`Connect view update error: ${error.message}`);
+            console.error('ConnectViewProvider: Error updating view', error);
+            Logger.error('Failed to update view', error);
+            
+            if (this._view) {
+                this._view.webview.html = getSignInHtml();
             }
         } finally {
             this._isUpdating = false;
-            console.log('ConnectViewProvider: Cleared _isUpdating flag');
         }
     }
 

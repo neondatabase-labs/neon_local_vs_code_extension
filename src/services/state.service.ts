@@ -261,11 +261,17 @@ export class StateService implements IStateService {
         });
     }
 
-    async setSelectedDatabase(value: string): Promise<void> {
+    async setSelectedDatabase(database: string): Promise<void> {
+        const baseConnectionString = 'postgres://neon:npg@localhost:5432';
+        const newConnectionString = database 
+            ? `${baseConnectionString}/${database}`
+            : baseConnectionString;
+
         await this.updateState({
             connection: {
                 ...this._state.connection,
-                selectedDatabase: value
+                selectedDatabase: database,
+                connectionInfo: newConnectionString
             }
         });
     }
@@ -451,10 +457,16 @@ export class StateService implements IStateService {
     }
 
     async updateDatabase(database: string): Promise<void> {
+        const baseConnectionString = 'postgres://neon:npg@localhost:5432';
+        const newConnectionString = database 
+            ? `${baseConnectionString}/${database}`
+            : baseConnectionString;
+
         await this.updateState({
             connection: {
                 ...this._state.connection,
-                selectedDatabase: database
+                selectedDatabase: database,
+                connectionInfo: newConnectionString
             }
         });
     }

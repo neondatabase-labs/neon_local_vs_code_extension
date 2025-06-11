@@ -85,19 +85,26 @@ export class NeonApiService {
         }
 
         const config = vscode.workspace.getConfiguration('neonLocal');
+        const persistentApiToken = config.get<string>('persistentApiToken');
         const apiKey = config.get<string>('apiKey');
-        const persistentApiToken = forNewBranch ? config.get<string>('persistentApiToken') : undefined;
         
-        if (forNewBranch && !persistentApiToken) {
+        // If persistent token exists, use it for all operations
+        if (persistentApiToken) {
+            this.apiClient = await this.createApiClient(persistentApiToken);
+            return this.apiClient;
+        }
+
+        // For new branches, we require persistent token
+        if (forNewBranch) {
             throw new Error('Persistent API token required for creating new branches.');
         }
 
-        if (!apiKey && !persistentApiToken) {
+        // For other operations, require OAuth token
+        if (!apiKey) {
             throw new Error('Authentication required. Please sign in.');
         }
 
-        const token = forNewBranch ? persistentApiToken : apiKey;
-        this.apiClient = await this.createApiClient(token!);
+        this.apiClient = await this.createApiClient(apiKey);
         return this.apiClient;
     }
 
