@@ -281,7 +281,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
           <div className="connection-status">
             <div className="status-indicator connected">
               <span className="status-dot"></span>
-              Connected to {state.connection.type === 'new' ? 'new' : 'existing'} branch
+              Connected to {state.connection.type === 'new' ? 'ephemeral' : 'existing'} branch
             </div>
           </div>
 
@@ -356,7 +356,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
                 onChange={handleConnectionTypeChange}
               >
                 <option value="existing">Connect to existing branch</option>
-                <option value="new">Connect to new branch</option>
+                <option value="new">Connect to ephemeral branch</option>
               </select>
             </div>
 
