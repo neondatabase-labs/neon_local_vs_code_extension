@@ -194,7 +194,10 @@ export const getStyles = (): string => `
     .detail-label-container {
         display: flex;
         align-items: center;
-        gap: 4px;
+        justify-content: space-between;
+        width: 100%;
+        flex-direction: row;
+        margin-bottom: 0;
     }
     .spinner {
         display: none;

@@ -44,7 +44,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
   }
 
   return (
-    <div className="database-content">
+    <div className="connection-details">
       <p className="description">
         Select a database and role to see your database's local connection string.
       </p>
@@ -82,52 +82,56 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
       </div>
 
       {state.connectionInfo && (
-        <div className="detail-row">
-          <div className="detail-label-container">
-            <div className="detail-label">Local Connection String</div>
-            <button
-              className="copy-button"
-              title="Copy connection string"
-              onClick={() => handleCopy(state.connectionInfo, 'connection')}
-            >
-              {copySuccess === 'connection' ? (
-                <span>✓</span>
-              ) : (
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M5.75 4.75h5.5v6.5h-5.5z"/>
-                  <path d="M9.75 4.75h1.5v8.5h-5.5v-1.5"/>
-                </svg>
-              )}
-            </button>
-          </div>
-          <div className="detail-value connection-string-container">
-            <div className="connection-string">{state.connectionInfo}</div>
+        <div>
+          <div className="detail-row">
+            <div className="detail-label-container">
+              <div className="detail-label">Local Connection String</div>
+              <button
+                className="copy-button"
+                title="Copy connection string"
+                onClick={() => handleCopy(state.connectionInfo, 'connection')}
+              >
+                {copySuccess === 'connection' ? (
+                  <span>✓</span>
+                ) : (
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M5.75 4.75h5.5v6.5h-5.5z"/>
+                    <path d="M9.75 4.75h1.5v8.5h-5.5v-1.5"/>
+                  </svg>
+                )}
+              </button>
+            </div>
+            <div className="detail-value connection-string-container">
+              <div className="connection-string">{state.connectionInfo}</div>
+            </div>
           </div>
         </div>
       )}
 
       {state.selectedDriver === 'serverless' && (
-        <div className="detail-row">
-          <div className="detail-label-container">
-            <div className="detail-label">Fetch Endpoint</div>
-            <button
-              className="copy-button"
-              title="Copy fetch endpoint configuration"
-              onClick={() => handleCopy("import { neonConfig } from '@neondatabase/serverless';\n\nneonConfig.fetchEndpoint = 'http://localhost:5432/sql';", 'endpoint')}
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M10.75 1.75H4.25C3.97386 1.75 3.75 1.97386 3.75 2.25V11.25C3.75 11.5261 3.97386 11.75 4.25 11.75H10.75C11.0261 11.75 11.25 11.5261 11.25 11.25V2.25C11.25 1.97386 11.0261 1.75 10.75 1.75Z" stroke="currentColor" strokeWidth="1.5"/>
-                <path d="M12.25 4.25H13.75V13.75H5.75V12.25" stroke="currentColor" strokeWidth="1.5"/>
-              </svg>
-              <span className={`copy-success ${copySuccess === 'endpoint' ? 'visible' : ''}`}>
-                Copied!
-              </span>
-            </button>
-          </div>
-          <div className="detail-value connection-string-container">
-            <div className="connection-string">
-              import {'{'} neonConfig {'}'} from '@neondatabase/serverless';<br /><br />
-              neonConfig.fetchEndpoint = 'http://localhost:5432/sql';
+        <div>
+          <div className="detail-row">
+            <div className="detail-label-container">
+              <div className="detail-label">Fetch Endpoint</div>
+              <button
+                className="copy-button"
+                title="Copy fetch endpoint configuration"
+                onClick={() => handleCopy("import { neonConfig } from '@neondatabase/serverless';\n\nneonConfig.fetchEndpoint = 'http://localhost:5432/sql';", 'endpoint')}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M10.75 1.75H4.25C3.97386 1.75 3.75 1.97386 3.75 2.25V11.25C3.75 11.5261 3.97386 11.75 4.25 11.75H10.75C11.0261 11.75 11.25 11.5261 11.25 11.25V2.25C11.25 1.97386 11.0261 1.75 10.75 1.75Z" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M12.25 4.25H13.75V13.75H5.75V12.25" stroke="currentColor" strokeWidth="1.5"/>
+                </svg>
+                <span className={`copy-success ${copySuccess === 'endpoint' ? 'visible' : ''}`}>
+                  Copied!
+                </span>
+              </button>
+            </div>
+            <div className="detail-value connection-string-container">
+              <div className="connection-string">
+                import {'{'} neonConfig {'}'} from '@neondatabase/serverless';<br /><br />
+                neonConfig.fetchEndpoint = 'http://localhost:5432/sql';
+              </div>
             </div>
           </div>
         </div>

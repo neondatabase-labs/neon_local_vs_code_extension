@@ -242,9 +242,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
     const driver = event.target.value as 'serverless' | 'postgres';
     updateState({ connection: { ...state.connection, driver } });
     vscode.postMessage({
-      command: 'selectBranch',
-      branchId: state.connection.selectedBranchId,
-      restartProxy: false,
+      command: 'updateDriver',
       driver
     });
   };

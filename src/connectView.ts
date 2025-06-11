@@ -335,6 +335,10 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     }
                     await this.updateView();
                     break;
+                case 'updateDriver':
+                    await this._stateService.setSelectedDriver(message.driver);
+                    await this.updateView();
+                    break;
                 case 'startProxy':
                     await this._stateService.setIsStarting(true);
                     try {
@@ -360,7 +364,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
 
                             progress.report({ message: "Updating connection state..." });
 
-                            // Only set currentlyConnectedBranch if it's not already set from .branches file
+                            // Only set currentlyConnectedBranch if it's not already set from .branches files
                             const currentlyConnectedBranch = await this._stateService.currentlyConnectedBranch;
                             if (!currentlyConnectedBranch) {
                                 const branchToConnect = message.isExisting ? message.branchId : message.parentBranchId;

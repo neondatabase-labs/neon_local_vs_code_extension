@@ -251,6 +251,8 @@ export class StateService implements IStateService {
     }
 
     async setSelectedDriver(value: 'postgres' | 'serverless'): Promise<void> {
+        const config = vscode.workspace.getConfiguration('neonLocal');
+        await config.update('driver', value, vscode.ConfigurationTarget.Global);
         await this.updateState({
             connection: {
                 ...this._state.connection,
@@ -491,7 +493,18 @@ export class StateService implements IStateService {
         });
         this._state = {
             ...this._state,
-            ...newState
+            connection: newState.connection ? {
+                ...this._state.connection,
+                ...newState.connection
+            } : this._state.connection,
+            selection: newState.selection ? {
+                ...this._state.selection,
+                ...newState.selection
+            } : this._state.selection,
+            loading: newState.loading ? {
+                ...this._state.loading,
+                ...newState.loading
+            } : this._state.loading
         };
         await this.saveState();
         await this.updateViewData();

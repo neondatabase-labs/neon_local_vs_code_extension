@@ -133,7 +133,7 @@ button:disabled {
 }
 
 .connection-details {
-  padding: 16px;
+  padding: 0 16px;
   margin-top: 16px;
   background-color: var(--vscode-editor-background);
   border-radius: 4px;
@@ -147,12 +147,15 @@ button:disabled {
   gap: 4px;
 }
 
-.detail-row:first-child {
-  padding-top: 0;
-}
 
-.detail-row:last-child {
-  padding-bottom: 0;
+
+.detail-label-container {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  flex-direction: row !important;
+  margin-bottom: 0 !important;
 }
 
 .detail-label {
@@ -291,17 +294,34 @@ button:disabled {
 
 .database-content select {
   width: 100%;
-  padding: 6px 8px;
-  border: 1px solid var(--vscode-input-border);
-  background-color: var(--vscode-input-background);
-  color: var(--vscode-input-foreground);
-  font-size: 13px;
-  border-radius: 2px;
+  padding: 8px;
+  padding-right: 32px;
+  margin: 4px 0 0 0;
+  background-color: var(--vscode-dropdown-background);
+  color: var(--vscode-dropdown-foreground);
+  border: 1px solid var(--vscode-dropdown-border);
+  border-radius: 4px;
+  font-size: 12px;
+  transition: border-color 0.2s, opacity 0.2s;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='16' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M7.976 10.072l4.357-4.357.62.618L8.284 11h-.618L3 6.333l.619-.618 4.357 4.357z' fill='%23C5C5C5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+
+.database-content select:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.database-content select:hover:not(:disabled) {
+  border-color: var(--vscode-dropdown-listBackground);
 }
 
 .database-content select:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  background-color: var(--vscode-dropdown-background);
 }
 
 .database-content .detail-row {
@@ -316,7 +336,7 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  width: 100%;
 }
 
 .database-content .detail-label {
