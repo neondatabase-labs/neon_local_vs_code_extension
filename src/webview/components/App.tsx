@@ -367,10 +367,10 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
                 <p>Ephemeral branches require a persistent API token. Generate a persistent API token and import it to connect to ephemeral Neon branches.</p>
                 <div className="token-actions">
                   <button onClick={handleGenerateToken} className="token-button">
-                    Generate API Token
+                    Create API Key
                   </button>
                   <button onClick={handleImportToken} className="token-button">
-                    Import Token
+                    Import API Key
                   </button>
                 </div>
               </div>

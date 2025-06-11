@@ -389,6 +389,7 @@ button:disabled {
 .token-actions {
   display: flex;
   gap: 8px;
+  flex-direction: column;
 }
 
 .token-button {

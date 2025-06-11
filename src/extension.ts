@@ -301,19 +301,33 @@ export async function activate(context: vscode.ExtensionContext) {
             
             const projectId = containerInfo.projectId;
             const branchId = await stateService.currentlyConnectedBranch;
+            const viewData = await stateService.getViewData();
+            const branchName = viewData.connection.selectedBranchName;
             
             console.log('Reset from parent - Project ID:', projectId);
             console.log('Reset from parent - Branch ID:', branchId);
+            console.log('Reset from parent - Branch Name:', branchName);
             
             if (!projectId || !branchId) {
                 throw new Error('Project ID or Branch ID not found');
+            }
+
+            // Add confirmation dialog
+            const answer = await vscode.window.showInformationMessage(
+                `Are you sure you want to reset branch "${branchId}" to its parent state? This action cannot be undone.`,
+                { modal: true },
+                'Reset',
+            );
+
+            if (answer !== 'Reset') {
+                return;
             }
 
             // Reset the branch using the API service
             const apiService = new NeonApiService();
             await apiService.resetBranchToParent(projectId, branchId);
 
-            vscode.window.showInformationMessage('Branch has been reset from parent');
+            vscode.window.showInformationMessage(`Branch "${branchId}" reset.`);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to reset branch: ${error}`);
         }
