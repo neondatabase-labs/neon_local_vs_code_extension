@@ -24,6 +24,7 @@ export class ConfigurationManager {
     static async clearAuth(): Promise<void> {
         await this.updateConfig('apiKey', undefined);
         await this.updateConfig('refreshToken', undefined);
+        await this.updateConfig('persistentApiToken', undefined);
     }
 }
 

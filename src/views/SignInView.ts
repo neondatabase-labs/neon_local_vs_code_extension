@@ -15,7 +15,7 @@ export class SignInView {
         this.stateService = stateService;
     }
 
-    public getHtml(): string {
+    public getHtml(customMessage?: string, showSignInButton: boolean = true): string {
         return `
         <!DOCTYPE html>
         <html lang="en">
@@ -25,10 +25,19 @@ export class SignInView {
             <title>Neon Local</title>
             ${getStyles()}
             <style>
+                .container {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 20px;
+                    text-align: center;
+                }
                 .error-message {
                     color: var(--vscode-errorForeground);
                     margin: 10px 0;
                     display: none;
+                    text-align: center;
                 }
                 .spinner {
                     border: 2px solid var(--vscode-editor-foreground);
@@ -44,49 +53,63 @@ export class SignInView {
                     0% { transform: rotate(0deg); }
                     100% { transform: rotate(360deg); }
                 }
+                .sign-in-message {
+                    margin: 10px 0;
+                    color: var(--vscode-foreground);
+                    text-align: center;
+                }
+                .description {
+                    text-align: center;
+                }
+                .sign-in-button {
+                    margin: 10px auto;
+                    display: block;
+                }
             </style>
         </head>
         <body>
             <div class="container">
-                <p class="description">Sign in to access your Neon projects and databases.</p>
+                ${customMessage ? `<p class="sign-in-message">${customMessage}</p>` : `<p class="description">Sign in to access your Neon projects and databases.</p>`}
                 <div class="error-message" id="errorMessage"></div>
-                <button class="sign-in-button" id="signInButton">Sign in to Neon</button>
-                <div class="spinner" id="spinner"></div>
-            </div>
-            <script>
-                const vscode = acquireVsCodeApi();
-                const signInButton = document.getElementById('signInButton');
-                const spinner = document.getElementById('spinner');
-                const errorMessage = document.getElementById('errorMessage');
+                ${showSignInButton ? `
+                    <button class="sign-in-button" id="signInButton">Sign in to Neon</button>
+                    <div class="spinner" id="spinner"></div>
+                    <script>
+                        const vscode = acquireVsCodeApi();
+                        const signInButton = document.getElementById('signInButton');
+                        const spinner = document.getElementById('spinner');
+                        const errorMessage = document.getElementById('errorMessage');
 
-                signInButton.addEventListener('click', () => {
-                    signInButton.disabled = true;
-                    spinner.style.display = 'block';
-                    errorMessage.style.display = 'none';
-                    vscode.postMessage({ command: 'signIn' });
-                });
-
-                window.addEventListener('message', event => {
-                    const message = event.data;
-                    switch (message.command) {
-                        case 'showLoading':
+                        signInButton.addEventListener('click', () => {
                             signInButton.disabled = true;
                             spinner.style.display = 'block';
                             errorMessage.style.display = 'none';
-                            break;
-                        case 'resetSignIn':
-                            signInButton.disabled = false;
-                            spinner.style.display = 'none';
-                            break;
-                        case 'showError':
-                            signInButton.disabled = false;
-                            spinner.style.display = 'none';
-                            errorMessage.textContent = message.text;
-                            errorMessage.style.display = 'block';
-                            break;
-                    }
-                });
-            </script>
+                            vscode.postMessage({ command: 'signIn' });
+                        });
+
+                        window.addEventListener('message', event => {
+                            const message = event.data;
+                            switch (message.command) {
+                                case 'showLoading':
+                                    signInButton.disabled = true;
+                                    spinner.style.display = 'block';
+                                    errorMessage.style.display = 'none';
+                                    break;
+                                case 'resetSignIn':
+                                    signInButton.disabled = false;
+                                    spinner.style.display = 'none';
+                                    break;
+                                case 'showError':
+                                    signInButton.disabled = false;
+                                    spinner.style.display = 'none';
+                                    errorMessage.textContent = message.text;
+                                    errorMessage.style.display = 'block';
+                                    break;
+                            }
+                        });
+                    </script>
+                ` : ''}
+            </div>
         </body>
         </html>`;
     }

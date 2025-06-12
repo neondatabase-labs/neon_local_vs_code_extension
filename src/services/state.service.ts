@@ -563,6 +563,7 @@ export class StateService implements IStateService {
         const config = vscode.workspace.getConfiguration('neonLocal');
         await config.update('apiKey', undefined, true);
         await config.update('refreshToken', undefined, true);
+        await config.update('persistentApiToken', undefined, true);
         await config.update('projectId', undefined, true);
         await this.setIsProxyRunning(false);
         await this.clearState();
