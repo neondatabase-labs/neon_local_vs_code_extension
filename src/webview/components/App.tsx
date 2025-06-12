@@ -208,6 +208,16 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
     }
 
     const branchId = event.target.value;
+    
+    // Handle create new branch option
+    if (branchId === 'create_new') {
+      vscode.postMessage({
+        command: 'createNewBranch',
+        projectId: state.connection.selectedProjectId
+      });
+      return;
+    }
+
     const selectedBranch = state.branches.find(branch => branch.id === branchId);
     
     if (selectedBranch) {
@@ -422,6 +432,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
                           {branch.name}
                         </option>
                       ))}
+                      <option value="create_new">Create new branch...</option>
                     </select>
                   </div>
                 ) : (

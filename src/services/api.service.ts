@@ -216,10 +216,21 @@ export class NeonApiService {
         }
     }
 
-    public async createBranch(projectId: string, parentBranchId: string): Promise<NeonBranch> {
+    public async createBranch(projectId: string, parentBranchId: string, branchName: string): Promise<NeonBranch> {
         const client = await this.ensureApiClient(true);
         const response = await client.post(`/projects/${projectId}/branches`, {
-            parent_id: parentBranchId
+            branch: {
+                name: branchName,
+                parent_id: parentBranchId
+            },
+            annotation_value: {
+                vscode_create: "true"
+            },
+            endpoints: [
+                {
+                    type: "read_write"
+                }
+            ]
         });
         return response.data;
     }

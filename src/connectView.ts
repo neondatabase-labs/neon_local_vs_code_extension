@@ -492,6 +492,86 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 case 'requestInitialData':
                     await this.updateView();
                     break;
+                case 'createNewBranch':
+                    try {
+                        // Show input box for branch name
+                        const branchName = await vscode.window.showInputBox({
+                            prompt: 'Enter a name for the new branch',
+                            placeHolder: 'e.g., feature/my-new-branch',
+                            validateInput: text => {
+                                return text ? null : 'Branch name is required';
+                            }
+                        });
+
+                        if (!branchName) {
+                            return; // User cancelled
+                        }
+
+                        // Get current state for branch list
+                        const currentState = await this._stateService.getViewData();
+                        
+                        // Create QuickPick for parent branch selection
+                        const parentBranch = await vscode.window.showQuickPick(
+                            currentState.branches.map(branch => ({
+                                label: branch.name,
+                                description: `Branch ID: ${branch.id}`,
+                                detail: branch.name === 'main' ? '(Default parent branch)' : undefined,
+                                id: branch.id
+                            })), {
+                                title: 'Select Parent Branch',
+                                placeHolder: 'Choose a parent branch for the new branch',
+                                ignoreFocusOut: true
+                            }
+                        );
+
+                        if (!parentBranch) {
+                            return; // User cancelled
+                        }
+
+                        try {
+                            // Create the branch
+                            const apiService = new NeonApiService();
+                            const newBranch = await apiService.createBranch(message.projectId, parentBranch.id, branchName);
+                            
+                            // Refresh the branches list
+                            const branches = await apiService.getBranches(message.projectId);
+                            await this._stateService.setBranches(branches);
+                            
+                            // Select the new branch
+                            await this._stateService.setCurrentBranch(newBranch.id);
+                            await this._stateService.updateState({
+                                selection: {
+                                    orgs: currentState.orgs,
+                                    projects: currentState.projects,
+                                    branches: branches,
+                                    selectedOrgId: currentState.selectedOrgId || '',
+                                    selectedOrgName: currentState.selectedOrgName || '',
+                                    selectedProjectId: currentState.selectedProjectId,
+                                    selectedProjectName: currentState.selectedProjectName,
+                                    selectedBranchId: newBranch.id,
+                                    selectedBranchName: newBranch.name,
+                                    parentBranchId: currentState.parentBranchId,
+                                    parentBranchName: currentState.parentBranchName
+                                }
+                            });
+
+                            // Update the view
+                            await this.updateView();
+                            
+                            vscode.window.showInformationMessage(`Branch "${branchName}" created successfully.`);
+                        } catch (error) {
+                            console.error('Error creating new branch:', error);
+                            if (error instanceof Error) {
+                                vscode.window.showErrorMessage(`Failed to create branch: ${error.message}`);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error in branch creation flow:', error);
+                        if (error instanceof Error) {
+                            vscode.window.showErrorMessage(`Failed to create branch: ${error.message}`);
+                        }
+                    }
+                    break;
             }
         } catch (error) {
             Logger.error('Error handling webview message', error);
