@@ -330,7 +330,6 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
               <button
                 className="action-button"
                 onClick={() => handleAction('resetFromParent')}
-                style={{ display: state.connection.type === 'new' ? 'block' : 'none' }}
               >
                 Reset from Parent Branch
               </button>

@@ -22,14 +22,12 @@ export const ActionsView: React.FC<ActionsViewProps> = ({ vscode }) => {
 
   return (
     <div className="actions-content">
-      {state.connectionType === 'new' && (
-        <button
-          className="action-button"
-          onClick={() => handleAction('resetFromParent')}
-        >
-          Reset from Parent Branch
-        </button>
-      )}
+      <button
+        className="action-button"
+        onClick={() => handleAction('resetFromParent')}
+      >
+        Reset from Parent Branch
+      </button>
       <button
         className="action-button"
         onClick={() => handleAction('openSqlEditor')}

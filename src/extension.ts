@@ -302,21 +302,27 @@ export async function activate(context: vscode.ExtensionContext) {
             const projectId = containerInfo.projectId;
             const branchId = await stateService.currentlyConnectedBranch;
             const viewData = await stateService.getViewData();
-            const branchName = viewData.connection.selectedBranchName;
+            const connectionType = viewData.connectionType;
+            const branchName = connectionType === 'existing' ? viewData.selectedBranchName : branchId;
             
             console.log('Reset from parent - Project ID:', projectId);
             console.log('Reset from parent - Branch ID:', branchId);
             console.log('Reset from parent - Branch Name:', branchName);
+            console.log('Reset from parent - Connection Type:', connectionType);
             
             if (!projectId || !branchId) {
                 throw new Error('Project ID or Branch ID not found');
             }
 
-            // Add confirmation dialog
+            // Add confirmation dialog with appropriate branch identifier
+            const confirmMessage = connectionType === 'existing' 
+                ? `Are you sure you want to reset branch "${branchName}" to its parent state? This action cannot be undone.`
+                : `Are you sure you want to reset branch "${branchId}" to its parent state? This action cannot be undone.`;
+
             const answer = await vscode.window.showInformationMessage(
-                `Are you sure you want to reset branch "${branchId}" to its parent state? This action cannot be undone.`,
+                confirmMessage,
                 { modal: true },
-                'Reset',
+                'Reset'
             );
 
             if (answer !== 'Reset') {
@@ -327,7 +333,12 @@ export async function activate(context: vscode.ExtensionContext) {
             const apiService = new NeonApiService();
             await apiService.resetBranchToParent(projectId, branchId);
 
-            vscode.window.showInformationMessage(`Branch "${branchId}" reset.`);
+            // Show success message with appropriate branch identifier
+            const successMessage = connectionType === 'existing'
+                ? `Branch "${branchName}" reset.`
+                : `Branch "${branchId}" reset.`;
+
+            vscode.window.showInformationMessage(successMessage);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to reset branch: ${error}`);
         }
