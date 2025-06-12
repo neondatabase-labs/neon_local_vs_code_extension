@@ -1,15 +1,13 @@
 import * as vscode from 'vscode';
-import { authenticate } from './services/auth.service';
 import { ConfigurationManager, Logger } from './utils';
 import { DEBOUNCE_DELAY, VIEW_TYPES } from './constants';
 import { ViewData, WebviewMessage, NeonOrg, NeonProject, NeonBranch } from './types';
-import { getStyles } from './templates/styles';
-import { getSignInHtml } from './templates/signIn';
 import * as path from 'path';
 import { WebViewService } from './services/webview.service';
 import { StateService } from './services/state.service';
 import { DockerService } from './services/docker.service';
 import { NeonApiService } from './services/api.service';
+import { SignInView } from './views/SignInView';
 
 export class ConnectViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = VIEW_TYPES.CONNECT;
@@ -25,6 +23,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
     private readonly _dockerService: DockerService;
     private readonly _extensionContext: vscode.ExtensionContext;
     private _lastUpdateData?: ViewData;
+    private _signInView?: SignInView;
 
     constructor(
         extensionUri: vscode.Uri,
@@ -61,6 +60,9 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 vscode.Uri.joinPath(this._extensionUri, 'out')
             ]
         };
+
+        // Initialize SignInView
+        this._signInView = new SignInView(webviewView.webview, this._stateService);
 
         // Set up message handler first
         webviewView.webview.onDidReceiveMessage(this.handleWebviewMessage.bind(this));
@@ -105,8 +107,8 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 // Otherwise, check for OAuth tokens
                 if (!apiKey && !refreshToken) {
                     console.log('ConnectViewProvider: No tokens found, showing sign-in HTML');
-                    if (this._view) {
-                        this._view.webview.html = getSignInHtml();
+                    if (this._view && this._signInView) {
+                        this._view.webview.html = this._signInView.getHtml();
                     }
                     return;
                 }
@@ -118,8 +120,8 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 await this.initializeViewData();
             } catch (error) {
                 console.error('ConnectViewProvider: Error during initial setup', error);
-                if (this._view) {
-                    this._view.webview.html = getSignInHtml();
+                if (this._view && this._signInView) {
+                    this._view.webview.html = this._signInView.getHtml();
                 }
             }
         }, 100);
@@ -206,7 +208,16 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         try {
             switch (message.command) {
                 case 'signIn':
-                    await this.handleSignIn();
+                    if (this._signInView) {
+                        await this._signInView.handleSignIn();
+                        // After successful sign-in, update the view
+                        await this.updateView();
+                    }
+                    break;
+                case 'showLoading':
+                case 'resetSignIn':
+                case 'showError':
+                    this._signInView?.handleMessage(message);
                     break;
                 case 'importToken':
                     const token = await vscode.window.showInputBox({
@@ -574,9 +585,9 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     break;
             }
         } catch (error) {
-            Logger.error('Error handling webview message', error);
+            console.error('Error handling webview message:', error);
             if (error instanceof Error) {
-                vscode.window.showErrorMessage(error.message);
+                vscode.window.showErrorMessage(`Error: ${error.message}`);
             }
         }
     }
@@ -654,7 +665,9 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             // Otherwise, check for OAuth tokens
             if (!apiKey && !refreshToken) {
                 console.log('ConnectViewProvider: No tokens found, showing sign-in HTML');
-                this._view.webview.html = getSignInHtml();
+                if (this._signInView) {
+                    this._view.webview.html = this._signInView.getHtml();
+                }
                 this._isUpdating = false;
                 return;
             }
@@ -663,6 +676,28 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             if (this._view.webview.html.includes('sign-in-button')) {
                 console.log('ConnectViewProvider: Transitioning from sign-in to connect view');
                 this._view.webview.html = this.getWebviewContent(this._view.webview);
+                
+                // Initialize state with empty selections
+                await this._stateService.updateState({
+                    selection: {
+                        orgs: [],
+                        projects: [],
+                        branches: [],
+                        selectedOrgId: '',
+                        selectedOrgName: '',
+                        selectedProjectId: undefined,
+                        selectedProjectName: undefined,
+                        selectedBranchId: undefined,
+                        selectedBranchName: undefined,
+                        parentBranchId: undefined,
+                        parentBranchName: undefined
+                    },
+                    loading: {
+                        orgs: false,
+                        projects: false,
+                        branches: false
+                    }
+                });
             }
 
             // Get the current view data
@@ -673,104 +708,11 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             console.error('ConnectViewProvider: Error updating view', error);
             Logger.error('Failed to update view', error);
             
-            if (this._view) {
-                this._view.webview.html = getSignInHtml();
+            if (this._view && this._signInView) {
+                this._view.webview.html = this._signInView.getHtml();
             }
         } finally {
             this._isUpdating = false;
-        }
-    }
-
-    private async handleSignIn(): Promise<void> {
-        try {
-            // Show loading state
-            if (this._view) {
-                this._view.webview.postMessage({ command: 'showLoading' });
-            }
-
-            // Attempt authentication
-            await authenticate();
-
-            // Show success message briefly
-            if (this._view) {
-                this._view.webview.postMessage({ command: 'signInSuccess' });
-            }
-
-            // Wait a moment to show the success message
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            // Update state service with authenticated state
-            await this._stateService.updateState({
-                connection: {
-                    connected: false,
-                    isStarting: false,
-                    type: 'existing',
-                    driver: 'postgres',
-                    connectionInfo: '',
-                    currentlyConnectedBranch: '',
-                    selectedDatabase: '',
-                    selectedRole: '',
-                    databases: [],
-                    roles: [],
-                    connectedOrgId: '',
-                    connectedOrgName: '',
-                    connectedProjectId: '',
-                    connectedProjectName: ''
-                },
-                selection: {
-                    orgs: [],
-                    projects: [],
-                    branches: [],
-                    selectedOrgId: '',
-                    selectedOrgName: '',
-                    selectedProjectId: undefined,
-                    selectedProjectName: undefined,
-                    selectedBranchId: undefined,
-                    selectedBranchName: undefined,
-                    parentBranchId: undefined,
-                    parentBranchName: undefined
-                },
-                loading: {
-                    orgs: false,
-                    projects: false,
-                    branches: false
-                }
-            });
-
-            // Update the view to show the connect interface
-            await this.updateView();
-
-            // Start loading organizations
-            const apiService = new NeonApiService();
-            await this._stateService.updateLoadingState({
-                orgs: true,
-                projects: false,
-                branches: false
-            });
-
-            // Fetch organizations
-            const orgs = await apiService.getOrgs();
-            await this._stateService.setOrganizations(orgs);
-            await this._stateService.updateLoadingState({
-                orgs: false,
-                projects: false,
-                branches: false
-            });
-
-            // Update view again with organizations
-            await this.updateView();
-
-        } catch (error) {
-            Logger.error('Error during sign in:', error);
-            if (this._view) {
-                this._view.webview.postMessage({ 
-                    command: 'showError',
-                    text: error instanceof Error ? error.message : 'Unknown error'
-                });
-            }
-            if (error instanceof Error) {
-                vscode.window.showErrorMessage(`Sign in error: ${error.message}`);
-            }
         }
     }
 }
