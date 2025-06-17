@@ -46,7 +46,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
   return (
     <div className="connection-details">
       <p className="description">
-        Select a database and role to see your database's local connection string.
+        Select a database to see its local connection string.
       </p>
       
       <div className="section">
@@ -65,6 +65,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
         </select>
       </div>
 
+      {/* Role dropdown section - temporarily commented out
       <div className="section">
         <label htmlFor="role">Role</label>
         <select
@@ -80,6 +81,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
           ))}
         </select>
       </div>
+      */}
 
       {state.connectionInfo && (
         <div>

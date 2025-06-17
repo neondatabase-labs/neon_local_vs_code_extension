@@ -1,18 +1,19 @@
 import * as vscode from 'vscode';
-import Dockerode from 'dockerode';
+import Docker from 'dockerode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { StateService } from './state.service';
+import { AuthManager } from '../auth/authManager';
 
 export class DockerService {
-    private docker: Dockerode;
+    private docker: Docker;
     private containerName = 'neon_local_vscode';
     private context: vscode.ExtensionContext;
     private stateService: StateService;
     private statusCheckInterval: NodeJS.Timeout | null = null;
 
     constructor(context: vscode.ExtensionContext, stateService: StateService) {
-        this.docker = new Dockerode();
+        this.docker = new Docker();
         this.context = context;
         this.stateService = stateService;
     }
@@ -376,6 +377,19 @@ export class DockerService {
             throw new Error('Authentication required. Please sign in.');
         }
 
+        // Refresh token if needed before starting container
+        const authManager = AuthManager.getInstance(options.context);
+        const refreshSuccess = await authManager.refreshTokenIfNeeded();
+        if (!refreshSuccess) {
+            throw new Error('Failed to refresh authentication token. Please sign in again.');
+        }
+
+        // Get the potentially refreshed token
+        const refreshedApiKey = vscode.workspace.getConfiguration('neonLocal').get<string>('apiKey');
+        if (!refreshedApiKey) {
+            throw new Error('No valid authentication token available. Please sign in again.');
+        }
+
         // Pull the latest image
         await this.pullImage();
 
@@ -385,7 +399,7 @@ export class DockerService {
             name: this.containerName,
             Env: [
                 `DRIVER=${options.driver === 'serverless' ? 'serverless' : 'postgres'}`,
-                `NEON_API_KEY=${apiKey}`,
+                `NEON_API_KEY=${refreshedApiKey}`,
                 `NEON_PROJECT_ID=${options.projectId}`,
                 'CLIENT=vscode',
                 `BRANCH_ID=${options.branchId}`
