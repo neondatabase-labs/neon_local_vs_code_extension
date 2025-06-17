@@ -164,11 +164,26 @@ export class NeonApiService {
             let orgs = Array.isArray(response) ? response : response.organizations || [];
             console.log('Organizations array before processing:', JSON.stringify(orgs, null, 2));
             
-            // Add Personal account as the first option
-            orgs = [
-                { id: 'personal_account', name: 'Personal account' },
-                ...orgs
-            ];
+            // Check if user has access to personal account by attempting to get projects
+            try {
+                await this.getProjects('personal_account');
+                // If successful, add Personal account as the first option
+                orgs = [
+                    { id: 'personal_account', name: 'Personal account' },
+                    ...orgs
+                ];
+            } catch (error) {
+                // If we get the specific error about org_id being required, don't add personal account
+                if (error instanceof Error && error.message.includes('org_id is required')) {
+                    console.log('User does not have access to personal account, skipping...');
+                } else {
+                    // For other errors, still add personal account as it might be a temporary issue
+                    orgs = [
+                        { id: 'personal_account', name: 'Personal account' },
+                        ...orgs
+                    ];
+                }
+            }
 
             console.log('Final processed organizations:', JSON.stringify(orgs, null, 2));
             return orgs;
