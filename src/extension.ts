@@ -7,12 +7,15 @@ import { ActionsViewProvider } from './actionsView';
 import { DockerService } from './services/docker.service';
 import { ViewData } from './types';
 import { NeonApiService } from './services/api.service';
+import { AuthManager } from './auth/authManager';
 
 export async function activate(context: vscode.ExtensionContext) {
   // Initialize services
   const stateService = new StateService(context);
+  const apiService = new NeonApiService(context);
   const webviewService = new WebViewService(context, stateService);
   const dockerService = new DockerService(context, stateService);
+  const authManager = AuthManager.getInstance(context);
 
   // Initialize webview service
   await webviewService.initialize();
@@ -40,7 +43,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
         // Fetch and update databases and roles
         try {
-          const apiService = new NeonApiService();
           const projectId = await stateService.getCurrentProjectId();
           if (projectId) {
             const [databases, roles] = await Promise.all([
@@ -66,7 +68,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
           // Fetch and update databases and roles
           try {
-            const apiService = new NeonApiService();
             const projectId = containerInfo.projectId;
             if (projectId) {
               const [databases, roles] = await Promise.all([
@@ -111,7 +112,8 @@ export async function activate(context: vscode.ExtensionContext) {
   const databaseViewProvider = new DatabaseViewProvider(
     context.extensionUri,
     webviewService,
-    stateService
+    stateService,
+    context
   );
   const actionsViewProvider = new ActionsViewProvider(
     context.extensionUri,
@@ -131,7 +133,7 @@ export async function activate(context: vscode.ExtensionContext) {
       await dockerService.stopContainer();
     }),
     vscode.commands.registerCommand('neon-local.clearAuth', async () => {
-      await stateService.clearAuth();
+      await authManager.signOut();
     })
   );
 
@@ -172,7 +174,7 @@ export async function activate(context: vscode.ExtensionContext) {
         }
 
         // Open the SQL Editor URL in the browser with the selected database
-        const sqlEditorUrl = `https://console.neon.tech/app/projects/${projectId}/branches/${branchId}/databases/${selectedDatabase.label}/sql-editor`;
+        const sqlEditorUrl = `https://console.neon.tech/app/projects/${projectId}/branches/${branchId}/sql-editor?database=${selectedDatabase.label}`;
         await vscode.env.openExternal(vscode.Uri.parse(sqlEditorUrl));
       } catch (error) {
         vscode.window.showErrorMessage(`Failed to open SQL Editor: ${error}`);
@@ -274,7 +276,6 @@ export async function activate(context: vscode.ExtensionContext) {
         }
 
         // Get the role password and compute endpoint
-        const apiService = new NeonApiService();
         const [password, endpoint] = await Promise.all([
           apiService.getRolePassword(projectId, branchId, selectedRole.label),
           apiService.getBranchEndpoint(projectId, branchId)
@@ -314,6 +315,13 @@ export async function activate(context: vscode.ExtensionContext) {
                 throw new Error('Project ID or Branch ID not found');
             }
 
+            // Check if the branch has a parent
+            const branchDetails = await apiService.getBranchDetails(projectId, branchId);
+            if (!branchDetails.parent_id) {
+                vscode.window.showErrorMessage(`Cannot reset branch "${branchName}" as it does not have a parent branch.`);
+                return;
+            }
+
             // Add confirmation dialog with appropriate branch identifier
             const confirmMessage = connectionType === 'existing' 
                 ? `Are you sure you want to reset branch "${branchName}" to its parent state? This action cannot be undone.`
@@ -330,7 +338,6 @@ export async function activate(context: vscode.ExtensionContext) {
             }
 
             // Reset the branch using the API service
-            const apiService = new NeonApiService();
             await apiService.resetBranchToParent(projectId, branchId);
 
             // Show success message with appropriate branch identifier

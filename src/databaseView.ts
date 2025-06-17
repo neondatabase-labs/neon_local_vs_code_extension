@@ -5,6 +5,7 @@ import { WebViewService } from './services/webview.service';
 import { StateService } from './services/state.service';
 import { ConfigurationManager } from './utils';
 import { SignInView } from './views/SignInView';
+import { AuthManager } from './auth/authManager';
 
 export class DatabaseViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = VIEW_TYPES.DATABASE;
@@ -16,20 +17,38 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
     private readonly _webviewService: WebViewService;
     private readonly _stateService: StateService;
     private _signInView?: SignInView;
+    private readonly _authManager: AuthManager;
 
     constructor(
         extensionUri: vscode.Uri,
         webviewService: WebViewService,
-        stateService: StateService
+        stateService: StateService,
+        extensionContext: vscode.ExtensionContext
     ) {
         this._extensionUri = extensionUri;
         this._webviewService = webviewService;
         this._stateService = stateService;
+        this._authManager = AuthManager.getInstance(extensionContext);
         this._configurationChangeListener = vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('neonLocal.refreshToken') || 
                 e.affectsConfiguration('neonLocal.apiKey') ||
                 e.affectsConfiguration('neonLocal.persistentApiToken')) {
                 this.updateView();
+            }
+        });
+
+        // Listen for authentication state changes
+        this._authManager.onDidChangeAuthentication(async (isAuthenticated) => {
+            console.log('DatabaseViewProvider: Authentication state changed', { isAuthenticated });
+            if (isAuthenticated) {
+                // When signing in, ensure we update the view with fresh data
+                if (this._view) {
+                    this._view.webview.html = this.getWebviewContent(this._view.webview);
+                    const data = await this._stateService.getViewData();
+                    await this._webviewService.updateWebview(this._view, data);
+                }
+            } else {
+                await this.updateView();
             }
         });
     }
@@ -43,15 +62,21 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
 
         webviewView.webview.options = {
             enableScripts: true,
-            localResourceRoots: [this._extensionUri]
+            localResourceRoots: [
+                this._extensionUri
+            ]
         };
 
-        // Initialize SignInView
-        this._signInView = new SignInView(webviewView.webview, this._stateService);
+        webviewView.webview.html = this.getWebviewContent(webviewView.webview);
 
-        // Set up message handler first
-        webviewView.webview.onDidReceiveMessage(this.handleWebviewMessage.bind(this));
-        
+        // Set up message handler
+        webviewView.webview.onDidReceiveMessage(async (message: WebviewMessage) => {
+            await this.handleWebviewMessage(message);
+        });
+
+        // Create sign-in view
+        this._signInView = new SignInView(webviewView.webview, this._stateService, this._authManager);
+
         // Handle visibility changes
         webviewView.onDidChangeVisibility(() => {
             if (webviewView.visible) {
@@ -69,7 +94,7 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
         // Initial update with a small delay to ensure proper registration
         setTimeout(async () => {
             try {
-                const persistentApiToken = ConfigurationManager.getConfigValue('persistentApiToken');
+                const persistentApiToken = this._authManager.getPersistentApiToken();
                 const apiKey = ConfigurationManager.getConfigValue('apiKey');
                 const refreshToken = ConfigurationManager.getConfigValue('refreshToken');
                 
@@ -86,7 +111,10 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
                         this._view.webview.html = this.getWebviewContent(this._view.webview);
                     }
                     await this._stateService.setPersistentApiToken(persistentApiToken);
-                    await this.updateView();
+                    const data = await this._stateService.getViewData();
+                    if (this._view) {
+                        await this._webviewService.updateWebview(this._view, data);
+                    }
                     return;
                 }
 
@@ -102,12 +130,13 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
                 // If we have OAuth tokens, show database view and initialize
                 if (this._view) {
                     this._view.webview.html = this.getWebviewContent(this._view.webview);
+                    const data = await this._stateService.getViewData();
+                    await this._webviewService.updateWebview(this._view, data);
                 }
-                await this.updateView();
             } catch (error) {
-                console.error('DatabaseViewProvider: Error during initial setup', error);
-                if (this._view && this._signInView) {
-                    this._view.webview.html = this._signInView.getHtml("Sign in to Neon in the Connect view", false);
+                console.error('Error in initial database view update:', error);
+                if (error instanceof Error) {
+                    vscode.window.showErrorMessage(`Database view initialization error: ${error.message}`);
                 }
             }
         }, 100);
@@ -169,7 +198,7 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
         this._isUpdating = true;
 
         try {
-            const persistentApiToken = ConfigurationManager.getConfigValue('persistentApiToken');
+            const persistentApiToken = this._authManager.getPersistentApiToken();
             const apiKey = ConfigurationManager.getConfigValue('apiKey');
             const refreshToken = ConfigurationManager.getConfigValue('refreshToken');
             
@@ -194,39 +223,8 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
                 this._view.webview.html = this.getWebviewContent(this._view.webview);
             }
 
-            const data = await this._webviewService.getViewData();
-            
-            // Always update on any connection state changes
-            const needsUpdate = !this._lastUpdateData || 
-                this._lastUpdateData.connected !== data.connected ||
-                this._lastUpdateData.connectionInfo !== data.connectionInfo ||
-                this._lastUpdateData.selectedDatabase !== data.selectedDatabase ||
-                this._lastUpdateData.selectedRole !== data.selectedRole ||
-                this._lastUpdateData.currentlyConnectedBranch !== data.currentlyConnectedBranch ||
-                JSON.stringify(this._lastUpdateData.databases) !== JSON.stringify(data.databases) ||
-                JSON.stringify(this._lastUpdateData.roles) !== JSON.stringify(data.roles);
-
-            if (needsUpdate) {
-                console.log('DatabaseView: Updating view with new data:', {
-                    connected: data.connected,
-                    databasesCount: data.databases?.length,
-                    rolesCount: data.roles?.length,
-                    selectedDatabase: data.selectedDatabase,
-                    selectedRole: data.selectedRole,
-                    isStarting: data.isStarting,
-                    connectionInfo: data.connectionInfo,
-                    currentlyConnectedBranch: data.currentlyConnectedBranch
-                });
-
-                // Store the last update data before sending
-                this._lastUpdateData = {...data};
-
-                // Send data via postMessage
-                await this._view.webview.postMessage({
-                    command: 'updateViewData',
-                    data: data
-                });
-            }
+            const data = await this._stateService.getViewData();
+            await this._webviewService.updateWebview(this._view, data);
         } catch (error) {
             console.error('Error updating database view:', error);
             if (error instanceof Error) {

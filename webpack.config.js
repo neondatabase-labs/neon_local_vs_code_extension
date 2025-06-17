@@ -61,7 +61,8 @@ const extensionConfig = {
   externals: {
     vscode: 'commonjs vscode',
     'utf-8-validate': 'commonjs utf-8-validate',
-    'bufferutil': 'commonjs bufferutil'
+    'bufferutil': 'commonjs bufferutil',
+    'openid-client': 'commonjs openid-client'
   },
   module: {
     rules: [

@@ -8,6 +8,7 @@ import { StateService } from './services/state.service';
 import { DockerService } from './services/docker.service';
 import { NeonApiService } from './services/api.service';
 import { SignInView } from './views/SignInView';
+import { AuthManager } from './auth/authManager';
 
 export class ConnectViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = VIEW_TYPES.CONNECT;
@@ -24,6 +25,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
     private readonly _extensionContext: vscode.ExtensionContext;
     private _lastUpdateData?: ViewData;
     private _signInView?: SignInView;
+    private readonly _authManager: AuthManager;
 
     constructor(
         extensionUri: vscode.Uri,
@@ -37,6 +39,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         this._stateService = stateService;
         this._dockerService = dockerService;
         this._extensionContext = extensionContext;
+        this._authManager = AuthManager.getInstance(extensionContext);
         this._configurationChangeListener = vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('neonLocal.refreshToken') || 
                 e.affectsConfiguration('neonLocal.apiKey') ||
@@ -56,35 +59,24 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         webviewView.webview.options = {
             enableScripts: true,
             localResourceRoots: [
-                vscode.Uri.joinPath(this._extensionUri, 'media'),
-                vscode.Uri.joinPath(this._extensionUri, 'out')
+                this._extensionUri
             ]
         };
 
-        // Initialize SignInView
-        this._signInView = new SignInView(webviewView.webview, this._stateService);
+        webviewView.webview.html = this.getWebviewContent(webviewView.webview);
 
-        // Set up message handler first
-        webviewView.webview.onDidReceiveMessage(this.handleWebviewMessage.bind(this));
-
-        // Handle visibility changes
-        webviewView.onDidChangeVisibility(() => {
-            if (webviewView.visible) {
-                // Force update when becoming visible
-                this._lastUpdateData = undefined;
-                this.updateView().catch(error => {
-                    console.error('Error updating connect view on visibility change:', error);
-                });
-            }
+        // Set up message handler
+        webviewView.webview.onDidReceiveMessage(async (message: WebviewMessage) => {
+            await this.handleWebviewMessage(message);
         });
 
-        // Register this view with the manager
-        this._webviewService.registerWebview(webviewView.webview);
+        // Create sign-in view
+        this._signInView = new SignInView(webviewView.webview, this._stateService, this._authManager);
 
         // Initial update with a small delay to ensure proper registration
         setTimeout(async () => {
             try {
-                const persistentApiToken = ConfigurationManager.getConfigValue('persistentApiToken');
+                const persistentApiToken = this._authManager.getPersistentApiToken();
                 const apiKey = ConfigurationManager.getConfigValue('apiKey');
                 const refreshToken = ConfigurationManager.getConfigValue('refreshToken');
                 console.log('ConnectViewProvider: Initial token check', { 
@@ -210,7 +202,11 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 case 'signIn':
                     if (this._signInView) {
                         await this._signInView.handleSignIn();
-                        // After successful sign-in, update the view
+                        // After successful sign-in, initialize view data and update the view
+                        await this.initializeViewData();
+                        if (this._view) {
+                            this._view.webview.html = this.getWebviewContent(this._view.webview);
+                        }
                         await this.updateView();
                     }
                     break;
@@ -227,8 +223,12 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     });
 
                     if (token) {
-                        await ConfigurationManager.updateConfig('persistentApiToken', token);
+                        await this._authManager.setPersistentApiToken(token);
                         await this._stateService.setPersistentApiToken(token);
+                        await this.initializeViewData();
+                        if (this._view) {
+                            this._view.webview.html = this.getWebviewContent(this._view.webview);
+                        }
                         await this.updateView();
                     }
                     break;
@@ -382,7 +382,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                             
                             // Start the container
                             await this._dockerService.startContainer({
-                                branchId: message.branchId || message.parentBranchId,
+                                branchId: message.isExisting ? message.branchId : message.parentBranchId,
                                 driver: message.driver,
                                 isExisting: message.isExisting,
                                 context: this._extensionContext,
@@ -640,7 +640,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         console.log('ConnectViewProvider: Set _isUpdating flag');
 
         try {
-            const persistentApiToken = ConfigurationManager.getConfigValue('persistentApiToken');
+            const persistentApiToken = this._authManager.getPersistentApiToken();
             const apiKey = ConfigurationManager.getConfigValue('apiKey');
             const refreshToken = ConfigurationManager.getConfigValue('refreshToken');
             

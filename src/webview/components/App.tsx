@@ -73,6 +73,11 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
             console.log('Clearing state');
             window.location.reload();
             break;
+
+          case 'launchPsql':
+            // Forward the command to the extension
+            vscode.postMessage({ command: 'launchPsql' });
+            break;
         }
       };
       
