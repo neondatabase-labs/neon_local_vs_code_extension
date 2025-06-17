@@ -26,6 +26,8 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
     private _lastUpdateData?: ViewData;
     private _signInView?: SignInView;
     private readonly _authManager: AuthManager;
+    private _lastKnownToken?: string;
+    private _authStateChangeDisposable?: vscode.Disposable;
 
     constructor(
         extensionUri: vscode.Uri,
@@ -45,6 +47,17 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 e.affectsConfiguration('neonLocal.apiKey') ||
                 e.affectsConfiguration('neonLocal.persistentApiToken')) {
                 this.debouncedUpdateView();
+            }
+        });
+
+        // Listen for authentication state changes
+        this._authStateChangeDisposable = this._authManager.onDidChangeAuthentication(async (isAuthenticated) => {
+            if (!isAuthenticated) {
+                // Clear the view data and show sign-in view when user signs out
+                await this._stateService.clearState();
+                if (this._view && this._signInView) {
+                    this._view.webview.html = this._signInView.getHtml("Please sign in to continue", true);
+                }
             }
         });
     }
@@ -85,6 +98,26 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     hasRefreshToken: !!refreshToken
                 });
 
+                // Check if the token has changed
+                const currentToken = persistentApiToken || apiKey || refreshToken;
+                if (this._lastKnownToken && this._lastKnownToken !== currentToken) {
+                    console.log('Token has changed, clearing selections');
+                    await this._stateService.clearState();
+                    // Also clear the current organization ID to prevent fetching projects for the old org
+                    await this._stateService.setCurrentOrg('');
+                }
+                this._lastKnownToken = currentToken;
+
+                // If no valid token exists, clear state and show sign-in
+                if (!currentToken) {
+                    console.log('ConnectViewProvider: No valid token found, clearing state and showing sign-in');
+                    await this._stateService.clearState();
+                    if (this._view && this._signInView) {
+                        this._view.webview.html = this._signInView.getHtml("Please sign in to continue", true);
+                    }
+                    return;
+                }
+
                 // If persistent token exists, show connect view and initialize
                 if (persistentApiToken) {
                     console.log('ConnectViewProvider: Using persistent API token');
@@ -100,7 +133,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 if (!apiKey && !refreshToken) {
                     console.log('ConnectViewProvider: No tokens found, showing sign-in HTML');
                     if (this._view && this._signInView) {
-                        this._view.webview.html = this._signInView.getHtml();
+                        this._view.webview.html = this._signInView.getHtml("Please sign in to continue", true);
                     }
                     return;
                 }
@@ -111,9 +144,9 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 }
                 await this.initializeViewData();
             } catch (error) {
-                console.error('ConnectViewProvider: Error during initial setup', error);
-                if (this._view && this._signInView) {
-                    this._view.webview.html = this._signInView.getHtml();
+                console.error('Error in initial view update:', error);
+                if (error instanceof Error) {
+                    vscode.window.showErrorMessage(`View initialization error: ${error.message}`);
                 }
             }
         }, 100);
@@ -137,9 +170,9 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 orgs: false
             });
 
-            // If there's a pre-selected organization, fetch its projects
+            // Only fetch projects if there's a valid organization selected
             const currentOrgId = this._stateService.currentOrg;
-            if (currentOrgId) {
+            if (currentOrgId && currentOrgId !== '') {
                 try {
                     const projects = await apiService.getProjects(currentOrgId);
                     await this._stateService.setProjects(projects);
@@ -230,6 +263,13 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                             this._view.webview.html = this.getWebviewContent(this._view.webview);
                         }
                         await this.updateView();
+                    }
+                    break;
+                case 'clearAuth':
+                    // Clear the view data and show sign-in view
+                    await this._stateService.clearState();
+                    if (this._view && this._signInView) {
+                        this._view.webview.html = this._signInView.getHtml("Please sign in to continue", true);
                     }
                     break;
                 case 'openNeonConsole':
@@ -600,6 +640,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             clearTimeout(this._connectionTypeUpdateTimeout);
         }
         this._configurationChangeListener.dispose();
+        this._authStateChangeDisposable?.dispose();
     }
 
     private getWebviewContent(webview: vscode.Webview): string {
@@ -666,7 +707,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             if (!apiKey && !refreshToken) {
                 console.log('ConnectViewProvider: No tokens found, showing sign-in HTML');
                 if (this._signInView) {
-                    this._view.webview.html = this._signInView.getHtml();
+                    this._view.webview.html = this._signInView.getHtml("Please sign in to continue", true);
                 }
                 this._isUpdating = false;
                 return;
@@ -709,7 +750,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             Logger.error('Failed to update view', error);
             
             if (this._view && this._signInView) {
-                this._view.webview.html = this._signInView.getHtml();
+                this._view.webview.html = this._signInView.getHtml("Please sign in to continue", true);
             }
         } finally {
             this._isUpdating = false;

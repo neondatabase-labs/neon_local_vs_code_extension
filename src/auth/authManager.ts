@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { auth, refreshToken, TokenSet, AuthProps } from './authService';
 import { CONFIG } from '../constants';
+import { StateService } from '../services/state.service';
 
 export class AuthManager {
   private static instance: AuthManager;
@@ -70,6 +71,11 @@ export class AuthManager {
     await vscode.workspace.getConfiguration(CONFIG.EXTENSION_NAME).update(CONFIG.SETTINGS.API_KEY, undefined, true);
     await vscode.workspace.getConfiguration(CONFIG.EXTENSION_NAME).update(CONFIG.SETTINGS.REFRESH_TOKEN, undefined, true);
     await vscode.workspace.getConfiguration(CONFIG.EXTENSION_NAME).update(CONFIG.SETTINGS.PERSISTENT_API_TOKEN, undefined, true);
+    
+    // Clear the state service
+    const stateService = new StateService(this.context);
+    await stateService.clearState();
+    await stateService.setCurrentOrg('');
     
     this._onDidChangeAuthentication.fire(false);
     
