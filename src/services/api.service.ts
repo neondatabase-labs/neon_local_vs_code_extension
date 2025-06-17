@@ -319,4 +319,27 @@ export class NeonApiService {
             throw new Error(`Failed to fetch branch details: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
+
+    public async createBranch(projectId: string, parentBranchId: string, branchName: string): Promise<NeonBranch> {
+        try {
+            const payload = {
+                branch: {
+                    name: branchName,
+                    parent_id: parentBranchId
+                },
+                endpoints: [{
+                    type: 'read_write',
+                }],
+                annotation_value: {
+                    vscode: 'true'
+                }
+            };
+
+            const response = await this.makeRequest<any>(`/projects/${projectId}/branches`, 'POST', payload);
+            return response.branch;
+        } catch (error: unknown) {
+            console.error('Error creating branch:', error);
+            throw new Error(`Failed to create branch: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
 }
