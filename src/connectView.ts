@@ -56,7 +56,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 // Clear the view data and show sign-in view when user signs out
                 await this._stateService.clearState();
                 if (this._view && this._signInView) {
-                    this._view.webview.html = this._signInView.getHtml("Please sign in to continue", true);
+                    this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
                 }
             }
         });
@@ -113,7 +113,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     console.log('ConnectViewProvider: No valid token found, clearing state and showing sign-in');
                     await this._stateService.clearState();
                     if (this._view && this._signInView) {
-                        this._view.webview.html = this._signInView.getHtml("Please sign in to continue", true);
+                        this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
                     }
                     return;
                 }
@@ -133,7 +133,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 if (!apiKey && !refreshToken) {
                     console.log('ConnectViewProvider: No tokens found, showing sign-in HTML');
                     if (this._view && this._signInView) {
-                        this._view.webview.html = this._signInView.getHtml("Please sign in to continue", true);
+                        this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
                     }
                     return;
                 }
@@ -269,7 +269,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     // Clear the view data and show sign-in view
                     await this._stateService.clearState();
                     if (this._view && this._signInView) {
-                        this._view.webview.html = this._signInView.getHtml("Please sign in to continue", true);
+                        this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
                     }
                     break;
                 case 'openNeonConsole':
@@ -707,7 +707,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             if (!apiKey && !refreshToken) {
                 console.log('ConnectViewProvider: No tokens found, showing sign-in HTML');
                 if (this._signInView) {
-                    this._view.webview.html = this._signInView.getHtml("Please sign in to continue", true);
+                    this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
                 }
                 this._isUpdating = false;
                 return;
@@ -750,7 +750,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             Logger.error('Failed to update view', error);
             
             if (this._view && this._signInView) {
-                this._view.webview.html = this._signInView.getHtml("Please sign in to continue", true);
+                this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
             }
         } finally {
             this._isUpdating = false;

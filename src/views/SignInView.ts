@@ -33,7 +33,7 @@ export class SignInView {
                     ${showSignInButton ? `
                         <div class="button-container">
                             <button class="button" id="signInButton">Sign in with Neon</button>
-                            <button class="button secondary" id="importTokenButton">Import API Token</button>
+                            <button class="button secondary" id="importTokenButton">Import API Key</button>
                         </div>
                     ` : ''}
                 </div>
