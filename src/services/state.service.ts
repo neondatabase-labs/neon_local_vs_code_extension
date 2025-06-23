@@ -162,7 +162,7 @@ export class StateService implements IStateService {
         const connectedOrgName = await this.state.get<string>('neonLocal.connectedOrgName', '');
         const connectedProjectId = await this.state.get<string>('neonLocal.connectedProjectId', '');
         const connectedProjectName = await this.state.get<string>('neonLocal.connectedProjectName', '');
-        const persistentApiToken = config.get<string>('persistentApiToken');
+        const persistentApiToken = await ConfigurationManager.getSecureToken(this.context, 'persistentApiToken');
 
         this._state = {
             connection: {
@@ -560,10 +560,8 @@ export class StateService implements IStateService {
     }
 
     public async clearAuth(): Promise<void> {
+        await ConfigurationManager.clearAuth(this.context);
         const config = vscode.workspace.getConfiguration('neonLocal');
-        await config.update('apiKey', undefined, true);
-        await config.update('refreshToken', undefined, true);
-        await config.update('persistentApiToken', undefined, true);
         await config.update('projectId', undefined, true);
         await this.setIsProxyRunning(false);
         await this.clearState();
@@ -597,7 +595,7 @@ export class StateService implements IStateService {
 
     public async setPersistentApiToken(value: string): Promise<void> {
         this._state.connection.persistentApiToken = value;
-        await ConfigurationManager.updateConfig('persistentApiToken', value);
+        await ConfigurationManager.updateSecureToken(this.context, 'persistentApiToken', value);
         await this.updateViewData();
     }
 } 

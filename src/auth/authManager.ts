@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { auth, refreshToken, TokenSet, AuthProps } from './authService';
 import { CONFIG } from '../constants';
 import { StateService } from '../services/state.service';
+import { SecureTokenStorage } from '../services/secureTokenStorage';
 
 export class AuthManager {
   private static instance: AuthManager;
@@ -9,13 +10,18 @@ export class AuthManager {
   private _isAuthenticated: boolean = false;
   private _tokenSet: TokenSet | undefined;
   private _onDidChangeAuthentication = new vscode.EventEmitter<boolean>();
+  private secureStorage: SecureTokenStorage;
   
   readonly onDidChangeAuthentication = this._onDidChangeAuthentication.event;
 
   private constructor(context: vscode.ExtensionContext) {
     this.context = context;
+    this.secureStorage = SecureTokenStorage.getInstance(context);
     this._tokenSet = this.context.globalState.get<TokenSet>('neon.tokenSet');
-    this._isAuthenticated = !!this._tokenSet || !!this.getPersistentApiToken();
+    // Initialize authentication state - will be updated when tokens are loaded
+    this._isAuthenticated = !!this._tokenSet;
+    // Initialize auth state asynchronously
+    this.initializeAuthState().catch(console.error);
   }
 
   static getInstance(context: vscode.ExtensionContext): AuthManager {
@@ -29,12 +35,17 @@ export class AuthManager {
     return this._isAuthenticated;
   }
 
+  async isAuthenticatedAsync(): Promise<boolean> {
+    const persistentToken = await this.getPersistentApiToken();
+    return !!persistentToken || !!this._tokenSet;
+  }
+
   get tokenSet(): TokenSet | undefined {
     return this._tokenSet;
   }
 
-  getPersistentApiToken(): string | undefined {
-    return vscode.workspace.getConfiguration(CONFIG.EXTENSION_NAME).get<string>(CONFIG.SETTINGS.PERSISTENT_API_TOKEN);
+  async getPersistentApiToken(): Promise<string | undefined> {
+    return await this.secureStorage.getPersistentApiToken();
   }
 
   async signIn(): Promise<void> {
@@ -50,9 +61,14 @@ export class AuthManager {
       this._tokenSet = tokenSet;
       this._isAuthenticated = true;
       
+      // Store tokens securely
       await this.context.globalState.update('neon.tokenSet', tokenSet);
-      await vscode.workspace.getConfiguration(CONFIG.EXTENSION_NAME).update(CONFIG.SETTINGS.API_KEY, tokenSet.access_token, true);
-      await vscode.workspace.getConfiguration(CONFIG.EXTENSION_NAME).update(CONFIG.SETTINGS.REFRESH_TOKEN, tokenSet.refresh_token, true);
+      if (tokenSet.access_token) {
+        await this.secureStorage.storeAccessToken(tokenSet.access_token);
+      }
+      if (tokenSet.refresh_token) {
+        await this.secureStorage.storeRefreshToken(tokenSet.refresh_token);
+      }
       
       this._onDidChangeAuthentication.fire(true);
       
@@ -67,10 +83,9 @@ export class AuthManager {
     this._tokenSet = undefined;
     this._isAuthenticated = false;
     
+    // Clear all storage locations
     await this.context.globalState.update('neon.tokenSet', undefined);
-    await vscode.workspace.getConfiguration(CONFIG.EXTENSION_NAME).update(CONFIG.SETTINGS.API_KEY, undefined, true);
-    await vscode.workspace.getConfiguration(CONFIG.EXTENSION_NAME).update(CONFIG.SETTINGS.REFRESH_TOKEN, undefined, true);
-    await vscode.workspace.getConfiguration(CONFIG.EXTENSION_NAME).update(CONFIG.SETTINGS.PERSISTENT_API_TOKEN, undefined, true);
+    await this.secureStorage.clearAllTokens();
     
     // Clear the state service
     const stateService = new StateService(this.context);
@@ -84,7 +99,8 @@ export class AuthManager {
 
   async refreshTokenIfNeeded(): Promise<boolean> {
     // If using persistent API token, no need to refresh
-    if (this.getPersistentApiToken()) {
+    const persistentToken = await this.getPersistentApiToken();
+    if (persistentToken) {
       return true;
     }
 
@@ -112,8 +128,12 @@ export class AuthManager {
       
       this._tokenSet = newTokenSet;
       await this.context.globalState.update('neon.tokenSet', newTokenSet);
-      await vscode.workspace.getConfiguration(CONFIG.EXTENSION_NAME).update(CONFIG.SETTINGS.API_KEY, newTokenSet.access_token, true);
-      await vscode.workspace.getConfiguration(CONFIG.EXTENSION_NAME).update(CONFIG.SETTINGS.REFRESH_TOKEN, newTokenSet.refresh_token, true);
+      if (newTokenSet.access_token) {
+        await this.secureStorage.storeAccessToken(newTokenSet.access_token);
+      }
+      if (newTokenSet.refresh_token) {
+        await this.secureStorage.storeRefreshToken(newTokenSet.refresh_token);
+      }
       
       return true;
     } catch (error) {
@@ -126,9 +146,27 @@ export class AuthManager {
   }
 
   async setPersistentApiToken(token: string): Promise<void> {
-    await vscode.workspace.getConfiguration(CONFIG.EXTENSION_NAME).update(CONFIG.SETTINGS.PERSISTENT_API_TOKEN, token, true);
+    await this.secureStorage.storePersistentApiToken(token);
     this._isAuthenticated = true;
     this._onDidChangeAuthentication.fire(true);
     vscode.window.showInformationMessage('Successfully imported API token!');
+  }
+
+  // Migration method to move existing tokens from config to secure storage
+  async migrateTokensFromConfig(): Promise<void> {
+    await this.secureStorage.migrateFromConfig();
+  }
+
+  // Initialize authentication state after constructor
+  async initializeAuthState(): Promise<void> {
+    const persistentToken = await this.getPersistentApiToken();
+    const wasAuthenticated = this._isAuthenticated;
+    // Persistent token takes precedence over OAuth token
+    this._isAuthenticated = !!persistentToken || !!this._tokenSet;
+    
+    // Fire authentication change event if the state changed
+    if (wasAuthenticated !== this._isAuthenticated) {
+      this._onDidChangeAuthentication.fire(this._isAuthenticated);
+    }
   }
 } 

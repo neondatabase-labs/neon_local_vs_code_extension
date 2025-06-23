@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { CONFIG } from './constants';
 import type { NeonConfiguration } from './types';
+import { SecureTokenStorage } from './services/secureTokenStorage';
 
 export class ConfigurationManager {
     private static getConfig(): vscode.WorkspaceConfiguration {
@@ -21,10 +22,53 @@ export class ConfigurationManager {
         return config.get<NeonConfiguration[K]>(key);
     }
 
-    static async clearAuth(): Promise<void> {
-        await this.updateConfig('apiKey', undefined);
-        await this.updateConfig('refreshToken', undefined);
-        await this.updateConfig('persistentApiToken', undefined);
+    // Secure token access methods
+    static async getSecureToken(context: vscode.ExtensionContext, tokenType: 'apiKey' | 'refreshToken' | 'persistentApiToken'): Promise<string | undefined> {
+        const secureStorage = SecureTokenStorage.getInstance(context);
+        
+        switch (tokenType) {
+            case 'apiKey':
+                return await secureStorage.getAccessToken();
+            case 'refreshToken':
+                return await secureStorage.getRefreshToken();
+            case 'persistentApiToken':
+                return await secureStorage.getPersistentApiToken();
+            default:
+                return undefined;
+        }
+    }
+
+    static async updateSecureToken(context: vscode.ExtensionContext, tokenType: 'apiKey' | 'refreshToken' | 'persistentApiToken', value: string | undefined): Promise<void> {
+        const secureStorage = SecureTokenStorage.getInstance(context);
+        
+        switch (tokenType) {
+            case 'apiKey':
+                if (value) {
+                    await secureStorage.storeAccessToken(value);
+                } else {
+                    await secureStorage.clearAllTokens(); // This will clear all tokens, but for backward compatibility
+                }
+                break;
+            case 'refreshToken':
+                if (value) {
+                    await secureStorage.storeRefreshToken(value);
+                } else {
+                    await secureStorage.clearAllTokens(); // This will clear all tokens, but for backward compatibility
+                }
+                break;
+            case 'persistentApiToken':
+                if (value) {
+                    await secureStorage.storePersistentApiToken(value);
+                } else {
+                    await secureStorage.clearAllTokens(); // This will clear all tokens, but for backward compatibility
+                }
+                break;
+        }
+    }
+
+    static async clearAuth(context: vscode.ExtensionContext): Promise<void> {
+        const secureStorage = SecureTokenStorage.getInstance(context);
+        await secureStorage.clearAllTokens();
     }
 }
 

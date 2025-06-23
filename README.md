@@ -4,7 +4,8 @@ This VS Code extension provides a seamless integration with Neon Database for lo
 
 ## Features
 
-- Configure Neon API key and project settings
+- **Secure Authentication**: Sign in with OAuth or import a persistent API key
+- **Secure Token Storage**: All tokens are encrypted and stored using VS Code's SecretStorage API
 - Create, switch between, and delete Neon database branches
 - Start and stop local proxy with support for both PostgreSQL and Neon Serverless drivers
 - Status bar indicator showing current branch
@@ -13,19 +14,35 @@ This VS Code extension provides a seamless integration with Neon Database for lo
 ## Requirements
 
 - Docker must be installed and running on your system
-- A Neon account and API key
+- A Neon account (for OAuth sign-in) or API key
 - VS Code 1.85.0 or later
 
 ## Installation
 
 1. Install the extension from the VS Code marketplace
-2. Configure your Neon API key and project ID using the "Neon: Configure Local Environment" command
+2. Open the Connect view in the sidebar
+3. Sign in with your Neon account or import a persistent API key
+
+## Authentication
+
+The extension supports two authentication methods:
+
+### OAuth Sign-in (Recommended)
+1. Click "Sign in" in the Connect view
+2. Complete the OAuth flow in your browser
+3. Your access and refresh tokens are securely stored
+
+### Persistent API Key
+1. Click "Import API Key" in the Connect view
+2. Enter your Neon persistent API key
+3. The key is securely stored and encrypted
+
+**Security**: All tokens are encrypted and stored using VS Code's SecretStorage API.
 
 ## Usage
 
 The extension provides the following commands (accessible via Command Palette - Ctrl/Cmd + Shift + P):
 
-- **Neon: Configure Local Environment**: Set up your Neon API key, project ID, and preferred driver
 - **Neon: Start Local Proxy**: Start the local proxy with a selected branch
 - **Neon: Stop Local Proxy**: Stop the currently running proxy
 - **Neon: Create New Branch**: Create a new Neon database branch
@@ -51,22 +68,23 @@ neonConfig.fetchEndpoint = 'http://localhost:5432/sql';
 
 This extension contributes the following settings:
 
-* `neonLocal.apiKey`: Your Neon API key
-* `neonLocal.projectId`: Your Neon project ID
 * `neonLocal.driver`: Driver to use (postgres/serverless)
 * `neonLocal.deleteOnStop`: Whether to delete the branch when stopping the proxy
 
 ## Security Notes
 
-- Your Neon API key is stored securely in VS Code's secret storage
+- **All tokens are encrypted** and stored using VS Code's SecretStorage API
+- **No tokens are stored in configuration files** or workspace settings
 - The extension only communicates with the official Neon API and your local Docker daemon
 - All connections use SSL/TLS encryption
+- OAuth tokens are automatically refreshed when needed
 
 ## Troubleshooting
 
 1. **Proxy won't start**: Ensure Docker is running and port 5432 is not in use
 2. **Connection errors**: Check if the correct driver is selected and SSL settings are properly configured
-3. **API errors**: Verify your API key and project ID are correct
+3. **Authentication errors**: Try signing out and signing back in, or re-import your API key
+4. **API errors**: Verify your authentication is working correctly
 
 ## Contributing
 

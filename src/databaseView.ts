@@ -11,11 +11,11 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = VIEW_TYPES.DATABASE;
     private _view?: vscode.WebviewView;
     private _lastUpdateData?: ViewData;
-    private _configurationChangeListener: vscode.Disposable;
     private _isUpdating = false;
     private readonly _extensionUri: vscode.Uri;
     private readonly _webviewService: WebViewService;
     private readonly _stateService: StateService;
+    private readonly _extensionContext: vscode.ExtensionContext;
     private _signInView?: SignInView;
     private readonly _authManager: AuthManager;
 
@@ -28,14 +28,8 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
         this._extensionUri = extensionUri;
         this._webviewService = webviewService;
         this._stateService = stateService;
+        this._extensionContext = extensionContext;
         this._authManager = AuthManager.getInstance(extensionContext);
-        this._configurationChangeListener = vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration('neonLocal.refreshToken') || 
-                e.affectsConfiguration('neonLocal.apiKey') ||
-                e.affectsConfiguration('neonLocal.persistentApiToken')) {
-                this.updateView();
-            }
-        });
 
         // Listen for authentication state changes
         this._authManager.onDidChangeAuthentication(async (isAuthenticated) => {
@@ -94,40 +88,20 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
         // Initial update with a small delay to ensure proper registration
         setTimeout(async () => {
             try {
-                const persistentApiToken = this._authManager.getPersistentApiToken();
-                const apiKey = ConfigurationManager.getConfigValue('apiKey');
-                const refreshToken = ConfigurationManager.getConfigValue('refreshToken');
-                
-                console.log('DatabaseViewProvider: Checked tokens', { 
-                    hasPersistentApiToken: !!persistentApiToken,
-                    hasApiKey: !!apiKey, 
-                    hasRefreshToken: !!refreshToken
-                });
+                // Use AuthManager to check authentication state consistently
+                const isAuthenticated = await this._authManager.isAuthenticatedAsync();
+                console.log('DatabaseViewProvider: Authentication state check', { isAuthenticated });
 
-                // If persistent token exists, we can proceed
-                if (persistentApiToken) {
-                    console.log('DatabaseViewProvider: Using persistent API token');
-                    if (this._view) {
-                        this._view.webview.html = this.getWebviewContent(this._view.webview);
-                    }
-                    await this._stateService.setPersistentApiToken(persistentApiToken);
-                    const data = await this._stateService.getViewData();
-                    if (this._view) {
-                        await this._webviewService.updateWebview(this._view, data);
-                    }
-                    return;
-                }
-
-                // Otherwise, check for OAuth tokens
-                if (!apiKey && !refreshToken) {
-                    console.log('DatabaseViewProvider: No tokens found, showing sign-in message');
+                if (!isAuthenticated) {
+                    console.log('DatabaseViewProvider: Not authenticated, showing sign-in message');
                     if (this._view && this._signInView) {
                         this._view.webview.html = this._signInView.getHtml("Sign in to Neon in the Connect view", false);
                     }
                     return;
                 }
 
-                // If we have OAuth tokens, show database view and initialize
+                // User is authenticated (either via OAuth or persistent API key), show database view
+                console.log('DatabaseViewProvider: User is authenticated, showing database view');
                 if (this._view) {
                     this._view.webview.html = this.getWebviewContent(this._view.webview);
                     const data = await this._stateService.getViewData();
@@ -198,9 +172,9 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
         this._isUpdating = true;
 
         try {
-            const persistentApiToken = this._authManager.getPersistentApiToken();
-            const apiKey = ConfigurationManager.getConfigValue('apiKey');
-            const refreshToken = ConfigurationManager.getConfigValue('refreshToken');
+            const persistentApiToken = await this._authManager.getPersistentApiToken();
+            const apiKey = await ConfigurationManager.getSecureToken(this._extensionContext, 'apiKey');
+            const refreshToken = await ConfigurationManager.getSecureToken(this._extensionContext, 'refreshToken');
             
             console.log('DatabaseViewProvider: Checking tokens for update', { 
                 hasPersistentApiToken: !!persistentApiToken,
@@ -236,7 +210,8 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
     }
 
     public dispose(): void {
-        this._configurationChangeListener.dispose();
+        // Note: Configuration change listener removed since we now use SecretStorage
+        // The authentication state change listener handles all token-related updates
     }
 }
 

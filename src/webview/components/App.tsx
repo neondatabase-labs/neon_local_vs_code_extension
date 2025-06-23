@@ -83,11 +83,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
       
       window.addEventListener('message', messageHandlerRef.current);
       
-      // Request initial data from the extension
-      console.log('Requesting initial data from extension');
-      vscode.postMessage({
-        command: 'requestInitialData'
-      });
+      // Note: Initial data request is handled by StateContext.tsx
     }
     
     return () => {

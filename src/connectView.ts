@@ -13,7 +13,6 @@ import { AuthManager } from './auth/authManager';
 export class ConnectViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = VIEW_TYPES.CONNECT;
     private _view?: vscode.WebviewView;
-    private _configurationChangeListener: vscode.Disposable;
     private _updateViewTimeout?: NodeJS.Timeout;
     private _isUpdating = false;
     private _lastRequestedConnectionType?: 'existing' | 'new';
@@ -42,18 +41,17 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         this._dockerService = dockerService;
         this._extensionContext = extensionContext;
         this._authManager = AuthManager.getInstance(extensionContext);
-        this._configurationChangeListener = vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration('neonLocal.refreshToken') || 
-                e.affectsConfiguration('neonLocal.apiKey') ||
-                e.affectsConfiguration('neonLocal.persistentApiToken')) {
-                this.debouncedUpdateView();
-            }
-        });
 
         // Listen for authentication state changes
         this._authStateChangeDisposable = this._authManager.onDidChangeAuthentication(async (isAuthenticated) => {
-            if (!isAuthenticated) {
-                // Only clear state when user signs out, not when sign-in screen is displayed
+            if (isAuthenticated) {
+                // User has signed in or imported a token, initialize the view
+                await this.initializeViewData();
+                if (this._view) {
+                    this._view.webview.html = this.getWebviewContent(this._view.webview);
+                }
+            } else {
+                // User has signed out, clear state and show sign-in
                 await this._stateService.clearState();
                 if (this._view && this._signInView) {
                     this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
@@ -89,55 +87,20 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         // Initial update with a small delay to ensure proper registration
         setTimeout(async () => {
             try {
-                const persistentApiToken = this._authManager.getPersistentApiToken();
-                const apiKey = ConfigurationManager.getConfigValue('apiKey');
-                const refreshToken = ConfigurationManager.getConfigValue('refreshToken');
-                console.log('ConnectViewProvider: Initial token check', { 
-                    hasPersistentApiToken: !!persistentApiToken,
-                    hasApiKey: !!apiKey, 
-                    hasRefreshToken: !!refreshToken
-                });
+                // Use AuthManager to check authentication state consistently
+                const isAuthenticated = await this._authManager.isAuthenticatedAsync();
+                console.log('ConnectViewProvider: Authentication state check', { isAuthenticated });
 
-                // Check if the token has changed (indicating different user)
-                const currentToken = persistentApiToken || apiKey || refreshToken;
-                if (this._lastKnownToken && this._lastKnownToken !== currentToken) {
-                    console.log('Token has changed, clearing selections');
-                    await this._stateService.clearState();
-                    // Also clear the current organization ID to prevent fetching projects for the old org
-                    await this._stateService.setCurrentOrg('');
-                }
-                this._lastKnownToken = currentToken;
-
-                // If no valid token exists, show sign-in without clearing state
-                if (!currentToken) {
-                    console.log('ConnectViewProvider: No valid token found, showing sign-in');
+                if (!isAuthenticated) {
+                    console.log('ConnectViewProvider: Not authenticated, showing sign-in');
                     if (this._view && this._signInView) {
                         this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
                     }
                     return;
                 }
 
-                // If persistent token exists, show connect view and initialize
-                if (persistentApiToken) {
-                    console.log('ConnectViewProvider: Using persistent API token');
-                    if (this._view) {
-                        this._view.webview.html = this.getWebviewContent(this._view.webview);
-                    }
-                    await this._stateService.setPersistentApiToken(persistentApiToken);
-                    await this.initializeViewData();
-                    return;
-                }
-
-                // Otherwise, check for OAuth tokens
-                if (!apiKey && !refreshToken) {
-                    console.log('ConnectViewProvider: No tokens found, showing sign-in HTML');
-                    if (this._view && this._signInView) {
-                        this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
-                    }
-                    return;
-                }
-
-                // If we have OAuth tokens, show connect view and initialize
+                // User is authenticated (either via OAuth or persistent API key), show connect view and initialize
+                console.log('ConnectViewProvider: User is authenticated, showing connect view');
                 if (this._view) {
                     this._view.webview.html = this.getWebviewContent(this._view.webview);
                 }
@@ -252,12 +215,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 case 'signIn':
                     if (this._signInView) {
                         await this._signInView.handleSignIn();
-                        // After successful sign-in, initialize view data and update the view
-                        await this.initializeViewData();
-                        if (this._view) {
-                            this._view.webview.html = this.getWebviewContent(this._view.webview);
-                        }
-                        await this.updateView();
+                        // The authentication state change listener will handle the UI update
                     }
                     break;
                 case 'showLoading':
@@ -275,11 +233,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     if (token) {
                         await this._authManager.setPersistentApiToken(token);
                         await this._stateService.setPersistentApiToken(token);
-                        await this.initializeViewData();
-                        if (this._view) {
-                            this._view.webview.html = this.getWebviewContent(this._view.webview);
-                        }
-                        await this.updateView();
+                        // The authentication state change listener will handle the UI update
                     }
                     break;
                 case 'clearAuth':
@@ -655,7 +609,6 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         if (this._connectionTypeUpdateTimeout) {
             clearTimeout(this._connectionTypeUpdateTimeout);
         }
-        this._configurationChangeListener.dispose();
         this._authStateChangeDisposable?.dispose();
     }
 
@@ -697,39 +650,20 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         console.log('ConnectViewProvider: Set _isUpdating flag');
 
         try {
-            const persistentApiToken = this._authManager.getPersistentApiToken();
-            const apiKey = ConfigurationManager.getConfigValue('apiKey');
-            const refreshToken = ConfigurationManager.getConfigValue('refreshToken');
-            
-            console.log('ConnectViewProvider: Checked tokens', { 
-                hasPersistentApiToken: !!persistentApiToken,
-                hasApiKey: !!apiKey, 
-                hasRefreshToken: !!refreshToken
-            });
+            // Use AuthManager to check authentication state consistently
+            const isAuthenticated = await this._authManager.isAuthenticatedAsync();
+            console.log('ConnectViewProvider: Authentication state check in updateView', { isAuthenticated });
 
-            // If persistent token exists, we can proceed
-            if (persistentApiToken) {
-                console.log('ConnectViewProvider: Using persistent API token');
-                if (this._view.webview.html.includes('sign-in-button')) {
-                    this._view.webview.html = this.getWebviewContent(this._view.webview);
+            if (!isAuthenticated) {
+                console.log('ConnectViewProvider: Not authenticated, showing sign-in message');
+                if (this._view && this._signInView) {
+                    this._view.webview.html = this._signInView.getHtml("Sign in to Neon in the Connect view", false);
                 }
-                const viewData = await this._stateService.getViewData();
-                await this._webviewService.updateWebview(this._view, viewData);
-                this._isUpdating = false;
                 return;
             }
 
-            // Otherwise, check for OAuth tokens
-            if (!apiKey && !refreshToken) {
-                console.log('ConnectViewProvider: No tokens found, showing sign-in HTML');
-                if (this._signInView) {
-                    this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
-                }
-                this._isUpdating = false;
-                return;
-            }
-
-            // If we're transitioning from sign-in to connect view, update the HTML
+            // User is authenticated (either via OAuth or persistent API key), show connect view
+            console.log('ConnectViewProvider: User is authenticated, showing connect view');
             if (this._view.webview.html.includes('sign-in-button')) {
                 console.log('ConnectViewProvider: Transitioning from sign-in to connect view');
                 this._view.webview.html = this.getWebviewContent(this._view.webview);

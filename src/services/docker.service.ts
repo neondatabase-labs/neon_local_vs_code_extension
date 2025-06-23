@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { StateService } from './state.service';
 import { AuthManager } from '../auth/authManager';
+import { ConfigurationManager } from '../utils';
 
 export class DockerService {
     private docker: Docker;
@@ -331,10 +332,9 @@ export class DockerService {
         context: vscode.ExtensionContext;
         projectId: string;
     }): Promise<void> {
-        // Get API key from configuration
-        const config = vscode.workspace.getConfiguration('neonLocal');
-        const persistentApiToken = config.get<string>('persistentApiToken');
-        const apiKey = config.get<string>('apiKey');
+        // Get API key from secure storage
+        const persistentApiToken = await ConfigurationManager.getSecureToken(options.context, 'persistentApiToken');
+        const apiKey = await ConfigurationManager.getSecureToken(options.context, 'apiKey');
 
         // If persistent token exists, use it for all operations
         if (persistentApiToken) {
@@ -385,7 +385,7 @@ export class DockerService {
         }
 
         // Get the potentially refreshed token
-        const refreshedApiKey = vscode.workspace.getConfiguration('neonLocal').get<string>('apiKey');
+        const refreshedApiKey = await ConfigurationManager.getSecureToken(options.context, 'apiKey');
         if (!refreshedApiKey) {
             throw new Error('No valid authentication token available. Please sign in again.');
         }

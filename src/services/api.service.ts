@@ -41,7 +41,7 @@ export class NeonApiService {
     }
 
     private async getToken(): Promise<string | null> {
-        const persistentApiToken = this.authManager.getPersistentApiToken();
+        const persistentApiToken = await this.authManager.getPersistentApiToken();
         const apiKey = this.authManager.tokenSet?.access_token;
         
         if (!persistentApiToken && !apiKey) {

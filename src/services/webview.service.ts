@@ -3,7 +3,7 @@ import { VIEW_TYPES } from '../constants';
 import { ViewData } from '../types';
 import { StateService } from './state.service';
 import axios from 'axios';
-import { Logger } from '../utils';
+import { Logger, ConfigurationManager } from '../utils';
 
 export class WebViewService {
     private panels: Set<vscode.WebviewPanel> = new Set();
@@ -167,15 +167,13 @@ export class WebViewService {
         });
 
         if (apiKey) {
-            const config = vscode.workspace.getConfiguration('neonLocal');
-            await config.update('apiKey', apiKey, true);
+            await ConfigurationManager.updateSecureToken(this.context, 'apiKey', apiKey);
             await this.showPanel(this.context);
         }
     }
 
     public async getNeonApiClient() {
-        const config = vscode.workspace.getConfiguration('neonLocal');
-        const apiKey = config.get<string>('apiKey');
+        const apiKey = await ConfigurationManager.getSecureToken(this.context, 'apiKey');
         
         if (!apiKey) {
             throw new Error('Neon API key not configured');

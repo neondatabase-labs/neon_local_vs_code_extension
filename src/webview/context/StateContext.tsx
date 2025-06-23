@@ -72,6 +72,8 @@ export function StateProvider({ children, vscode }: StateProviderProps) {
     }
   });
 
+  const [hasReceivedInitialData, setHasReceivedInitialData] = useState(false);
+
   useEffect(() => {
     const messageHandler = (event: MessageEvent) => {
       const message = event.data;
@@ -86,6 +88,7 @@ export function StateProvider({ children, vscode }: StateProviderProps) {
               ...message.data.connection
             }
           }));
+          setHasReceivedInitialData(true);
           break;
           
         case 'clearState':
@@ -96,15 +99,17 @@ export function StateProvider({ children, vscode }: StateProviderProps) {
 
     window.addEventListener('message', messageHandler);
     
-    // Request initial data
-    vscode.postMessage({
-      command: 'requestInitialData'
-    });
+    // Request initial data only if we haven't received it yet
+    if (!hasReceivedInitialData) {
+      vscode.postMessage({
+        command: 'requestInitialData'
+      });
+    }
 
     return () => {
       window.removeEventListener('message', messageHandler);
     };
-  }, [vscode]);
+  }, [vscode, hasReceivedInitialData]);
 
   const updateState = (newState: Partial<ViewData>) => {
     setState(prevState => ({
