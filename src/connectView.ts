@@ -53,7 +53,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         // Listen for authentication state changes
         this._authStateChangeDisposable = this._authManager.onDidChangeAuthentication(async (isAuthenticated) => {
             if (!isAuthenticated) {
-                // Clear the view data and show sign-in view when user signs out
+                // Only clear state when user signs out, not when sign-in screen is displayed
                 await this._stateService.clearState();
                 if (this._view && this._signInView) {
                     this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
@@ -98,7 +98,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     hasRefreshToken: !!refreshToken
                 });
 
-                // Check if the token has changed
+                // Check if the token has changed (indicating different user)
                 const currentToken = persistentApiToken || apiKey || refreshToken;
                 if (this._lastKnownToken && this._lastKnownToken !== currentToken) {
                     console.log('Token has changed, clearing selections');
@@ -108,10 +108,9 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 }
                 this._lastKnownToken = currentToken;
 
-                // If no valid token exists, clear state and show sign-in
+                // If no valid token exists, show sign-in without clearing state
                 if (!currentToken) {
-                    console.log('ConnectViewProvider: No valid token found, clearing state and showing sign-in');
-                    await this._stateService.clearState();
+                    console.log('ConnectViewProvider: No valid token found, showing sign-in');
                     if (this._view && this._signInView) {
                         this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
                     }
@@ -165,6 +164,24 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         try {
             // Fetch organizations first
             const orgs = await apiService.getOrgs();
+            
+            // Check if organizations have changed (indicating different user)
+            const currentViewData = await this._stateService.getViewData();
+            const currentOrgs = currentViewData.orgs;
+            
+            // Compare organization IDs to detect if user has changed
+            const currentOrgIds = currentOrgs.map(org => org.id).sort();
+            const newOrgIds = orgs.map(org => org.id).sort();
+            
+            const orgsChanged = currentOrgs.length > 0 && 
+                               (currentOrgIds.length !== newOrgIds.length || 
+                                !currentOrgIds.every((id, index) => id === newOrgIds[index]));
+            
+            if (orgsChanged) {
+                console.log('Different organizations detected after sign-in, clearing state');
+                await this._stateService.clearState();
+            }
+            
             await this._stateService.setOrganizations(orgs);
             await this._stateService.updateLoadingState({
                 orgs: false
@@ -266,8 +283,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     }
                     break;
                 case 'clearAuth':
-                    // Clear the view data and show sign-in view
-                    await this._stateService.clearState();
+                    // Show sign-in view without clearing state
                     if (this._view && this._signInView) {
                         this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
                     }
