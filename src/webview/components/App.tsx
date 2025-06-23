@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { ViewData, NeonOrg, NeonProject, NeonBranch, NeonDatabase, NeonRole } from '../../types';
 import { useStateService } from '../context/StateContext';
+import { HelpIcon } from './HelpIcon';
 
 interface MainAppProps {
   vscode: any;
@@ -292,7 +293,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
           <div className="connection-status">
             <div className="status-indicator connected">
               <span className="status-dot"></span>
-              Connected to {state.connection.type === 'new' ? 'ephemeral' : 'existing'} branch
+              Connected to {state.connection.type === 'new' ? 'ephemeral' : ''} branch
             </div>
           </div>
 
@@ -321,7 +322,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
             )}
             <div className="detail-row">
               <div className="detail-label">Driver</div>
-              <div className="detail-value">{state.connection.driver === 'serverless' ? 'Neon Serverless' : 'PostgreSQL'}</div>
+              <div className="detail-value">{state.connection.driver === 'serverless' ? 'Neon Serverless (http)' : 'PostgreSQL'}</div>
             </div>
           </div>
 
@@ -359,14 +360,20 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
         <>
           <div className="form-content">
             <div className="section">
-              <label htmlFor="connection-type">Connection Type</label>
+              <div className="label-with-help">
+                <label htmlFor="connection-type">Connection Type</label>
+                <HelpIcon 
+                  tooltip="Connecting to an existing Neon branch or a new ephemeral branch that will be automatically deleted when you disconnect."
+                  className="tooltip-below"
+                />
+              </div>
               <select
                 id="connection-type"
                 value={state.connection.type}
                 onChange={handleConnectionTypeChange}
               >
-                <option value="existing">Connect to existing branch</option>
-                <option value="new">Connect to ephemeral branch</option>
+                <option value="existing">Connect to Neon branch</option>
+                <option value="new">Connect to ephemeral Neon branch</option>
               </select>
             </div>
 
@@ -455,14 +462,19 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
                 )}
 
                 <div className="section">
-                  <label htmlFor="driver">Driver</label>
+                  <div className="label-with-help">
+                    <label htmlFor="driver">Driver</label>
+                    <HelpIcon 
+                      tooltip="Select PostgreSQL driver for traditional database connections or Neon Serverless driver for serverless applications requiring an http connection."
+                    />
+                  </div>
                   <select
                     id="driver"
                     value={state.connection.driver}
                     onChange={handleDriverSelect}
                   >
-                    <option value="serverless">Neon Serverless</option>
                     <option value="postgres">PostgreSQL</option>
+                    <option value="serverless">Neon Serverless (http)</option>
                   </select>
                 </div>
 

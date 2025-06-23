@@ -147,8 +147,6 @@ button:disabled {
   gap: 4px;
 }
 
-
-
 .detail-label-container {
   display: flex !important;
   align-items: center !important;
@@ -459,4 +457,59 @@ button:disabled {
 .action-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Help Icon Styles */
+.help-icon-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  cursor: help;
+}
+
+.help-icon {
+  color: var(--vscode-descriptionForeground);
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  margin-top: -4px;
+}
+
+.help-icon-container:hover .help-icon {
+  opacity: 1;
+}
+
+.help-tooltip {
+  position: fixed;
+  padding: 8px 8px;
+  background-color: var(--vscode-tooltip-background, #2d2d30);
+  color: var(--vscode-tooltip-foreground, #ffffff);
+  font-size: 11px;
+  line-height: 1.4;
+  border-radius: 4px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+  z-index: 9999;
+  width: 225px;
+  max-width: 800px;
+  min-width: 200px;
+  white-space: normal;
+  text-align: left;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  pointer-events: none;
+}
+
+.help-icon-container:hover .help-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Label with help icon */
+.label-with-help {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
 } 
