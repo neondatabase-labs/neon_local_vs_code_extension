@@ -29,7 +29,7 @@ export class FileService {
 
     private get neonLocalDir(): string {
         const neonLocalPath = path.join(this.context.globalStorageUri.fsPath, '.neon_local');
-        console.log('Neon local directory path:', neonLocalPath);
+        console.log('Neon Local Connect directory path:', neonLocalPath);
         return neonLocalPath;
     }
 

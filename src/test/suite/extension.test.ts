@@ -203,7 +203,7 @@ describe('Extension Test Suite', () => {
 
             // Verify that the notification was shown exactly once
             assert.strictEqual(notifications.length, 1, 'Should show exactly one notification');
-            assert.strictEqual(notifications[0], 'Neon Local proxy started successfully', 'Should show correct notification message');
+            assert.strictEqual(notifications[0], 'Neon Local Connect proxy started successfully', 'Should show correct notification message');
         });
 
         it('should update UI state correctly when starting proxy', async () => {

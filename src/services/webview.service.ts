@@ -99,7 +99,7 @@ export class WebViewService {
     public showPanel(context: vscode.ExtensionContext): void {
         const panel = vscode.window.createWebviewPanel(
             'neonLocal',
-            'Neon Local',
+            'Neon Local Connect',
             vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -116,11 +116,11 @@ export class WebViewService {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Neon Local</title>
+                <title>Neon Local Connect</title>
             </head>
             <body>
-                <h1>Neon Local</h1>
-                <p>Please use the Neon Local view in the Activity Bar.</p>
+                <h1>Neon Local Connect</h1>
+                <p>Please use the Neon Local Connect view in the Activity Bar.</p>
             </body>
             </html>`;
     }

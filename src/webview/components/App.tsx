@@ -363,7 +363,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
               <div className="label-with-help">
                 <label htmlFor="connection-type">Connection Type</label>
                 <HelpIcon 
-                  tooltip="Connecting to an existing Neon branch or a new ephemeral branch that will be automatically deleted when you disconnect."
+                  tooltip="Connect to an existing Neon branch or a new ephemeral branch that will be automatically deleted when you disconnect."
                   className="tooltip-below"
                 />
               </div>

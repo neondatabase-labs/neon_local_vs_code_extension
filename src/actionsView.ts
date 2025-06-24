@@ -107,7 +107,7 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval'; img-src ${webview.cspSource} data: https:; font-src ${webview.cspSource}; connect-src 'self';">
                 <link href="${styleUri}" rel="stylesheet" />
-                <title>Neon Local Actions</title>
+                <title>Neon Local Connect Actions</title>
             </head>
             <body data-view-type="${VIEW_TYPES.ACTIONS}">
                 <div id="root"></div>

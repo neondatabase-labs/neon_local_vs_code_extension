@@ -1,4 +1,4 @@
-# Neon Local VS Code Extension
+# Neon Local Connect VS Code Extension
 
 This VS Code extension provides a seamless integration with Neon Database for local development. It allows you to manage Neon database branches and run local proxies using either PostgreSQL or Neon Serverless drivers.
 

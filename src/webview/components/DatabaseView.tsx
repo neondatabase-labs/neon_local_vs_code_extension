@@ -38,7 +38,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
   if (!state.connected) {
     return (
       <div className="not-connected">
-        <p>Connect to a Neon database to see connection strings.</p>
+        <p>Connect to a database to see its local connection string.</p>
       </div>
     );
   }

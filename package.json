@@ -1,6 +1,6 @@
 {
   "name": "neon-local",
-  "displayName": "Neon Local",
+  "displayName": "Neon Local Connect",
   "description": "Local development environment for Neon Database with branch management",
   "version": "0.0.1",
   "publisher": "neon",
@@ -21,44 +21,44 @@
     "onView:neonLocalActions"
   ],
   "main": "./dist/extension.js",
-  "icon": "resources/neon_logo.svg",
+  "icon": "resources/neon_logo.png",
   "contributes": {
     "commands": [
       {
         "command": "neonLocal.signIn.triggerSignIn",
-        "title": "Neon Local: Trigger Sign In"
+        "title": "Neon Local Connect: Trigger Sign In"
       },
       {
         "command": "neon-local.configure",
-        "title": "Neon Local: Configure"
+        "title": "Neon Local Connect: Configure"
       },
       {
         "command": "neon-local.showPanel",
-        "title": "Neon Local: Show Panel"
+        "title": "Neon Local Connect: Show Panel"
       },
       {
         "command": "neon-local.stopProxy",
-        "title": "Neon Local: Stop Proxy"
+        "title": "Neon Local Connect: Stop Proxy"
       },
       {
         "command": "neon-local.clearAuth",
-        "title": "Neon Local: Clear Authentication"
+        "title": "Neon Local Connect: Clear Authentication"
       },
       {
         "command": "neon-local.openSqlEditor",
-        "title": "Neon Local: Open SQL Editor"
+        "title": "Neon Local Connect: Open SQL Editor"
       },
       {
         "command": "neon-local.openTableView",
-        "title": "Neon Local: Open Table View"
+        "title": "Neon Local Connect: Open Table View"
       },
       {
         "command": "neon-local.launchPsql",
-        "title": "Neon Local: Launch PSQL"
+        "title": "Neon Local Connect: Launch PSQL"
       }
     ],
     "configuration": {
-      "title": "Neon Local",
+      "title": "Neon Local Connect",
       "properties": {
         "neonLocal.apiKey": {
           "type": "string",
@@ -116,8 +116,8 @@
       "activitybar": [
         {
           "id": "neon-local",
-          "title": "Neon Local",
-          "icon": "resources/neon_logo.svg"
+          "title": "Neon Local Connect",
+          "icon": "resources/neon_logo.png"
         }
       ]
     },
