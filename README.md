@@ -16,13 +16,13 @@ Connect any app to any Neon branch over localhost. Branch, test, and reset datab
 - VS Code 1.85.0 or later
 - A [Neon account](https://neon.tech)
 
-## 🚀 Quick Start
+## 🚀 Quick start
 
-### 1. **Install the Extension**
+### 1. **Install the extension**
 
 Find "Neon Local Connect" in the VS Code Marketplace and click **Install**.
 
-### 2. **Sign In to Neon**
+### 2. **Sign in to Neon**
 Open the Neon Local Connect panel in the sidebar (look for the Neon logo).
 
 Click **Sign in** (OAuth) or **Import API Key**.
@@ -31,11 +31,12 @@ Click **Sign in** (OAuth) or **Import API Key**.
 
 OAuth sign in will ask to launch authentication in an external browser.
 
-**Note:** Your access and refresh tokens (or API key) are securely stored and encrypted by the extension.
 
 ![neon OAuth authorization in browser](/resources/authorize_neon.png)
 
-### 3. **Connect to a Branch**
+If you choose the API method, your access and refresh tokens (or API key) are securely stored and encrypted by the extension.
+
+### 3. **Connect to a branch**
 
 You have two main choices:
 
@@ -49,19 +50,21 @@ You have two main choices:
 
    ![ephemeral branch connected](/resources/ephemeral_branch_connected.png)
 
-In both cases, you'll be asked to choose your driver type: PostgreSQL for most postgres connections, or Neon serverless for edge or http. [Read the docs for more info on choosing a connection type.](https://neon.com/docs/connect/choose-connection)
+In both cases, you'll be asked to choose your driver type: **PostgreSQL** for most Postgres connections, or **Neon serverless** for edge or HTTP. [Read the docs for more info on choosing a connection type.](https://neon.com/docs/connect/choose-connection)
 
-### 4. **Use the Static Connection String**
+### 4. **Use the static connection string**
 
 After connecting, you can find your local connection string in the **Local Connection Details** section of the extension panel. Select your database from the dropdown to see and copy the connection string for use in your app's `.env` or config:
 
 ![Local connection details](/resources/connection_details.png)
 
+Example `.env`:
+
 ```env
 DATABASE_URL="postgres://neon:npg@localhost:5432/neondb"
 ```
 
-### 5. **Run Your App**
+### 5. **Run your app**
 
 Your app now talks to Neon via `localhost:5432`. No code changes needed when you switch branches!
 
@@ -80,7 +83,7 @@ or
 psql $DATABASE_URL
 ```
 
-## 🖱️ Panel Actions
+## 🖱️ Panel actions
 
 Once connected, the Neon Local Connect panel provides quick access to common database operations:
 
@@ -93,7 +96,7 @@ Once connected, the Neon Local Connect panel provides quick access to common dat
 - **Launch PSQL:** Open a psql shell in the integrated terminal for direct SQL access.  
   [Docs: Using psql with Neon](https://neon.com/docs/connect/query-with-psql-editor)
 
-## 💡 Why This Matters
+## 💡 Why this matters
 
 - No more dynamic connection strings, just use `localhost:5432` everywhere.
 - Switch branches for features, tests, or teammates without touching your app code.
@@ -105,7 +108,7 @@ Once connected, the Neon Local Connect panel provides quick access to common dat
 - Docker must be running for the extension to work.
 - If you see "connection refused," check that Docker is running and port 5432 is available.
 
-## 📚 Learn More
+## 📚 Learn more
 
 - [Neon Docs](https://neon.tech/docs/)
 - [Neon Local Documentation](https://neon.tech/docs/local/neon-local)
