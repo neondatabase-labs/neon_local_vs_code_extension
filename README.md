@@ -31,7 +31,7 @@ OAuth sign in will ask to launch authentication in an external browser.
 
 **Note:** Your access and refresh tokens (or API key) are securely stored and encrypted by the extension.
 
-![neon OAuth authorization in browser](authorize_neon.png)
+![neon OAuth authorization in browser](/resources/authorize_neon.png)
 
 ### 3. **Connect to a Branch**
 
@@ -40,12 +40,12 @@ You have two main choices:
 - **Existing branch:**  
   Use this if you want to connect to a long-lived branch (like `main`, `development`, or a feature branch) that you or your team will use repeatedly. This is best for ongoing development, team collaboration, or when you want your changes to persist.
 
-  ![persistent branch connected](branch_connected.png)
+  ![persistent branch connected](/resources/branch_connected.png)
 
 - **Ephemeral branch:**  
   Choose this for a temporary, disposable branch that's created just for your current session. Perfect for testing, experiments, or CI runs. Your branch (and any changes) will be automatically deleted when you disconnect.
 
-   ![ephemeral branch connected](ephemeral_branch_connected.png)
+   ![ephemeral branch connected](/resources/ephemeral_branch_connected.png)
 
 In both cases, you'll be asked to choose your driver type: PostgreSQL for most postgres connections, or Neon serverless for edge or http. [Read the docs for more info on choosing a connection type.](https://neon.com/docs/connect/choose-connection)
 
@@ -53,7 +53,7 @@ In both cases, you'll be asked to choose your driver type: PostgreSQL for most p
 
 After connecting, you can find your local connection string in the **Local Connection Details** section of the extension panel. Select your database from the dropdown to see and copy the connection string for use in your app's `.env` or config:
 
-![Local connection details](connection_details.png)
+![Local connection details](/resources/neon_local_start_view.png)
 
 ```env
 DATABASE_URL="postgres://neon:npg@localhost:5432/neondb"
@@ -83,7 +83,7 @@ psql $DATABASE_URL
 Once connected, the Neon Local Connect panel provides quick access to common database operations:
 
 - **Reset from Parent Branch:** Instantly reset your branch to match its parent's state.  
-  [Docs: Branch reset]https://neon.com/docs/guides/reset-from-parent)
+  [Docs: Branch reset][https://neon.com/docs/guides/reset-from-parent)
 - **Open SQL Editor:** Launch the Neon SQL Editor in your browser for advanced queries.  
   [Docs: SQL Editor](https://neon.com/docs/get-started-with-neon/query-with-neon-sql-editor)
 - **Open Table View:** Browse your database schema and data in the Neon Console.  
