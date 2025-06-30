@@ -27,6 +27,8 @@ Open the Neon Local Connect panel in the sidebar (look for the Neon logo).
 
 Click **Sign in** (OAuth) or **Import API Key**.
 
+![choose your sign in method](/resources/neon_local_start_view.png)
+
 OAuth sign in will ask to launch authentication in an external browser.
 
 **Note:** Your access and refresh tokens (or API key) are securely stored and encrypted by the extension.
@@ -53,7 +55,7 @@ In both cases, you'll be asked to choose your driver type: PostgreSQL for most p
 
 After connecting, you can find your local connection string in the **Local Connection Details** section of the extension panel. Select your database from the dropdown to see and copy the connection string for use in your app's `.env` or config:
 
-![Local connection details](/resources/neon_local_start_view.png)
+![Local connection details](/resources/connection_details.png)
 
 ```env
 DATABASE_URL="postgres://neon:npg@localhost:5432/neondb"
