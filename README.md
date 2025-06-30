@@ -90,7 +90,7 @@ psql $DATABASE_URL
 Once connected, the Neon Local Connect panel provides quick access to common database operations:
 
 - **Reset from Parent Branch:** Instantly reset your branch to match its parent's state.  
-  [Docs: Branch reset][https://neon.com/docs/guides/reset-from-parent)
+  [Docs: Branch reset](https://neon.com/docs/guides/reset-from-parent)
 - **Open SQL Editor:** Launch the Neon SQL Editor in your browser for advanced queries.  
   [Docs: SQL Editor](https://neon.com/docs/get-started-with-neon/query-with-neon-sql-editor)
 - **Open Table View:** Browse your database schema and data in the Neon Console.  
