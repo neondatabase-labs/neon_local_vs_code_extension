@@ -1,4 +1,4 @@
-![Neon logo](/resources/Neon_log.png)
+![Neon logo](/resources/Neon_logo.png)
 
 # Neon Local Connect VS Code Extension
 
