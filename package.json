@@ -1,9 +1,9 @@
 {
   "name": "neon-local",
   "displayName": "Neon Local Connect",
-  "description": "Local development environment for Neon Database with branch management",
-  "version": "0.0.1",
-  "publisher": "neon",
+  "description": "Local development environment for Neon Databases with branch management",
+  "version": "1.0.0",
+  "publisher": "databricks",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -17,7 +17,6 @@
     "onCommand:neon-local.stopProxy",
     "onCommand:neon-local.clearAuth",
     "onView:neonLocalConnect",
-    "onView:neonLocalDatabase",
     "onView:neonLocalActions"
   ],
   "main": "./dist/extension.js",
@@ -30,7 +29,7 @@
       },
       {
         "command": "neon-local.configure",
-        "title": "Neon Local Connect: Configure"
+        "title": "Neon Local Connect: Import API Key"
       },
       {
         "command": "neon-local.showPanel",
@@ -116,7 +115,7 @@
       "activitybar": [
         {
           "id": "neon-local",
-          "title": "Neon Local Connect",
+          "title": "Neon Local",
           "icon": "resources/neon_logo.png"
         }
       ]
@@ -127,11 +126,6 @@
           "type": "webview",
           "id": "neonLocalConnect",
           "name": "Connect"
-        },
-        {
-          "type": "webview",
-          "id": "neonLocalDatabase",
-          "name": "Local Connection Details"
         }
       ]
     },

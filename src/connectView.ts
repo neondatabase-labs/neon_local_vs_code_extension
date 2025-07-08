@@ -54,7 +54,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 // User has signed out, clear state and show sign-in
                 await this._stateService.clearState();
                 if (this._view && this._signInView) {
-                    this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
+                    this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account to connect to your database", true);
                 }
             }
         });
@@ -94,7 +94,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 if (!isAuthenticated) {
                     console.log('ConnectViewProvider: Not authenticated, showing sign-in');
                     if (this._view && this._signInView) {
-                        this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
+                        this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account to connect to your database", true);
                     }
                     return;
                 }
@@ -239,7 +239,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 case 'clearAuth':
                     // Show sign-in view without clearing state
                     if (this._view && this._signInView) {
-                        this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
+                        this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account to connect to your database", true);
                     }
                     break;
                 case 'openNeonConsole':
@@ -700,7 +700,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             Logger.error('Failed to update view', error);
             
             if (this._view && this._signInView) {
-                this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account or import a Neon api key to connect to your database", true);
+                this._view.webview.html = this._signInView.getHtml("ign in to your Neon account to connect to your database", true);
             }
         } finally {
             this._isUpdating = false;

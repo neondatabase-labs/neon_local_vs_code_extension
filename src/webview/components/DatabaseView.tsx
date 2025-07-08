@@ -114,7 +114,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
         <div>
           <div className="detail-row">
             <div className="detail-label-container">
-              <div className="detail-label">Fetch Endpoint</div>
+              <div className="detail-label" title="When connecting to your database's local connection string with the Neon serverless driver, you must also set the local fetch endpoint in your app's Neon config.">Local Fetch Endpoint</div>
               <button
                 className="copy-button"
                 title="Copy fetch endpoint configuration"

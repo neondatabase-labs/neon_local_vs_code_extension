@@ -17,15 +17,11 @@ const NEON_VSCODE_SCOPES = [
     'openid',
     'offline',
     'offline_access',
-    'urn:neoncloud:projects:create',
-    'urn:neoncloud:projects:read',
-    'urn:neoncloud:projects:update',
-    'urn:neoncloud:projects:delete',
-    'urn:neoncloud:orgs:create',
     'urn:neoncloud:orgs:read',
-    'urn:neoncloud:orgs:update',
-    'urn:neoncloud:orgs:delete',
-    'urn:neoncloud:orgs:permission'
+    'urn:neoncloud:projects:read',
+    'urn:neoncloud:projects:create',
+    'urn:neoncloud:projects:update',
+
 ] as const;
 
 const AUTH_TIMEOUT_SECONDS = 60;

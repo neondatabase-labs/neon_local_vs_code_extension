@@ -26,16 +26,20 @@ export class SignInView {
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>Neon Local Connect - Sign In</title>
                 ${getStyles()}
+                <style>
+                    .message {
+                        text-align: center;
+                        margin-bottom: 8px;
+                    }
+                </style>
             </head>
             <body>
                 <div class="container">
                     ${message ? `<div class="message">${message}</div>` : ''}
-                    ${showSignInButton ? `
-                        <div class="button-container">
-                            <button class="button" id="signInButton">Sign in with Neon</button>
-                            <button class="button secondary" id="importTokenButton">Import API Key</button>
-                        </div>
-                    ` : ''}
+                    <div class="button-container">
+                        <button class="button" id="signInButton">Sign in with Neon</button>
+                    </div>
+
                 </div>
                 <script>
                     const vscode = acquireVsCodeApi();

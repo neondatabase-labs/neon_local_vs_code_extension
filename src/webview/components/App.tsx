@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ViewData, NeonOrg, NeonProject, NeonBranch, NeonDatabase, NeonRole } from '../../types';
 import { useStateService } from '../context/StateContext';
 import { HelpIcon } from './HelpIcon';
@@ -33,6 +33,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
   const { state, updateState } = useStateService();
   const lastConnectedState = useRef<boolean>(false);
   const messageHandlerRef = useRef<((event: MessageEvent) => void) | null>(null);
+  const [copySuccess, setCopySuccess] = useState<string | null>(null);
   
   // Only show connected view if proxy is running AND we have a connection info
   // Add a small delay before showing disconnected state to prevent flicker
@@ -285,6 +286,16 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
     vscode.postMessage({ command: action });
   };
 
+  const handleCopy = async (text: string | undefined, type: string) => {
+    try {
+      await navigator.clipboard.writeText(text || '');
+      setCopySuccess(type);
+      setTimeout(() => setCopySuccess(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
+
   console.log('state', state.connection);
   return (
     <div className="app">
@@ -324,6 +335,65 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
               <div className="detail-label">Driver</div>
               <div className="detail-value">{state.connection.driver === 'serverless' ? 'Neon Serverless (http)' : 'PostgreSQL'}</div>
             </div>
+            {state.connectionInfo && (
+              <div>
+                <div className="detail-row">
+                  <div className="detail-label-container">
+                    <div className="detail-label">Local Connection String</div>
+                    <button
+                      className="copy-button"
+                      title="Copy connection string"
+                      onClick={() => handleCopy(state.connectionInfo, 'connection')}
+                    >
+                      {copySuccess === 'connection' ? (
+                        <span>✓</span>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M10.75 1.75H4.25C3.97386 1.75 3.75 1.97386 3.75 2.25V11.25C3.75 11.5261 3.97386 11.75 4.25 11.75H10.75C11.0261 11.75 11.25 11.5261 11.25 11.25V2.25C11.25 1.97386 11.0261 1.75 10.75 1.75Z" stroke="currentColor" strokeWidth="1.5"/>
+                          <path d="M12.25 4.25H13.75V13.75H5.75V12.25" stroke="currentColor" strokeWidth="1.5"/>
+                      </svg>
+                      )}
+                    </button>
+                  </div>
+                  <div className="detail-value connection-string-container">
+                    <div className="connection-string">{state.connectionInfo}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {state.selectedDriver === 'serverless' && (
+              <div>
+                <div className="detail-row">
+                  <div className="detail-label-container">
+                    <div className="label-with-help">
+                      <div className="detail-label">Local Fetch Endpoint</div>
+                      <HelpIcon 
+                        tooltip="When connecting to your database's local connection string with the Neon serverless driver, you must also set the local fetch endpoint in your app's Neon config."
+                      />
+                    </div>
+                    <button
+                      className="copy-button"
+                      title="Copy fetch endpoint configuration"
+                      onClick={() => handleCopy("import { neonConfig } from '@neondatabase/serverless';\n\nneonConfig.fetchEndpoint = 'http://localhost:5432/sql';", 'endpoint')}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M10.75 1.75H4.25C3.97386 1.75 3.75 1.97386 3.75 2.25V11.25C3.75 11.5261 3.97386 11.75 4.25 11.75H10.75C11.0261 11.75 11.25 11.5261 11.25 11.25V2.25C11.25 1.97386 11.0261 1.75 10.75 1.75Z" stroke="currentColor" strokeWidth="1.5"/>
+                        <path d="M12.25 4.25H13.75V13.75H5.75V12.25" stroke="currentColor" strokeWidth="1.5"/>
+                      </svg>
+                      <span className={`copy-success ${copySuccess === 'endpoint' ? 'visible' : ''}`}>
+                        Copied!
+                      </span>
+                    </button>
+                  </div>
+                  <div className="detail-value connection-string-container">
+                    <div className="connection-string">
+                      import {'{'} neonConfig {'}'} from '@neondatabase/serverless';<br /><br />
+                      neonConfig.fetchEndpoint = 'http://localhost:5432/sql';
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="section proxy-buttons">

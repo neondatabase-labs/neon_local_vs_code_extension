@@ -446,7 +446,7 @@ export class DockerService {
         console.log(`Started new container: ${containerName}`);
 
         // Set the connection string based on the driver
-        const connectionString = `postgres://neon:npg@localhost:5432`;
+        const connectionString = `postgres://neon:npg@localhost:5432/<database_name>`;
         await this.stateService.setConnectionInfo({
             connectionInfo: connectionString,
             selectedDatabase: ''
