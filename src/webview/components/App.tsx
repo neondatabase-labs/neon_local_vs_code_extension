@@ -34,6 +34,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
   const lastConnectedState = useRef<boolean>(false);
   const messageHandlerRef = useRef<((event: MessageEvent) => void) | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
+  const [isProcessingCommand, setIsProcessingCommand] = useState(false);
   
   // Only show connected view if proxy is running AND we have a connection info
   // Add a small delay before showing disconnected state to prevent flicker
@@ -261,6 +262,10 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
   };
 
   const handleStartProxy = () => {
+    if (isProcessingCommand) {
+      return;
+    }
+    setIsProcessingCommand(true);
     vscode.postMessage({
       command: 'startProxy',
       driver: state.connection.driver,
@@ -277,6 +282,10 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
   };
 
   const handleStopProxy = () => {
+    if (isProcessingCommand) {
+      return;
+    }
+    setIsProcessingCommand(true);
     vscode.postMessage({
       command: 'stopProxy'
     });
@@ -295,6 +304,11 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
       console.error('Failed to copy text: ', err);
     }
   };
+
+  // Add effect to reset processing state when connection state changes
+  useEffect(() => {
+    setIsProcessingCommand(false);
+  }, [state.connection.connected]);
 
   console.log('state', state.connection);
   return (
@@ -397,7 +411,13 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
           </div>
 
           <div className="section proxy-buttons">
-            <button onClick={handleStopProxy} className="stop-button">Disconnect</button>
+            <button 
+              onClick={handleStopProxy} 
+              className="stop-button"
+              disabled={isProcessingCommand}
+            >
+              {isProcessingCommand ? 'Disconnecting...' : 'Disconnect'}
+            </button>
             <div className="action-group">
               <button
                 className="action-button"
@@ -551,10 +571,10 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
                 <div className="section proxy-buttons">
                   <button
                     onClick={handleStartProxy}
-                    disabled={!state.connection.selectedProjectId || (!state.connection.selectedBranchId && !state.connection.parentBranchId)}
+                    disabled={isProcessingCommand || !state.connection.selectedProjectId || (state.connection.type === 'existing' ? !state.connection.selectedBranchId : !state.connection.parentBranchId)}
                     className="start-button"
                   >
-                    Connect
+                    {isProcessingCommand ? 'Connecting...' : 'Connect'}
                   </button>
                 </div>
               </>
