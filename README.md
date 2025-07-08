@@ -27,14 +27,14 @@ Find "Neon Local Connect" in the VS Code Marketplace and click **Install**.
 ### 2. **Sign in to Neon**
 Open the Neon Local Connect panel in the sidebar (look for the Neon logo).
 
-Click **Sign in** (OAuth) or **Import API Key**.
+Click **Sign in**
 
-![choose your sign in method](/resources/neon_local_start_view.png)
+![sign in with your Neon account](/resources/sign-in.png)
 
 OAuth sign in will ask to launch authentication in an external browser.
 
 
-![neon OAuth authorization in browser](/resources/authorize_neon.png)
+![neon OAuth authorization in browser](/resources/authorize.png)
 
 If you choose the API method, your access and refresh tokens (or API key) are securely stored and encrypted by the extension.
 
@@ -45,20 +45,20 @@ You have two main choices:
 - **Existing branch:**  
   Use this if you want to connect to a long-lived branch (like `main`, `development`, or a feature branch) that you or your team will use repeatedly. This is best for ongoing development, team collaboration, or when you want your changes to persist.
 
-  ![persistent branch connected](/resources/branch_connected.png)
+  ![persistent branch connected](/resources/connected.png)
 
 - **Ephemeral branch:**  
   Choose this for a temporary, disposable branch that's created just for your current session. Perfect for testing, experiments, or CI runs. Your branch (and any changes) will be automatically deleted when you disconnect.
 
-   ![ephemeral branch connected](/resources/ephemeral_branch_connected.png)
+   ![ephemeral branch connected](/resources/ephemeral_connected.png)
 
 In both cases, you'll be asked to choose your driver type: **PostgreSQL** for most Postgres connections, or **Neon serverless** for edge or HTTP. [Read the docs for more info on choosing a connection type.](https://neon.com/docs/connect/choose-connection)
 
 ### 4. **Use the static connection string**
 
-After connecting, you can find your local connection string in the **Local Connection Details** section of the extension panel. Select your database from the dropdown to see and copy the connection string for use in your app's `.env` or config:
+After connecting, you can find your local connection string in the extension panel. Copy the connection string, update it with your database name, and then add it to your app's `.env` or config. The local connection string will not change as you switch between branches:
 
-![Local connection details](/resources/connection_details.png)
+![Local connection details](/resources/connection_string.png)
 
 Example `.env`:
 
