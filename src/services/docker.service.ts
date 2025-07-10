@@ -258,7 +258,13 @@ export class DockerService {
                     
                     const logStr = logs.toString();
                     
-                    // Check if there are any error messages in the logs
+                    // Check for specific branch limit error (422 Unprocessable Entity)
+                    if (logStr.includes('422 Client Error: Unprocessable Entity for url:') && logStr.includes('/branches')) {
+                        console.error('Found branch limit error in container logs:', logStr);
+                        throw new Error('Unable to create ephemeral branch, as you have reached your Branch limit. Delete one or more branches in the selected project and retry.');
+                    }
+                    
+                    // Check if there are any other error messages in the logs
                     if (logStr.includes('Error:') || logStr.includes('error:')) {
                         console.error('Found error in container logs:', logStr);
                         throw new Error('Container reported an error in logs');
@@ -277,6 +283,12 @@ export class DockerService {
                 await new Promise(resolve => setTimeout(resolve, 1000));
             } catch (error) {
                 console.error('Error waiting for container:', error);
+                
+                // Re-throw specific branch limit error immediately
+                if (error instanceof Error && error.message.includes('Unable to create ephemeral branch, as you have reached your Branch limit')) {
+                    throw error;
+                }
+                
                 attempts++;
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }

@@ -308,7 +308,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
   // Add effect to reset processing state when connection state changes
   useEffect(() => {
     setIsProcessingCommand(false);
-  }, [state.connection.connected]);
+  }, [state.connection.connected, state.connection.isStarting]);
 
   console.log('state', state.connection);
   return (
