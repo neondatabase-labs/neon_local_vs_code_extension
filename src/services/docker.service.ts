@@ -129,7 +129,7 @@ export class DockerService {
             if (error instanceof Error && error.message.includes('Unable to create ephemeral branch, as you have reached your Branch limit')) {
                 console.log('Branch limit error detected, cleaning up container...');
                 try {
-                    await this.cleanupContainer();
+                    //await this.cleanupContainer();
                 } catch (cleanupError) {
                     console.error('Error cleaning up container after branch limit error:', cleanupError);
                 }
@@ -331,6 +331,32 @@ export class DockerService {
         }
         
         throw new Error('Container failed to become ready within timeout period');
+    }
+
+    async checkContainerReady(): Promise<boolean> {
+        try {
+            const container = await this.docker.getContainer(this.containerName);
+            const logs = await container.logs({
+                stdout: true,
+                stderr: true,
+                tail: 100
+            });
+            
+            const logStr = logs.toString();
+            console.log('Checking container readiness, logs:', logStr);
+            
+            // Check if the ready message is present
+            if (logStr.includes('Neon Local is ready')) {
+                console.log('Container is ready');
+                return true;
+            }
+            
+            console.log('Container is not ready - no ready message found');
+            return false;
+        } catch (error) {
+            console.error('Error checking container readiness:', error);
+            return false;
+        }
     }
 
     async getContainerInfo(): Promise<{

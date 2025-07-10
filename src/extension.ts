@@ -31,64 +31,85 @@ export async function activate(context: vscode.ExtensionContext) {
   try {
     const isRunning = await dockerService.checkContainerStatus();
     if (isRunning) {
-      console.log('Container is already running, updating state...');
+      console.log('Container is already running, checking if it is ready...');
       
-      // First try to get branch ID from .branches file
-      const branchId = await dockerService.checkBranchesFile(context);
-      
-      if (branchId) {
-        console.log('Using branch ID from .branches file:', branchId);
-        await stateService.setIsProxyRunning(true);
-        await stateService.setCurrentlyConnectedBranch(branchId);
-
-        // Fetch and update databases and roles
+      // Check if the container is ready by looking at the logs
+      const isReady = await dockerService.checkContainerReady();
+      if (!isReady) {
+        console.log('Container is not ready (no ready message found), stopping it...');
         try {
-          const projectId = await stateService.getCurrentProjectId();
-          if (projectId) {
-            const [databases, roles] = await Promise.all([
-              apiService.getDatabases(projectId, branchId),
-              apiService.getRoles(projectId, branchId)
-            ]);
-            await Promise.all([
-              stateService.setDatabases(databases),
-              stateService.setRoles(roles)
-            ]);
-            console.log('Updated databases and roles on startup');
-          }
-        } catch (error) {
-          console.error('Error fetching databases and roles on startup:', error);
+          await dockerService.stopContainer();
+          console.log('Container stopped successfully');
+        } catch (stopError) {
+          console.error('Error stopping unready container:', stopError);
         }
+        
+        // Ensure the UI shows disconnected state
+        await stateService.setIsProxyRunning(false);
+        await stateService.setCurrentlyConnectedBranch('');
+        await stateService.setDatabases([]);
+        await stateService.setRoles([]);
+        console.log('State reset to disconnected after stopping unready container');
       } else {
-        // Fallback to container info if .branches file doesn't have the ID
-        console.log('No branch ID in .branches file, falling back to container info...');
-        const containerInfo = await dockerService.getContainerInfo();
-        if (containerInfo) {
+        console.log('Container is ready, updating state...');
+        
+        // First try to get branch ID from .branches file
+        const branchId = await dockerService.checkBranchesFile(context);
+        
+        if (branchId) {
+          console.log('Using branch ID from .branches file:', branchId);
           await stateService.setIsProxyRunning(true);
-          await stateService.setCurrentlyConnectedBranch(containerInfo.branchId);
+          await stateService.setCurrentlyConnectedBranch(branchId);
 
           // Fetch and update databases and roles
           try {
-            const projectId = containerInfo.projectId;
+            const projectId = await stateService.getCurrentProjectId();
             if (projectId) {
               const [databases, roles] = await Promise.all([
-                apiService.getDatabases(projectId, containerInfo.branchId),
-                apiService.getRoles(projectId, containerInfo.branchId)
+                apiService.getDatabases(projectId, branchId),
+                apiService.getRoles(projectId, branchId)
               ]);
               await Promise.all([
                 stateService.setDatabases(databases),
                 stateService.setRoles(roles)
               ]);
-              console.log('Updated databases and roles on startup (from container info)');
+              console.log('Updated databases and roles on startup');
             }
           } catch (error) {
             console.error('Error fetching databases and roles on startup:', error);
           }
+        } else {
+          // Fallback to container info if .branches file doesn't have the ID
+          console.log('No branch ID in .branches file, falling back to container info...');
+          const containerInfo = await dockerService.getContainerInfo();
+          if (containerInfo) {
+            await stateService.setIsProxyRunning(true);
+            await stateService.setCurrentlyConnectedBranch(containerInfo.branchId);
+
+            // Fetch and update databases and roles
+            try {
+              const projectId = containerInfo.projectId;
+              if (projectId) {
+                const [databases, roles] = await Promise.all([
+                  apiService.getDatabases(projectId, containerInfo.branchId),
+                  apiService.getRoles(projectId, containerInfo.branchId)
+                ]);
+                await Promise.all([
+                  stateService.setDatabases(databases),
+                  stateService.setRoles(roles)
+                ]);
+                console.log('Updated databases and roles on startup (from container info)');
+              }
+            } catch (error) {
+              console.error('Error fetching databases and roles on startup:', error);
+            }
+          }
         }
+        
+        // Start the status check to keep state in sync
+        await dockerService.startStatusCheck();
+        console.log('Started status check for existing container');
       }
-      
-      // Start the status check to keep state in sync
-      await dockerService.startStatusCheck();
-      console.log('Started status check for existing container');
     } else {
       console.log('No running container found on startup');
       await stateService.setIsProxyRunning(false);
