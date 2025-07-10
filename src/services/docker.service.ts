@@ -124,6 +124,17 @@ export class DockerService {
         } catch (error) {
             console.error('Error starting container:', error);
             await this.stateService.setIsStarting(false);
+            
+            // If this is a branch limit error, clean up the container
+            if (error instanceof Error && error.message.includes('Unable to create ephemeral branch, as you have reached your Branch limit')) {
+                console.log('Branch limit error detected, cleaning up container...');
+                try {
+                    await this.cleanupContainer();
+                } catch (cleanupError) {
+                    console.error('Error cleaning up container after branch limit error:', cleanupError);
+                }
+            }
+            
             throw error;
         }
     }
@@ -163,6 +174,31 @@ export class DockerService {
                 return;
             }
             console.error('Error stopping container:', error);
+            throw error;
+        }
+    }
+
+    private async cleanupContainer(): Promise<void> {
+        try {
+            const container = await this.docker.getContainer(this.containerName);
+            console.log('Stopping and removing container due to error...');
+            
+            try {
+                await container.stop();
+            } catch (stopError) {
+                // Container might already be stopped, that's fine
+                console.log('Container may already be stopped:', stopError);
+            }
+            
+            await container.remove({ force: true });
+            console.log('Container cleaned up successfully');
+        } catch (error) {
+            // If the container doesn't exist, that's fine
+            if ((error as any).statusCode === 404) {
+                console.log('Container does not exist, no cleanup needed');
+                return;
+            }
+            console.error('Error during container cleanup:', error);
             throw error;
         }
     }
