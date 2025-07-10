@@ -51,7 +51,8 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
         webviewView.webview.html = this.getWebviewContent(webviewView.webview);
 
         // Register this view with the manager
-        this._webviewService.registerWebview(webviewView.webview);
+        const viewId = this._webviewService.registerWebview(webviewView.webview, 'actionsView');
+        console.log(`ActionsViewProvider: Registered webview with ID: ${viewId}`);
 
         // Initial update with a small delay to ensure proper registration
         setTimeout(() => {

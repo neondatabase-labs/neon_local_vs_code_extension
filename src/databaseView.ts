@@ -83,7 +83,8 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
         });
 
         // Register this view with the manager
-        this._webviewService.registerWebview(webviewView.webview);
+        const viewId = this._webviewService.registerWebview(webviewView.webview, 'databaseView');
+        console.log(`DatabaseViewProvider: Registered webview with ID: ${viewId}`);
 
         // Initial update with a small delay to ensure proper registration
         setTimeout(async () => {

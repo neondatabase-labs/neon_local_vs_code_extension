@@ -84,6 +84,10 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         // Create sign-in view
         this._signInView = new SignInView(webviewView.webview, this._stateService, this._authManager);
 
+        // Register this view with the manager
+        const viewId = this._webviewService.registerWebview(webviewView.webview, 'connectView');
+        console.log(`ConnectViewProvider: Registered webview with ID: ${viewId}`);
+
         // Initial update with a small delay to ensure proper registration
         setTimeout(async () => {
             try {
@@ -115,7 +119,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
     }
 
     private async initializeViewData(): Promise<void> {
-        const apiService = new NeonApiService();
+        const apiService = new NeonApiService(this._extensionContext);
 
         // Start loading organizations
         await this._stateService.updateLoadingState({
@@ -274,7 +278,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     
                     // Fetch projects for the selected organization
                     try {
-                        const apiService = new NeonApiService();
+                        const apiService = new NeonApiService(this._extensionContext);
                         const projects = await apiService.getProjects(message.orgId);
                         await this._stateService.setProjects(projects);
                     } catch (error) {
@@ -314,7 +318,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     
                     // Fetch branches for the selected project
                     try {
-                        const apiService = new NeonApiService();
+                        const apiService = new NeonApiService(this._extensionContext);
                         const branches = await apiService.getBranches(message.projectId);
                         await this._stateService.setBranches(branches);
                     } catch (error) {
@@ -444,7 +448,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                             progress.report({ message: "Fetching database information..." });
 
                             // Fetch and update databases and roles
-                            const apiService = new NeonApiService();
+                            const apiService = new NeonApiService(this._extensionContext);
                             const projectId = this._stateService.currentProject;
                             const branchId = message.branchId || message.parentBranchId;
                             const [databases, roles] = await Promise.all([
@@ -551,7 +555,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
 
                         try {
                             // Create the branch
-                            const apiService = new NeonApiService();
+                            const apiService = new NeonApiService(this._extensionContext);
                             const newBranch = await apiService.createBranch(message.projectId, parentBranch.id, branchName);
                             
                             // Refresh the branches list

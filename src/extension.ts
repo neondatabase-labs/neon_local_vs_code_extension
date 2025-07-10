@@ -134,6 +134,12 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('neon-local.clearAuth', async () => {
       await authManager.signOut();
+    }),
+    vscode.commands.registerCommand('neon-local.showWebviewStats', () => {
+      const stats = webviewService.getRegistrationStats();
+      vscode.window.showInformationMessage(
+        `WebView Stats - Panels: ${stats.panels}, Views: ${stats.views}, Messages: ${stats.messageStats.successful} success / ${stats.messageStats.failed} failed`
+      );
     })
   );
 

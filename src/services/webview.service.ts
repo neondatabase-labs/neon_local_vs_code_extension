@@ -6,44 +6,106 @@ import axios from 'axios';
 import { Logger, ConfigurationManager } from '../utils';
 
 export class WebViewService {
-    private panels: Set<vscode.WebviewPanel> = new Set();
-    private views: Set<vscode.Webview> = new Set();
+    private panels: Map<string, vscode.WebviewPanel> = new Map();
+    private views: Map<string, vscode.Webview> = new Map();
+    private viewDisposables: Map<string, vscode.Disposable[]> = new Map();
     private lastViewData: Map<string, ViewData> = new Map();
     private readonly stateService: StateService;
     private context: vscode.ExtensionContext;
+    private messagePostingStats = {
+        successful: 0,
+        failed: 0,
+        lastFailureTime: 0,
+        lastFailureReason: ''
+    };
 
     constructor(context: vscode.ExtensionContext, stateService: StateService) {
         this.context = context;
         this.stateService = stateService;
+        console.log('WebViewService: Initialized with context');
     }
 
     public async initialize(): Promise<void> {
+        console.log('WebViewService: Initializing service');
         // Initialize with empty state
         await this.updateAllViews();
+        console.log('WebViewService: Service initialization complete');
     }
 
-    public registerPanel(panel: vscode.WebviewPanel) {
-        this.panels.add(panel);
+    public registerPanel(panel: vscode.WebviewPanel, panelId?: string): string {
+        const id = panelId || `panel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        console.log(`WebViewService: Registering panel with ID: ${id}`);
+        
+        this.panels.set(id, panel);
+        const disposables: vscode.Disposable[] = [];
         
         // Remove panel from registry when it's disposed
-        panel.onDidDispose(() => {
-            this.panels.delete(panel);
+        const disposeHandler = panel.onDidDispose(() => {
+            console.log(`WebViewService: Panel ${id} disposed, cleaning up`);
+            this.panels.delete(id);
+            
+            // Clean up all disposables for this panel
+            const panelDisposables = this.viewDisposables.get(id);
+            if (panelDisposables) {
+                panelDisposables.forEach(d => {
+                    try {
+                        d.dispose();
+                    } catch (error) {
+                        console.error(`WebViewService: Error disposing panel ${id} resource:`, error);
+                    }
+                });
+                this.viewDisposables.delete(id);
+            }
         });
+        
+        disposables.push(disposeHandler);
+        this.viewDisposables.set(id, disposables);
 
         // Setup the webview
         this.setupWebview(panel.webview);
+        
+        console.log(`WebViewService: Panel ${id} registered successfully. Total panels: ${this.panels.size}`);
+        return id;
     }
 
-    public registerWebview(webview: vscode.Webview) {
-        this.views.add(webview);
+    public registerWebview(webview: vscode.Webview, viewId?: string): string {
+        const id = viewId || `view_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        console.log(`WebViewService: Registering webview with ID: ${id}`);
+        
+        this.views.set(id, webview);
         this.setupWebview(webview);
+        
+        console.log(`WebViewService: Webview ${id} registered successfully. Total views: ${this.views.size}`);
+        return id;
     }
 
-    public unregisterWebview(webview: vscode.Webview) {
-        this.views.delete(webview);
+    public unregisterWebview(webviewId: string): boolean {
+        console.log(`WebViewService: Unregistering webview with ID: ${webviewId}`);
+        
+        const removed = this.views.delete(webviewId);
+        if (removed) {
+            // Clean up any disposables associated with this view
+            const viewDisposables = this.viewDisposables.get(webviewId);
+            if (viewDisposables) {
+                viewDisposables.forEach(d => {
+                    try {
+                        d.dispose();
+                    } catch (error) {
+                        console.error(`WebViewService: Error disposing view ${webviewId} resource:`, error);
+                    }
+                });
+                this.viewDisposables.delete(webviewId);
+            }
+            console.log(`WebViewService: Webview ${webviewId} unregistered successfully. Total views: ${this.views.size}`);
+        } else {
+            console.warn(`WebViewService: Attempted to unregister non-existent webview: ${webviewId}`);
+        }
+        
+        return removed;
     }
 
     private setupWebview(webview: vscode.Webview) {
+        console.log('WebViewService: Setting up webview options');
         webview.options = {
             enableScripts: true,
             localResourceRoots: [
@@ -52,32 +114,95 @@ export class WebViewService {
         };
     }
 
-    public postMessageToAll(message: any) {
+    public postMessageToAll(message: any): void {
+        const timestamp = Date.now();
+        const messageType = message.command || 'unknown';
+        console.log(`WebViewService: Broadcasting message '${messageType}' to ${this.panels.size} panels and ${this.views.size} views`);
+        
+        let successCount = 0;
+        let failureCount = 0;
+        const failures: string[] = [];
+
         // Post to all panels
-        for (const panel of this.panels) {
+        for (const [panelId, panel] of this.panels) {
             try {
                 panel.webview.postMessage(message);
+                successCount++;
+                console.log(`WebViewService: Successfully posted message to panel ${panelId}`);
             } catch (err) {
-                console.error('Failed to post message to panel:', err);
+                failureCount++;
+                const errorMsg = err instanceof Error ? err.message : String(err);
+                failures.push(`Panel ${panelId}: ${errorMsg}`);
+                console.error(`WebViewService: Failed to post message to panel ${panelId}:`, err);
+                
                 // Remove panel if it's no longer valid
-                this.panels.delete(panel);
+                console.log(`WebViewService: Removing invalid panel ${panelId}`);
+                this.panels.delete(panelId);
+                
+                // Clean up disposables
+                const disposables = this.viewDisposables.get(panelId);
+                if (disposables) {
+                    disposables.forEach(d => {
+                        try {
+                            d.dispose();
+                        } catch (disposeError) {
+                            console.error(`WebViewService: Error disposing panel ${panelId} resources:`, disposeError);
+                        }
+                    });
+                    this.viewDisposables.delete(panelId);
+                }
             }
         }
 
         // Post to all views
-        for (const view of this.views) {
+        for (const [viewId, view] of this.views) {
             try {
                 view.postMessage(message);
+                successCount++;
+                console.log(`WebViewService: Successfully posted message to view ${viewId}`);
             } catch (err) {
-                console.error('Failed to post message to view:', err);
+                failureCount++;
+                const errorMsg = err instanceof Error ? err.message : String(err);
+                failures.push(`View ${viewId}: ${errorMsg}`);
+                console.error(`WebViewService: Failed to post message to view ${viewId}:`, err);
+                
                 // Remove view if it's no longer valid
-                this.views.delete(view);
+                console.log(`WebViewService: Removing invalid view ${viewId}`);
+                this.views.delete(viewId);
+                
+                // Clean up disposables
+                const disposables = this.viewDisposables.get(viewId);
+                if (disposables) {
+                    disposables.forEach(d => {
+                        try {
+                            d.dispose();
+                        } catch (disposeError) {
+                            console.error(`WebViewService: Error disposing view ${viewId} resources:`, disposeError);
+                        }
+                    });
+                    this.viewDisposables.delete(viewId);
+                }
             }
+        }
+
+        // Update statistics
+        this.messagePostingStats.successful += successCount;
+        this.messagePostingStats.failed += failureCount;
+        
+        if (failureCount > 0) {
+            this.messagePostingStats.lastFailureTime = timestamp;
+            this.messagePostingStats.lastFailureReason = failures.join('; ');
+        }
+
+        console.log(`WebViewService: Message broadcast complete. Success: ${successCount}, Failures: ${failureCount}`);
+        
+        if (failures.length > 0) {
+            console.error(`WebViewService: Message posting failures:`, failures);
         }
     }
 
     public updateViewData(viewType: string, data: ViewData): void {
-        console.log(`WebView service: Updating view ${viewType} with data:`, {
+        console.log(`WebViewService: Updating view ${viewType} with data:`, {
             connected: data.connected,
             isStarting: data.isStarting,
             connectionType: data.connectionType,
@@ -85,7 +210,8 @@ export class WebViewService {
             currentlyConnectedBranch: data.currentlyConnectedBranch,
             databases: data.databases?.length,
             roles: data.roles?.length,
-            isExplicitUpdate: data.isExplicitUpdate
+            isExplicitUpdate: data.isExplicitUpdate,
+            timestamp: new Date().toISOString()
         });
         
         // Store the latest data
@@ -93,10 +219,19 @@ export class WebViewService {
         
         // Send to all views
         this.postMessageToAll({ command: 'updateViewData', data });
-        console.log('View data sent to', viewType);
+        console.log(`WebViewService: View data sent to ${viewType}. Active panels: ${this.panels.size}, Active views: ${this.views.size}`);
+    }
+
+    public getRegistrationStats() {
+        return {
+            panels: this.panels.size,
+            views: this.views.size,
+            messageStats: { ...this.messagePostingStats }
+        };
     }
 
     public showPanel(context: vscode.ExtensionContext): void {
+        console.log('WebViewService: Creating new webview panel');
         const panel = vscode.window.createWebviewPanel(
             'neonLocal',
             'Neon Local Connect',
@@ -108,6 +243,10 @@ export class WebViewService {
         );
 
         panel.webview.html = this.getWebviewContent();
+        
+        // Register the panel
+        const panelId = this.registerPanel(panel);
+        console.log(`WebViewService: Panel created and registered with ID: ${panelId}`);
     }
 
     private getWebviewContent(): string {
@@ -126,11 +265,13 @@ export class WebViewService {
     }
 
     public async handleDatabaseSelection(database: string) {
+        console.log(`WebViewService: Handling database selection: ${database}`);
         await this.stateService.updateDatabase(database);
         await this.updateAllViews();
     }
 
     public async handleRoleSelection(role: string) {
+        console.log(`WebViewService: Handling role selection: ${role}`);
         await this.stateService.updateRole(role);
         await this.updateAllViews();
     }
@@ -140,6 +281,7 @@ export class WebViewService {
     }
 
     private async updateAllViews() {
+        console.log('WebViewService: Updating all views with current state');
         const viewData = await this.getViewData();
         this.updateViewData('neonLocal', viewData);
     }
@@ -191,17 +333,41 @@ export class WebViewService {
 
     public async updateWebview(webview: vscode.WebviewView, viewData: ViewData): Promise<void> {
         try {
-            console.log('WebViewService: Sending updateViewData message');
+            console.log('WebViewService: Sending updateViewData message to specific webview');
             await webview.webview.postMessage({
                 command: 'updateViewData',
                 data: viewData
             });
-            console.log('WebViewService: View update complete');
+            console.log('WebViewService: Specific webview update complete');
         } catch (error) {
-            console.error('WebViewService: Error updating webview:', error);
+            console.error('WebViewService: Error updating specific webview:', error);
             if (error instanceof Error) {
                 vscode.window.showErrorMessage(`Webview update error: ${error.message}`);
             }
         }
+    }
+
+    public dispose(): void {
+        console.log('WebViewService: Disposing service and cleaning up resources');
+        
+        // Clean up all disposables
+        for (const [id, disposables] of this.viewDisposables) {
+            console.log(`WebViewService: Cleaning up disposables for ${id}`);
+            disposables.forEach(d => {
+                try {
+                    d.dispose();
+                } catch (error) {
+                    console.error(`WebViewService: Error disposing resource for ${id}:`, error);
+                }
+            });
+        }
+        
+        // Clear all maps
+        this.panels.clear();
+        this.views.clear();
+        this.viewDisposables.clear();
+        this.lastViewData.clear();
+        
+        console.log('WebViewService: Service disposal complete');
     }
 } 
