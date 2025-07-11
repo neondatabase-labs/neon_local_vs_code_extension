@@ -235,9 +235,48 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     });
 
                     if (token) {
-                        await this._authManager.setPersistentApiToken(token);
-                        await this._stateService.setPersistentApiToken(token);
-                        // The authentication state change listener will handle the UI update
+                        // Validate the token by making an API call
+                        console.log('🔍 Validating imported API token...');
+                        
+                        try {
+                            // Show progress while validating
+                            await vscode.window.withProgress({
+                                location: vscode.ProgressLocation.Notification,
+                                title: "Validating API token...",
+                                cancellable: false
+                            }, async (progress) => {
+                                // Create API service and test the token directly (no storage needed)
+                                const testApiService = new NeonApiService(this._extensionContext);
+                                
+                                console.log('📡 Testing API token with validation call...');
+                                const isValid = await testApiService.validateToken(token);
+                                
+                                if (!isValid) {
+                                    throw new Error('Invalid API token');
+                                }
+                                
+                                console.log('✅ API token validation successful');
+                                
+                                // Token is valid, proceed with storing it permanently
+                                await this._authManager.setPersistentApiToken(token);
+                                await this._stateService.setPersistentApiToken(token);
+                                
+                                console.log('✅ API token imported and stored successfully');
+                            });
+                            
+                            // The authentication state change listener will handle the UI update
+                            
+                        } catch (error) {
+                            console.error('❌ API token validation failed:', error);
+                            
+                            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                            vscode.window.showErrorMessage(
+                                `Invalid API token: ${errorMessage}. Please check your token and try again.`
+                            );
+                            
+                            // Don't store the invalid token
+                            console.log('❌ API token not imported due to validation failure');
+                        }
                     }
                     break;
                 case 'clearAuth':

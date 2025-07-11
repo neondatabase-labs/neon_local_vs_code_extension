@@ -40,6 +40,50 @@ export class NeonApiService {
         this.authManager = AuthManager.getInstance(context);
     }
 
+    // Validation method that doesn't use auto-refresh to avoid infinite loops
+    public async validateToken(token: string): Promise<boolean> {
+        console.log('🔍 Validating token with direct API call (no auto-refresh)...');
+        
+        return new Promise((resolve) => {
+            const options: https.RequestOptions = {
+                hostname: 'console.neon.tech',
+                path: '/api/v2/users/me/organizations',
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            };
+
+            const req = https.request(options, (res) => {
+                let responseData = '';
+                res.on('data', (chunk) => {
+                    responseData += chunk;
+                });
+
+                res.on('end', () => {
+                    console.log(`📡 Validation response: ${res.statusCode}`);
+                    
+                    if (res.statusCode === 200) {
+                        console.log('✅ Token validation successful');
+                        resolve(true);
+                    } else {
+                        console.log(`❌ Token validation failed with status ${res.statusCode}: ${responseData}`);
+                        resolve(false);
+                    }
+                });
+            });
+
+            req.on('error', (error) => {
+                console.log(`❌ Token validation failed with error: ${error.message}`);
+                resolve(false);
+            });
+
+            req.end();
+        });
+    }
+
     private async getToken(): Promise<string | null> {
         const persistentApiToken = await this.authManager.getPersistentApiToken();
         const apiKey = this.authManager.tokenSet?.access_token;
