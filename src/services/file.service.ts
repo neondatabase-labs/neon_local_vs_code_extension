@@ -67,4 +67,21 @@ export class FileService {
             return undefined;
         }
     }
+
+    public async deleteBranchesFile(): Promise<void> {
+        try {
+            if (fs.existsSync(this.branchesFilePath)) {
+                await fs.promises.unlink(this.branchesFilePath);
+                console.log('Successfully deleted .branches file at:', this.branchesFilePath);
+            } else {
+                console.log('Branches file does not exist, no cleanup needed');
+            }
+        } catch (error) {
+            console.error('Error deleting branches file:', error);
+            if (error instanceof Error) {
+                console.error('Error details:', error.message);
+                console.error('Error stack:', error.stack);
+            }
+        }
+    }
 } 

@@ -239,33 +239,57 @@ export class NeonApiService {
 
     public async getBranches(projectId: string): Promise<NeonBranch[]> {
         try {
+            console.log(`🔍 API Request - getBranches: projectId="${projectId}"`);
+            console.log(`📡 Making API request to: /projects/${projectId}/branches`);
+            
             const response = await this.makeRequest<any>(`/projects/${projectId}/branches`);
+            console.log(`✅ getBranches response:`, response);
+            
             // Ensure we return an array of branches
-            return Array.isArray(response) ? response : response.branches || [];
+            const branches = Array.isArray(response) ? response : response.branches || [];
+            console.log(`🌿 Processed branches (${branches.length} items):`, branches.map((b: any) => ({ id: b.id, name: b.name })));
+            
+            return branches;
         } catch (error: unknown) {
-            console.error('Error fetching branches:', error);
+            console.error(`❌ Error fetching branches for project="${projectId}":`, error);
             throw new Error(`Failed to fetch branches: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
 
     public async getDatabases(projectId: string, branchId: string): Promise<NeonDatabase[]> {
         try {
+            console.log(`🔍 API Request - getDatabases: projectId="${projectId}", branchId="${branchId}"`);
+            console.log(`📡 Making API request to: /projects/${projectId}/branches/${branchId}/databases`);
+            
             const response = await this.makeRequest<any>(`/projects/${projectId}/branches/${branchId}/databases`);
+            console.log(`✅ getDatabases response:`, response);
+            
             // Ensure we return an array of databases
-            return Array.isArray(response) ? response : response.databases || [];
+            const databases = Array.isArray(response) ? response : response.databases || [];
+            console.log(`📊 Processed databases (${databases.length} items):`, databases);
+            
+            return databases;
         } catch (error: unknown) {
-            console.error('Error fetching databases:', error);
+            console.error(`❌ Error fetching databases for project="${projectId}", branch="${branchId}":`, error);
             throw new Error(`Failed to fetch databases: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
 
     public async getRoles(projectId: string, branchId: string): Promise<NeonRole[]> {
         try {
+            console.log(`🔍 API Request - getRoles: projectId="${projectId}", branchId="${branchId}"`);
+            console.log(`📡 Making API request to: /projects/${projectId}/branches/${branchId}/roles`);
+            
             const response = await this.makeRequest<any>(`/projects/${projectId}/branches/${branchId}/roles`);
+            console.log(`✅ getRoles response:`, response);
+            
             // Ensure we return an array of roles
-            return Array.isArray(response) ? response : response.roles || [];
+            const roles = Array.isArray(response) ? response : response.roles || [];
+            console.log(`👥 Processed roles (${roles.length} items):`, roles);
+            
+            return roles;
         } catch (error: unknown) {
-            console.error('Error fetching roles:', error);
+            console.error(`❌ Error fetching roles for project="${projectId}", branch="${branchId}":`, error);
             throw new Error(`Failed to fetch roles: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }

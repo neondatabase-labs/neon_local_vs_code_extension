@@ -448,13 +448,31 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
 
                                 progress.report({ message: "Fetching database information..." });
 
+                                // For ephemeral branches, we need to get the actual branch ID from the .branches file
+                                let actualBranchId: string;
+                                if (message.isExisting) {
+                                    // For existing branches, use the selected branch ID
+                                    actualBranchId = message.branchId;
+                                    console.log('🔍 Using existing branch ID for API calls:', actualBranchId);
+                                } else {
+                                    // For ephemeral branches, get the branch ID from the .branches file
+                                    console.log('🔍 Getting ephemeral branch ID from .branches file...');
+                                    const ephemeralBranchId = await this._dockerService.checkBranchesFile(this._extensionContext);
+                                    if (!ephemeralBranchId) {
+                                        throw new Error('Failed to get ephemeral branch ID from .branches file');
+                                    }
+                                    actualBranchId = ephemeralBranchId;
+                                    console.log('✅ Using ephemeral branch ID for API calls:', actualBranchId);
+                                }
+
                                 // Fetch and update databases and roles
                                 const apiService = new NeonApiService(this._extensionContext);
                                 const projectId = this._stateService.currentProject;
-                                const branchId = message.branchId || message.parentBranchId;
+                                console.log('🔍 Making API calls with projectId:', projectId, 'branchId:', actualBranchId);
+                                
                                 const [databases, roles] = await Promise.all([
-                                    apiService.getDatabases(projectId, branchId),
-                                    apiService.getRoles(projectId, branchId)
+                                    apiService.getDatabases(projectId, actualBranchId),
+                                    apiService.getRoles(projectId, actualBranchId)
                                 ]);
 
                                 // Update the connection state with databases and roles

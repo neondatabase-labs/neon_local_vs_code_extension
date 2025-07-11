@@ -57,14 +57,17 @@ export async function activate(context: vscode.ExtensionContext) {
         const branchId = await dockerService.checkBranchesFile(context);
         
         if (branchId) {
-          console.log('Using branch ID from .branches file:', branchId);
+          console.log('✅ Using branch ID from .branches file:', branchId);
           await stateService.setIsProxyRunning(true);
           await stateService.setCurrentlyConnectedBranch(branchId);
 
           // Fetch and update databases and roles
           try {
             const projectId = await stateService.getCurrentProjectId();
+            console.log('🔍 Extension startup - projectId:', projectId, 'branchId:', branchId);
+            
             if (projectId) {
+              console.log('📊 Fetching databases and roles for startup...');
               const [databases, roles] = await Promise.all([
                 apiService.getDatabases(projectId, branchId),
                 apiService.getRoles(projectId, branchId)
@@ -73,23 +76,29 @@ export async function activate(context: vscode.ExtensionContext) {
                 stateService.setDatabases(databases),
                 stateService.setRoles(roles)
               ]);
-              console.log('Updated databases and roles on startup');
+              console.log('✅ Updated databases and roles on startup');
+            } else {
+              console.warn('⚠️  No projectId found during startup');
             }
           } catch (error) {
-            console.error('Error fetching databases and roles on startup:', error);
+            console.error('❌ Error fetching databases and roles on startup:', error);
           }
         } else {
           // Fallback to container info if .branches file doesn't have the ID
-          console.log('No branch ID in .branches file, falling back to container info...');
+          console.log('⚠️  No branch ID in .branches file, falling back to container info...');
           const containerInfo = await dockerService.getContainerInfo();
           if (containerInfo) {
+            console.log('✅ Using branch ID from container info:', containerInfo.branchId);
             await stateService.setIsProxyRunning(true);
             await stateService.setCurrentlyConnectedBranch(containerInfo.branchId);
 
             // Fetch and update databases and roles
             try {
               const projectId = containerInfo.projectId;
+              console.log('🔍 Extension startup (container fallback) - projectId:', projectId, 'branchId:', containerInfo.branchId);
+              
               if (projectId) {
+                console.log('📊 Fetching databases and roles for startup (from container info)...');
                 const [databases, roles] = await Promise.all([
                   apiService.getDatabases(projectId, containerInfo.branchId),
                   apiService.getRoles(projectId, containerInfo.branchId)
@@ -98,11 +107,15 @@ export async function activate(context: vscode.ExtensionContext) {
                   stateService.setDatabases(databases),
                   stateService.setRoles(roles)
                 ]);
-                console.log('Updated databases and roles on startup (from container info)');
+                console.log('✅ Updated databases and roles on startup (from container info)');
+              } else {
+                console.warn('⚠️  No projectId found in container info during startup');
               }
             } catch (error) {
-              console.error('Error fetching databases and roles on startup:', error);
+              console.error('❌ Error fetching databases and roles on startup (container fallback):', error);
             }
+          } else {
+            console.warn('⚠️  No container info available for fallback');
           }
         }
         
