@@ -13,7 +13,6 @@
   "activationEvents": [
     "onStartupFinished",
     "onCommand:neon-local.configure",
-    "onCommand:neon-local.showPanel",
     "onCommand:neon-local.stopProxy",
     "onCommand:neon-local.clearAuth",
     "onView:neonLocalConnect",
@@ -24,25 +23,18 @@
   "contributes": {
     "commands": [
       {
-        "command": "neonLocal.signIn.triggerSignIn",
-        "title": "Neon Local Connect: Trigger Sign In"
-      },
-      {
         "command": "neon-local.configure",
         "title": "Neon Local Connect: Import API Key"
-      },
-      {
-        "command": "neon-local.showPanel",
-        "title": "Neon Local Connect: Show Panel"
-      },
-      {
-        "command": "neon-local.stopProxy",
-        "title": "Neon Local Connect: Stop Proxy"
       },
       {
         "command": "neon-local.clearAuth",
         "title": "Neon Local Connect: Clear Authentication"
       },
+      {
+        "command": "neon-local.stopProxy",
+        "title": "Neon Local Connect: Disconnect"
+      },
+      
       {
         "command": "neon-local.openSqlEditor",
         "title": "Neon Local Connect: Open SQL Editor"
