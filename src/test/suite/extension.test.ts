@@ -33,7 +33,7 @@ describe('Extension Test Suite', () => {
         console.log('Available extensions:', allExtensions.map(ext => ext.id));
         
         // Try to find our extension with the correct ID
-        const ext = vscode.extensions.getExtension('undefined_publisher.neon-local');
+        const ext = vscode.extensions.getExtension('undefined_publisher.neon-local-connect');
         console.log('Found extension:', ext?.id);
         
         if (!ext) {
@@ -45,7 +45,7 @@ describe('Extension Test Suite', () => {
 
     it('should activate the extension', async () => {
         console.log('Attempting to activate extension...');
-        const ext = vscode.extensions.getExtension('undefined_publisher.neon-local');
+        const ext = vscode.extensions.getExtension('undefined_publisher.neon-local-connect');
         assert.ok(ext, 'Extension should be present');
         
         try {
@@ -63,15 +63,15 @@ describe('Extension Test Suite', () => {
         const commands = await vscode.commands.getCommands(true);
         console.log('All registered commands:', commands);
         
-        const neonCommands = commands.filter(cmd => cmd.startsWith('neon-local.'));
+        const neonCommands = commands.filter(cmd => cmd.startsWith('neon-local-connect.'));
         console.log('Found Neon commands:', neonCommands);
         
         // Check for specific commands we know should be registered
         const expectedCommands = [
-            'neon-local.configure',
-            'neon-local.showPanel',
-            'neon-local.stopProxy',
-            'neon-local.clearAuth'
+            'neon-local-connect.configure',
+            'neon-local-connect.showPanel',
+            'neon-local-connect.stopProxy',
+            'neon-local-connect.clearAuth'
         ];
         
         expectedCommands.forEach(cmd => {

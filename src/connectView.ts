@@ -552,18 +552,18 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     await this._stateService.setIsProxyRunning(false);
                     await this.updateView();
                     break;
-                case 'resetFromParent':
-                    await vscode.commands.executeCommand('neon-local.resetFromParent');
-                    break;
-                case 'openSqlEditor':
-                    await vscode.commands.executeCommand('neon-local.openSqlEditor');
-                    break;
-                case 'openTableView':
-                    await vscode.commands.executeCommand('neon-local.openTableView');
-                    break;
-                case 'launchPsql':
-                    await vscode.commands.executeCommand('neon-local.launchPsql');
-                    break;
+                      case 'resetFromParent':
+        await vscode.commands.executeCommand('neon-local-connect.resetFromParent');
+        break;
+      case 'openSqlEditor':
+        await vscode.commands.executeCommand('neon-local-connect.openSqlEditor');
+        break;
+      case 'openTableView':
+        await vscode.commands.executeCommand('neon-local-connect.openTableView');
+        break;
+      case 'launchPsql':
+        await vscode.commands.executeCommand('neon-local-connect.launchPsql');
+        break;
                 case 'updateConnectionType':
                     console.log('ConnectViewProvider: Handling connection type update:', {
                         newType: message.connectionType,

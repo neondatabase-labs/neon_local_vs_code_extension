@@ -157,19 +157,19 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Register core commands
   disposables.push(
-    vscode.commands.registerCommand('neon-local.configure', () => {
+    vscode.commands.registerCommand('neon-local-connect.configure', () => {
       webviewService.configure();
     }),
-    vscode.commands.registerCommand('neon-local.showPanel', () => {
+    vscode.commands.registerCommand('neon-local-connect.showPanel', () => {
       webviewService.showPanel(context);
     }),
-    vscode.commands.registerCommand('neon-local.stopProxy', async () => {
+    vscode.commands.registerCommand('neon-local-connect.stopProxy', async () => {
       await dockerService.stopContainer();
     }),
-    vscode.commands.registerCommand('neon-local.clearAuth', async () => {
+    vscode.commands.registerCommand('neon-local-connect.clearAuth', async () => {
       await authManager.signOut();
     }),
-    vscode.commands.registerCommand('neon-local.showWebviewStats', () => {
+    vscode.commands.registerCommand('neon-local-connect.showWebviewStats', () => {
       const stats = webviewService.getRegistrationStats();
       vscode.window.showInformationMessage(
         `WebView Stats - Panels: ${stats.panels}, Views: ${stats.views}, Messages: ${stats.messageStats.successful} success / ${stats.messageStats.failed} failed`
@@ -179,7 +179,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Register database action commands
   disposables.push(
-    vscode.commands.registerCommand('neon-local.openSqlEditor', async () => {
+    vscode.commands.registerCommand('neon-local-connect.openSqlEditor', async () => {
       try {
         // Get the current project and branch IDs
         const projectId = await stateService.getCurrentProjectId();
@@ -220,7 +220,7 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage(`Failed to open SQL Editor: ${error}`);
       }
     }),
-    vscode.commands.registerCommand('neon-local.openTableView', async () => {
+    vscode.commands.registerCommand('neon-local-connect.openTableView', async () => {
       try {
         // Get the current project and branch IDs
         const projectId = await stateService.getCurrentProjectId();
@@ -261,7 +261,7 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage(`Failed to open Table View: ${error}`);
       }
     }),
-    vscode.commands.registerCommand('neon-local.launchPsql', async () => {
+    vscode.commands.registerCommand('neon-local-connect.launchPsql', async () => {
       try {
         // Get the current project and branch IDs
         const projectId = await stateService.getCurrentProjectId();
@@ -332,7 +332,7 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage(`Failed to launch PSQL: ${error instanceof Error ? error.message : String(error)}`);
       }
     }),
-    vscode.commands.registerCommand('neon-local.resetFromParent', async () => {
+    vscode.commands.registerCommand('neon-local-connect.resetFromParent', async () => {
         try {
             const containerInfo = await dockerService.getContainerInfo();
             

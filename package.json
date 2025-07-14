@@ -1,5 +1,5 @@
 {
-  "name": "neon-local",
+  "name": "neon-local-connect",
   "displayName": "Neon Local Connect",
   "description": "Local development environment for Neon Databases with branch management",
   "version": "1.0.0",
@@ -16,9 +16,9 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onCommand:neon-local.configure",
-    "onCommand:neon-local.stopProxy",
-    "onCommand:neon-local.clearAuth",
+    "onCommand:neon-local-connect.configure",
+    "onCommand:neon-local-connect.stopProxy",
+    "onCommand:neon-local-connect.clearAuth",
     "onView:neonLocalConnect",
     "onView:neonLocalActions"
   ],
@@ -27,28 +27,28 @@
   "contributes": {
     "commands": [
       {
-        "command": "neon-local.configure",
+        "command": "neon-local-connect.configure",
         "title": "Neon Local Connect: Import API Key"
       },
       {
-        "command": "neon-local.clearAuth",
+        "command": "neon-local-connect.clearAuth",
         "title": "Neon Local Connect: Clear Authentication"
       },
       {
-        "command": "neon-local.stopProxy",
+        "command": "neon-local-connect.stopProxy",
         "title": "Neon Local Connect: Disconnect"
       },
       
       {
-        "command": "neon-local.openSqlEditor",
+        "command": "neon-local-connect.openSqlEditor",
         "title": "Neon Local Connect: Open SQL Editor"
       },
       {
-        "command": "neon-local.openTableView",
+        "command": "neon-local-connect.openTableView",
         "title": "Neon Local Connect: Open Table View"
       },
       {
-        "command": "neon-local.launchPsql",
+        "command": "neon-local-connect.launchPsql",
         "title": "Neon Local Connect: Launch PSQL"
       }
     ],
@@ -110,14 +110,14 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "neon-local",
-          "title": "Neon Local",
+          "id": "neon-local-connect",
+          "title": "Neon Local Connect",
           "icon": "resources/Neon_logo.png"
         }
       ]
     },
     "views": {
-      "neon-local": [
+      "neon-local-connect": [
         {
           "type": "webview",
           "id": "neonLocalConnect",

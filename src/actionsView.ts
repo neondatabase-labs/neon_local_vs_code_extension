@@ -67,18 +67,18 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
 
         try {
             switch (message.command) {
-                case 'resetFromParent':
-                    await vscode.commands.executeCommand('neon-local.resetFromParent');
-                    break;
-                case 'openSqlEditor':
-                    await vscode.commands.executeCommand('neon-local.openSqlEditor');
-                    break;
-                case 'openTableView':
-                    await vscode.commands.executeCommand('neon-local.openTableView');
-                    break;
-                case 'launchPsql':
-                    await vscode.commands.executeCommand('neon-local.launchPsql');
-                    break;
+                      case 'resetFromParent':
+        await vscode.commands.executeCommand('neon-local-connect.resetFromParent');
+        break;
+      case 'openSqlEditor':
+        await vscode.commands.executeCommand('neon-local-connect.openSqlEditor');
+        break;
+      case 'openTableView':
+        await vscode.commands.executeCommand('neon-local-connect.openTableView');
+        break;
+      case 'launchPsql':
+        await vscode.commands.executeCommand('neon-local-connect.launchPsql');
+        break;
                 case 'refresh':
                     await this.updateView();
                     break;
