@@ -23,7 +23,7 @@
     "onView:neonLocalActions"
   ],
   "main": "./dist/extension.js",
-  "icon": "resources/neon_logo.png",
+  "icon": "resources/Neon_logo.png",
   "contributes": {
     "commands": [
       {
@@ -112,7 +112,7 @@
         {
           "id": "neon-local",
           "title": "Neon Local",
-          "icon": "resources/neon_logo.png"
+          "icon": "resources/Neon_logo.png"
         }
       ]
     },
