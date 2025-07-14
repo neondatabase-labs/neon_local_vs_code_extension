@@ -25,27 +25,22 @@ jobs:
               with:
                   node-version: ${{ matrix.node-version }}
 
-            - name: download release
-              run: |
-                  set x
-                  echo Version: ${{ github.event.inputs.version }}
-                  echo REF: ${{ github.ref }}
-                  TAG=${{ github.event.inputs.version }}
-                  if [[ ! -z "${{ github.event.inputs.version }}" ]]; then
-                    TAG=${{ github.event.inputs.version }}
-                  elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
-                    TAG=$(echo ${{ github.ref }} | sed -e "s|^refs/tags/||")
-                  else
-                    exit 1
-                  fi
-                  echo Tag: $TAG
-                  gh release download $TAG -R databricks/sqltools-databricks-driver
-                  ls -lR
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Checkout repository
+              uses: actions/checkout@v3
+
+            - name: Install dependencies
+              run: npm install
+
+            - name: Build extension
+              run: npm run package
 
             - name: Install vcse
               run: npm install -g @vscode/vsce
+
+            - name: Package extension
+              run: |
+                  vsce package
+                  ls -lR *.vsix
 
             - name: Publish to VS Code Marketplace
               run: |
