@@ -1,6 +1,4 @@
 
-![Neon Logo](/resources/neon-logo-light-color.png)
-
 # Neon Local Connect VS Code Extension
 
 Connect any app to any Neon branch over localhost. Branch, test, and reset database branches from your IDE using Docker-based [Neon Local](https://github.com/neondatabase-labs/neon_local) under the hood.

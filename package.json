@@ -38,7 +38,6 @@
         "command": "neon-local-connect.stopProxy",
         "title": "Neon Local Connect: Disconnect"
       },
-      
       {
         "command": "neon-local-connect.openSqlEditor",
         "title": "Neon Local Connect: Open SQL Editor"
@@ -155,6 +154,7 @@
     "browserify-zlib": "^0.2.0",
     "buffer": "^6.0.3",
     "constants-browserify": "^1.0.0",
+    "copy-webpack-plugin": "^11.0.0",
     "crypto-browserify": "^3.12.1",
     "css-loader": "^6.10.0",
     "eslint": "^8.54.0",

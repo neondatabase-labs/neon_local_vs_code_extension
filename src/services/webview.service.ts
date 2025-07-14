@@ -108,6 +108,7 @@ export class WebViewService {
         console.log('WebViewService: Setting up webview options');
         webview.options = {
             enableScripts: true,
+            enableCommandUris: false,
             localResourceRoots: [
                 vscode.Uri.joinPath(this.context.extensionUri, 'dist')
             ]
@@ -238,6 +239,7 @@ export class WebViewService {
             vscode.ViewColumn.One,
             {
                 enableScripts: true,
+                enableCommandUris: false,
                 localResourceRoots: [context.extensionUri]
             }
         );

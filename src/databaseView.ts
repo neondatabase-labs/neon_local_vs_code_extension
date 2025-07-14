@@ -56,6 +56,7 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
 
         webviewView.webview.options = {
             enableScripts: true,
+            enableCommandUris: false,
             localResourceRoots: [
                 this._extensionUri
             ]

@@ -1,4 +1,3 @@
-import { custom, generators, Issuer, TokenSet } from 'openid-client';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { createReadStream } from 'fs';
 import { AddressInfo } from 'net';
@@ -34,59 +33,145 @@ export type AuthProps = {
   extensionUri: vscode.Uri;
 };
 
-// Re-export TokenSet for use in other files
-export { TokenSet };
-
-custom.setHttpOptionsDefaults({
-  timeout: SERVER_TIMEOUT,
-});
-
 export const refreshToken = async (
   { oauthHost, clientId }: AuthProps,
-  tokenSet: TokenSet,
+  tokenSet: any, // Use any to avoid importing TokenSet at module level
 ) => {
-  console.debug('Discovering oauth server');
-  const issuer = await Issuer.discover(oauthHost);
+  console.debug('🔍 Starting token refresh with params:', { oauthHost, clientId });
+  
+  // Add error handling and validation for oauthHost
+  if (!oauthHost || typeof oauthHost !== 'string') {
+    throw new Error('Invalid OAuth host configuration');
+  }
+  
+  // Validate that the OAuth host is a valid URL
+  try {
+    new URL(oauthHost);
+  } catch (error) {
+    throw new Error(`Invalid OAuth host URL: ${oauthHost}`);
+  }
+  
+  // Validate tokenSet
+  if (!tokenSet || !tokenSet.refresh_token) {
+    throw new Error('Invalid token set or missing refresh token');
+  }
+  
+  console.debug('🔍 Discovering oauth server');
+  
+  let issuer;
+  try {
+    console.debug('🔍 Loading openid-client dynamically...');
+    const { Issuer } = await import('openid-client');
+    console.debug('🔍 Attempting to discover issuer at:', oauthHost);
+    issuer = await Issuer.discover(oauthHost);
+    console.debug('🔍 Successfully discovered issuer:', issuer.issuer);
+  } catch (error) {
+    console.error('🚨 Failed to discover OAuth issuer:', error);
+    throw new Error(`Failed to discover OAuth issuer at ${oauthHost}: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
-  const neonOAuthClient = new issuer.Client({
-    token_endpoint_auth_method: 'none',
-    client_id: clientId,
-    response_types: ['code'],
-  });
-  return await neonOAuthClient.refresh(tokenSet);
+  let client;
+  try {
+    console.debug('🔍 Creating OAuth client for token refresh');
+    client = new issuer.Client({
+      client_id: clientId,
+      token_endpoint_auth_method: 'none',
+    });
+    console.debug('🔍 Successfully created OAuth client');
+  } catch (error) {
+    console.error('🚨 Failed to create OAuth client:', error);
+    throw new Error(`Failed to create OAuth client: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  try {
+    console.debug('🔍 Refreshing token');
+    const newTokenSet = await client.refresh(tokenSet);
+    console.debug('🔍 Successfully refreshed token');
+    return newTokenSet;
+  } catch (error) {
+    console.error('🚨 Failed to refresh token:', error);
+    throw new Error(`Failed to refresh token: ${error instanceof Error ? error.message : String(error)}`);
+  }
 };
 
 export const auth = async ({ oauthHost, clientId, extensionUri }: AuthProps) => {
-  console.debug('Discovering oauth server');
-  const issuer = await Issuer.discover(oauthHost);
+  console.debug('🔍 Starting auth flow with params:', { oauthHost, clientId });
+  
+  // Add error handling and validation for oauthHost
+  if (!oauthHost || typeof oauthHost !== 'string') {
+    throw new Error('Invalid OAuth host configuration');
+  }
+  
+  // Validate that the OAuth host is a valid URL
+  try {
+    new URL(oauthHost);
+  } catch (error) {
+    throw new Error(`Invalid OAuth host URL: ${oauthHost}`);
+  }
+  
+  console.debug('🔍 Discovering oauth server');
+  
+  let issuer;
+  try {
+    console.debug('🔍 Loading openid-client dynamically...');
+    const { Issuer } = await import('openid-client');
+    console.debug('🔍 Attempting to discover issuer at:', oauthHost);
+    issuer = await Issuer.discover(oauthHost);
+    console.debug('🔍 Successfully discovered issuer:', issuer.issuer);
+  } catch (error) {
+    console.error('🚨 Failed to discover OAuth issuer:', error);
+    throw new Error(`Failed to discover OAuth issuer at ${oauthHost}: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
   //
   // Start HTTP server and wait till /callback is hit
   //
-  console.debug('Starting HTTP Server for callback');
+  console.debug('🔍 Starting HTTP Server for callback');
   const server = createServer();
   server.listen(0, '127.0.0.1', function (this: typeof server) {
-    console.debug(`Listening on port ${(this.address() as AddressInfo).port}`);
+    console.debug(`🔍 Listening on port ${(this.address() as AddressInfo).port}`);
   });
   await new Promise((resolve) => server.once('listening', resolve));
   const listen_port = (server.address() as AddressInfo).port;
 
-  const neonOAuthClient = new issuer.Client({
-    token_endpoint_auth_method: 'none',
-    client_id: clientId,
-    redirect_uris: [REDIRECT_URI(listen_port)],
-    response_types: ['code'],
-  });
+  let neonOAuthClient;
+  try {
+    console.debug('🔍 Creating OAuth client with redirect URI:', REDIRECT_URI(listen_port));
+    neonOAuthClient = new issuer.Client({
+      token_endpoint_auth_method: 'none',
+      client_id: clientId,
+      redirect_uris: [REDIRECT_URI(listen_port)],
+      response_types: ['code'],
+    });
+    console.debug('🔍 Successfully created OAuth client');
+  } catch (error) {
+    console.error('🚨 Failed to create OAuth client:', error);
+    throw new Error(`Failed to create OAuth client: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
   // https://datatracker.ietf.org/doc/html/rfc6819#section-4.4.1.8
-  const state = generators.state();
+  let state, codeVerifier, codeChallenge;
+  try {
+    console.debug('🔍 Generating OAuth parameters...');
+    console.debug('🔍 Loading generators from openid-client...');
+    const { generators } = await import('openid-client');
+    
+    state = generators.state();
+    console.debug('🔍 Generated state:', state);
+    
+    codeVerifier = generators.codeVerifier();
+    console.debug('🔍 Generated codeVerifier length:', codeVerifier.length);
+    
+    codeChallenge = generators.codeChallenge(codeVerifier);
+    console.debug('🔍 Generated codeChallenge:', codeChallenge);
+    
+    console.debug('🔍 Successfully generated OAuth parameters');
+  } catch (error) {
+    console.error('🚨 Failed to generate OAuth parameters:', error);
+    throw new Error(`Failed to generate OAuth parameters: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
-  // we store the code_verifier in memory
-  const codeVerifier = generators.codeVerifier();
-
-  const codeChallenge = generators.codeChallenge(codeVerifier);
-
-  return new Promise<TokenSet>((resolve, reject) => {
+  return new Promise<any>((resolve, reject) => {
     const timer = setTimeout(() => {
       reject(
         new Error(
@@ -130,8 +215,8 @@ export const auth = async ({ oauthHost, clientId, extensionUri }: AuthProps) => 
         },
       );
 
-      response.writeHead(200, { 'Content-Type': 'text/html' });
-      const callbackHtmlPath = path.join(extensionUri.fsPath, 'src', 'auth', 'callback.html');
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      const callbackHtmlPath = path.join(__dirname, 'callback.html');
       createReadStream(callbackHtmlPath).pipe(response);
 
       clearTimeout(timer);
@@ -156,8 +241,6 @@ export const auth = async ({ oauthHost, clientId, extensionUri }: AuthProps) => 
     });
 
     vscode.window.showInformationMessage('Awaiting authentication in web browser.');
-    console.log(`Auth Url: ${authUrl}`);
-
     vscode.env.openExternal(vscode.Uri.parse(authUrl));
   });
 }; 

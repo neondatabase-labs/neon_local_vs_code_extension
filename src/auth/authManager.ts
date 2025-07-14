@@ -1,8 +1,11 @@
 import * as vscode from 'vscode';
-import { auth, refreshToken, TokenSet, AuthProps } from './authService';
+import { auth, refreshToken, AuthProps } from './authService';
 import { CONFIG } from '../constants';
 import { StateService } from '../services/state.service';
 import { SecureTokenStorage } from '../services/secureTokenStorage';
+
+// Use any instead of importing TokenSet to avoid loading openid-client during extension activation
+type TokenSet = any;
 
 export class AuthManager {
   private static instance: AuthManager;
@@ -11,7 +14,7 @@ export class AuthManager {
   private _tokenSet: TokenSet | undefined;
   private _onDidChangeAuthentication = new vscode.EventEmitter<boolean>();
   private secureStorage: SecureTokenStorage;
-  
+
   readonly onDidChangeAuthentication = this._onDidChangeAuthentication.event;
 
   private constructor(context: vscode.ExtensionContext) {
@@ -36,8 +39,7 @@ export class AuthManager {
   }
 
   async isAuthenticatedAsync(): Promise<boolean> {
-    const persistentToken = await this.getPersistentApiToken();
-    return !!persistentToken || !!this._tokenSet;
+    return this._isAuthenticated;
   }
 
   get tokenSet(): TokenSet | undefined {
@@ -80,41 +82,27 @@ export class AuthManager {
   }
 
   async signOut(): Promise<void> {
-    this._tokenSet = undefined;
-    this._isAuthenticated = false;
-    
-    // Clear all storage locations
-    await this.context.globalState.update('neon.tokenSet', undefined);
-    await this.secureStorage.clearAllTokens();
-    
-    // Clear the state service
-    const stateService = new StateService(this.context);
-    await stateService.clearState();
-    await stateService.setCurrentOrg('');
-    
-    this._onDidChangeAuthentication.fire(false);
-    
-    vscode.window.showInformationMessage('Signed out from Neon');
+    try {
+      this._tokenSet = undefined;
+      this._isAuthenticated = false;
+      
+      // Clear stored tokens
+      await this.context.globalState.update('neon.tokenSet', undefined);
+      await this.secureStorage.clearAllTokens();
+      
+      this._onDidChangeAuthentication.fire(false);
+      
+      vscode.window.showInformationMessage('Successfully signed out from Neon!');
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to sign out: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
   }
 
   async refreshTokenIfNeeded(): Promise<boolean> {
-    // If using persistent API token, no need to refresh
-    const persistentToken = await this.getPersistentApiToken();
-    if (persistentToken) {
-      return true;
-    }
-
-    if (!this._tokenSet || !this._tokenSet.refresh_token) {
+    if (!this._tokenSet?.refresh_token) {
+      console.log('No refresh token available');
       return false;
-    }
-
-    // Check if token is expired or about to expire (within 5 minutes)
-    const now = Math.floor(Date.now() / 1000);
-    const expiresAt = this._tokenSet.expires_at || 0;
-    
-    if (expiresAt - now > 300) {
-      // Token is still valid for more than 5 minutes
-      return true;
     }
 
     try {
@@ -124,9 +112,12 @@ export class AuthManager {
         extensionUri: this.context.extensionUri
       };
 
+      console.log('Attempting to refresh token...');
       const newTokenSet = await refreshToken(authProps, this._tokenSet);
       
       this._tokenSet = newTokenSet;
+      
+      // Update stored tokens
       await this.context.globalState.update('neon.tokenSet', newTokenSet);
       if (newTokenSet.access_token) {
         await this.secureStorage.storeAccessToken(newTokenSet.access_token);
@@ -135,29 +126,35 @@ export class AuthManager {
         await this.secureStorage.storeRefreshToken(newTokenSet.refresh_token);
       }
       
+      console.log('Token refresh successful');
       return true;
     } catch (error) {
-      console.error('Failed to refresh token:', error);
+      console.error('Token refresh failed:', error);
       
-      // If refresh fails, sign out
-      await this.signOut();
+      // Clear invalid tokens
+      this._tokenSet = undefined;
+      this._isAuthenticated = false;
+      await this.context.globalState.update('neon.tokenSet', undefined);
+      await this.secureStorage.clearAllTokens();
+      
+      this._onDidChangeAuthentication.fire(false);
+      
       return false;
     }
   }
 
   async setPersistentApiToken(token: string): Promise<void> {
     await this.secureStorage.storePersistentApiToken(token);
+    
+    // Update auth state
     this._isAuthenticated = true;
     this._onDidChangeAuthentication.fire(true);
-    vscode.window.showInformationMessage('Successfully imported API token!');
   }
 
-  // Migration method to move existing tokens from config to secure storage
   async migrateTokensFromConfig(): Promise<void> {
-    await this.secureStorage.migrateFromConfig();
+    // Migration logic if needed
   }
 
-  // Initialize authentication state after constructor
   async initializeAuthState(): Promise<void> {
     const persistentToken = await this.getPersistentApiToken();
     const wasAuthenticated = this._isAuthenticated;
