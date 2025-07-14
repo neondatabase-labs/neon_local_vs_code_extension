@@ -25,24 +25,16 @@ jobs:
               with:
                   node-version: ${{ matrix.node-version }}
 
-            - name: download release
+            - name: Checkout repository
+              uses: actions/checkout@v3
+
+            - name: Install dependencies
+              run: npm install
+
+            - name: Build extension
               run: |
-                  set x
-                  echo Version: ${{ github.event.inputs.version }}
-                  echo REF: ${{ github.ref }}
-                  TAG=${{ github.event.inputs.version }}
-                  if [[ ! -z "${{ github.event.inputs.version }}" ]]; then
-                    TAG=${{ github.event.inputs.version }}
-                  elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
-                    TAG=$(echo ${{ github.ref }} | sed -e "s|^refs/tags/||")
-                  else
-                    exit 1
-                  fi
-                  echo Tag: $TAG
-                  gh release download $TAG -R databricks/sqltools-databricks-driver
+                  npm run build
                   ls -lR
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Install vcse
               run: npm install -g @vscode/vsce
@@ -50,7 +42,7 @@ jobs:
             - name: Publish to VS Code Marketplace
               run: |
                   vsce -V
-                  vsce publish -p ${{ secrets.VSCE_TOKEN }} --packagePath sqltools-databricks-driver-*.vsix --allow-star-activation --skip-duplicate --pre-release
+                  vsce publish -p ${{ secrets.VSCE_TOKEN }} --packagePath neon-local-connect*.vsix --allow-star-activation --skip-duplicate --pre-release
 
               env:
                   VSCE_TOKEN: ${{ secrets.VSCE_TOKEN }}
@@ -61,6 +53,6 @@ jobs:
             - name: Publish to Open VSIX
               run: |
                   ovsx verify-pat databricks
-                  ovsx publish --packagePath sqltools-databricks-driver-*.vsix --skip-duplicate --pre-release
+                  ovsx publish --packagePath neon-local-connect*.vsix --skip-duplicate --pre-release
               env:
                   OVSX_PAT: ${{ secrets.OVSX_PAT }}
