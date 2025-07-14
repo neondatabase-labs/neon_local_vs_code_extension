@@ -45,7 +45,7 @@ jobs:
             - name: Publish to VS Code Marketplace
               run: |
                   vsce -V
-                  vsce publish -p ${{ secrets.VSCE_TOKEN }} --packagePath sqltools-databricks-driver-*.vsix --allow-star-activation --skip-duplicate --pre-release
+                  vsce publish -p ${{ secrets.VSCE_TOKEN }} --packagePath neon-local-connect*.vsix --allow-star-activation --skip-duplicate --pre-release
 
               env:
                   VSCE_TOKEN: ${{ secrets.VSCE_TOKEN }}
@@ -56,6 +56,6 @@ jobs:
             - name: Publish to Open VSIX
               run: |
                   ovsx verify-pat databricks
-                  ovsx publish --packagePath sqltools-databricks-driver-*.vsix --skip-duplicate --pre-release
+                  ovsx publish --packagePath neon-local-connect*.vsix --skip-duplicate --pre-release
               env:
                   OVSX_PAT: ${{ secrets.OVSX_PAT }}
