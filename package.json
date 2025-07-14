@@ -4,6 +4,10 @@
   "description": "Local development environment for Neon Databases with branch management",
   "version": "1.0.0",
   "publisher": "databricks",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neondatabase-labs/neon_local_vs_code_extension"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
