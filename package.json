@@ -1,6 +1,6 @@
 {
   "name": "neon-local-connect",
-  "displayName": "Neon Local",
+  "displayName": "Neon Local Connect",
   "description": "Local development environment for Neon Databases with branch management",
   "version": "1.0.0",
   "publisher": "databricks",
@@ -111,7 +111,7 @@
       "activitybar": [
         {
           "id": "neon-local-connect",
-          "title": "Neon Local Connect",
+          "title": "Neon Local",
           "icon": "resources/Neon_logo.png"
         }
       ]
