@@ -39,7 +39,7 @@ jobs:
 
             - name: Package extension
               run: |
-                  vsce package --baseContentUrl https://github.com/neondatabase-labs/neon_local_vs_code_extension/raw/main --baseImagesUrl https://github.com/neondatabase-labs/neon_local_vs_code_extension/raw/main
+                  vsce package --pre-release --baseContentUrl https://github.com/neondatabase-labs/neon_local_vs_code_extension/raw/main --baseImagesUrl https://github.com/neondatabase-labs/neon_local_vs_code_extension/raw/main
                   ls -lR *.vsix
 
             - name: Publish to VS Code Marketplace
