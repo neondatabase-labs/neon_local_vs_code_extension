@@ -1,4 +1,8 @@
-![Neon logo](/resources/Neon_logo.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="/resources/neon-logo-dark-color.png">
+  <source media="(prefers-color-scheme: light)" srcset="/resources/neon-logo-light-color.png">
+  <img alt="neon logo" src="/resources/neon-logo-light-color.png">
+</picture>
 
 # Neon Local Connect VS Code Extension
 
