@@ -64,26 +64,39 @@ export class SecureTokenStorage {
     // Migration helper: migrate from config to secrets
     async migrateFromConfig(): Promise<void> {
         const config = vscode.workspace.getConfiguration('neonLocal');
+        let migrationPerformed = false;
         
         // Migrate access token
         const accessToken = config.get<string>('apiKey');
         if (accessToken) {
+            console.log('SecureTokenStorage: Migrating access token from config to secure storage');
             await this.storeAccessToken(accessToken);
             await config.update('apiKey', undefined, true);
+            migrationPerformed = true;
         }
 
         // Migrate refresh token
         const refreshToken = config.get<string>('refreshToken');
         if (refreshToken) {
+            console.log('SecureTokenStorage: Migrating refresh token from config to secure storage');
             await this.storeRefreshToken(refreshToken);
             await config.update('refreshToken', undefined, true);
+            migrationPerformed = true;
         }
 
         // Migrate persistent API token
         const persistentToken = config.get<string>('persistentApiToken');
         if (persistentToken) {
+            console.log('SecureTokenStorage: Migrating persistent API token from config to secure storage');
             await this.storePersistentApiToken(persistentToken);
             await config.update('persistentApiToken', undefined, true);
+            migrationPerformed = true;
+        }
+
+        if (migrationPerformed) {
+            console.log('SecureTokenStorage: Token migration completed successfully');
+        } else {
+            console.log('SecureTokenStorage: No tokens found in config to migrate');
         }
     }
 } 

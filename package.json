@@ -103,6 +103,14 @@
         "neonLocal.workspacePath": {
           "type": "string",
           "description": "Absolute path to the workspace root directory"
+        },
+        "neonLocal.port": {
+          "type": "number",
+          "default": 5432,
+          "minimum": 1024,
+          "maximum": 65535,
+          "description": "Local port to use for the database proxy container",
+          "scope": "application"
         }
       }
     },

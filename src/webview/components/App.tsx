@@ -35,6 +35,8 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
   const messageHandlerRef = useRef<((event: MessageEvent) => void) | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
   const [isProcessingCommand, setIsProcessingCommand] = useState(false);
+  const [portInputValue, setPortInputValue] = useState<string>('');
+  const [portError, setPortError] = useState<string | null>(null);
   
   // Only show connected view if proxy is running AND we have a connection info
   // Add a small delay before showing disconnected state to prevent flicker
@@ -50,6 +52,17 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
       isConnected
     });
   }, [state.connection.connected, state.connection.isStarting]);
+
+  // Sync port input value with state
+  useEffect(() => {
+    setPortInputValue(state.connection.port.toString() || '5432');
+  }, [state.connection.port]);
+
+  // Helper function to validate port
+  const isValidPort = (port: number | string): boolean => {
+    const portNum = typeof port === 'string' ? parseInt(port, 10) : port;
+    return !isNaN(portNum) && portNum >= 1024 && portNum <= 65535;
+  };
 
   // Handle messages from the extension
   useEffect(() => {
@@ -261,6 +274,56 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
     });
   };
 
+  const handlePortChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    
+    // Update local input value immediately to allow typing
+    setPortInputValue(value);
+    
+    // Clear any existing error when user starts typing
+    setPortError(null);
+    
+    // If empty, don't validate yet (allow user to type)
+    if (value === '') {
+      return;
+    }
+    
+    const port = parseInt(value, 10);
+    // Update state for any numeric input
+    if (!isNaN(port)) {
+      updateState({ connection: { ...state.connection, port } });
+      
+      // Validate port range and set error if invalid
+      if (!isValidPort(port)) {
+        setPortError('Port must be between 1024 and 65535');
+      }
+      
+      // Only send valid ports to the extension
+      if (isValidPort(port)) {
+        vscode.postMessage({
+          command: 'updatePort',
+          port
+        });
+      }
+    } else {
+      setPortError('Port must be a valid number');
+    }
+  };
+
+  const handlePortBlur = () => {
+    // On blur, validate the current value
+    if (portInputValue === '') {
+      setPortError('Port is required');
+    } else {
+      const port = parseInt(portInputValue, 10);
+      if (isNaN(port)) {
+        setPortError('Port must be a valid number');
+      } else if (!isValidPort(port)) {
+        setPortError('Port must be between 1024 and 65535');
+      }
+    }
+  };
+
   const handleStartProxy = () => {
     if (isProcessingCommand) {
       return;
@@ -388,7 +451,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
                     <button
                       className="copy-button"
                       title="Copy fetch endpoint configuration"
-                      onClick={() => handleCopy("import { neonConfig } from '@neondatabase/serverless';\n\nneonConfig.fetchEndpoint = 'http://localhost:5432/sql';", 'endpoint')}
+                      onClick={() => handleCopy(`import { neonConfig } from '@neondatabase/serverless';\n\nneonConfig.fetchEndpoint = 'http://localhost:${state.port}/sql';`, 'endpoint')}
                     >
                       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M10.75 1.75H4.25C3.97386 1.75 3.75 1.97386 3.75 2.25V11.25C3.75 11.5261 3.97386 11.75 4.25 11.75H10.75C11.0261 11.75 11.25 11.5261 11.25 11.25V2.25C11.25 1.97386 11.0261 1.75 10.75 1.75Z" stroke="currentColor" strokeWidth="1.5"/>
@@ -402,7 +465,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
                   <div className="detail-value connection-string-container">
                     <div className="connection-string">
                       import {'{'} neonConfig {'}'} from '@neondatabase/serverless';<br /><br />
-                      neonConfig.fetchEndpoint = 'http://localhost:5432/sql';
+                      neonConfig.fetchEndpoint = 'http://localhost:{state.port}/sql';
                     </div>
                   </div>
                 </div>
@@ -568,10 +631,34 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
                   </select>
                 </div>
 
+                <div className="section">
+                  <div className="label-with-help">
+                    <label htmlFor="port">Database Port</label>
+                    <HelpIcon 
+                      tooltip="Local port for the database proxy container. Default is 5432. Must be between 1024-65535."
+                    />
+                  </div>
+                  <input
+                    type="number"
+                    id="port"
+                    min="1024"
+                    max="65535"
+                    value={portInputValue}
+                    onChange={handlePortChange}
+                    onBlur={handlePortBlur}
+                    className={portError ? 'error' : ''}
+                  />
+                  {portError && (
+                    <div className="field-error">
+                      {portError}
+                    </div>
+                  )}
+                </div>
+
                 <div className="section proxy-buttons">
                   <button
                     onClick={handleStartProxy}
-                    disabled={isProcessingCommand || !state.connection.selectedProjectId || (state.connection.type === 'existing' ? !state.connection.selectedBranchId : !state.connection.parentBranchId)}
+                    disabled={isProcessingCommand || !state.connection.selectedProjectId || (state.connection.type === 'existing' ? !state.connection.selectedBranchId : !state.connection.parentBranchId) || !!portError || !isValidPort(portInputValue)}
                     className="start-button"
                   >
                     {isProcessingCommand ? 'Connecting...' : 'Connect'}

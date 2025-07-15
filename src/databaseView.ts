@@ -97,7 +97,7 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
                 if (!isAuthenticated) {
                     console.log('DatabaseViewProvider: Not authenticated, showing sign-in message');
                     if (this._view && this._signInView) {
-                        this._view.webview.html = this._signInView.getHtml("Sign in to Neon in the Connect view", false);
+                        this._view.webview.html = this._signInView.getHtml("Please sign in to your Neon account in the Connect view", false);
                     }
                     return;
                 }
@@ -188,7 +188,7 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
             if (!persistentApiToken && !apiKey && !refreshToken) {
                 console.log('DatabaseViewProvider: No tokens found, showing sign-in message');
                 if (this._signInView) {
-                    this._view.webview.html = this._signInView.getHtml("Sign in to Neon in the Connect view", false);
+                    this._view.webview.html = this._signInView.getHtml("Please sign in to your Neon account in the Connect view", false);
                 }
                 this._isUpdating = false;
                 return;

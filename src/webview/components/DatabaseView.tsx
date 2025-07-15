@@ -118,7 +118,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
               <button
                 className="copy-button"
                 title="Copy fetch endpoint configuration"
-                onClick={() => handleCopy("import { neonConfig } from '@neondatabase/serverless';\n\nneonConfig.fetchEndpoint = 'http://localhost:5432/sql';", 'endpoint')}
+                onClick={() => handleCopy(`import { neonConfig } from '@neondatabase/serverless';\n\nneonConfig.fetchEndpoint = 'http://localhost:${state.port}/sql';`, 'endpoint')}
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M10.75 1.75H4.25C3.97386 1.75 3.75 1.97386 3.75 2.25V11.25C3.75 11.5261 3.97386 11.75 4.25 11.75H10.75C11.0261 11.75 11.25 11.5261 11.25 11.25V2.25C11.25 1.97386 11.0261 1.75 10.75 1.75Z" stroke="currentColor" strokeWidth="1.5"/>
@@ -132,7 +132,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ vscode }) => {
             <div className="detail-value connection-string-container">
               <div className="connection-string">
                 import {'{'} neonConfig {'}'} from '@neondatabase/serverless';<br /><br />
-                neonConfig.fetchEndpoint = 'http://localhost:5432/sql';
+                neonConfig.fetchEndpoint = 'http://localhost:{state.port}/sql';
               </div>
             </div>
           </div>

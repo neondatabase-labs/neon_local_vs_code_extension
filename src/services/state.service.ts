@@ -19,6 +19,7 @@ interface ConnectionState {
     databases: NeonDatabase[];
     roles: NeonRole[];
     persistentApiToken?: string;
+    port: number;
 }
 
 interface SelectionState {
@@ -55,8 +56,10 @@ export interface IStateService {
     currentBranch: string;
     currentlyConnectedBranch: Promise<string>;
     parentBranchId: string;
+    port: number;
     setSelectedDatabase(value: string): Promise<void>;
     setSelectedRole(value: string): Promise<void>;
+    setPort(value: number): Promise<void>;
     isProxyRunning: boolean;
     isStarting: boolean;
     selectedDriver: 'postgres' | 'serverless';
@@ -111,7 +114,8 @@ export class StateService implements IStateService {
             selectedRole: '',
             databases: [],
             roles: [],
-            persistentApiToken: undefined
+            persistentApiToken: undefined,
+            port: 5432
         },
         selection: {
             orgs: [],
@@ -163,6 +167,7 @@ export class StateService implements IStateService {
         const connectedProjectId = await this.state.get<string>('neonLocal.connectedProjectId', '');
         const connectedProjectName = await this.state.get<string>('neonLocal.connectedProjectName', '');
         const persistentApiToken = await ConfigurationManager.getSecureToken(this.context, 'persistentApiToken');
+        const port = config.get<number>('port', 5432);
 
         this._state = {
             connection: {
@@ -180,7 +185,8 @@ export class StateService implements IStateService {
                 selectedRole,
                 databases: [],
                 roles: [],
-                persistentApiToken
+                persistentApiToken,
+                port
             },
             selection: {
                 orgs: [],
@@ -224,7 +230,8 @@ export class StateService implements IStateService {
             this.state.update('neonLocal.connectedOrgId', this._state.connection.connectedOrgId),
             this.state.update('neonLocal.connectedOrgName', this._state.connection.connectedOrgName),
             this.state.update('neonLocal.connectedProjectId', this._state.connection.connectedProjectId),
-            this.state.update('neonLocal.connectedProjectName', this._state.connection.connectedProjectName)
+            this.state.update('neonLocal.connectedProjectName', this._state.connection.connectedProjectName),
+            this.state.update('neonLocal.port', this._state.connection.port)
         ]);
     }
 
@@ -240,6 +247,7 @@ export class StateService implements IStateService {
     get connectionType(): 'existing' | 'new' { return this._state.connection.type; }
     get connectionInfo(): string { return this._state.connection.connectionInfo; }
     get currentlyConnectedBranch(): Promise<string> { return Promise.resolve(this._state.connection.currentlyConnectedBranch); }
+    get port(): number { return this._state.connection.port; }
 
     async setConnectionType(value: 'existing' | 'new'): Promise<void> {
         await this.updateState({
@@ -262,7 +270,7 @@ export class StateService implements IStateService {
     }
 
     async setSelectedDatabase(database: string): Promise<void> {
-        const baseConnectionString = 'postgres://neon:npg@localhost:5432<database_name>';
+        const baseConnectionString = `postgres://neon:npg@localhost:${this._state.connection.port}<database_name>`;
         const newConnectionString = database 
             ? `${baseConnectionString}/${database}`
             : baseConnectionString;
@@ -380,7 +388,8 @@ export class StateService implements IStateService {
                 connectedOrgName: '',
                 connectedProjectId: '',
                 connectedProjectName: '',
-                persistentApiToken: undefined
+                persistentApiToken: undefined,
+                port: 5432
             },
             selection: {
                 orgs: [],
@@ -425,7 +434,8 @@ export class StateService implements IStateService {
                 selectedBranchName: this._state.selection.selectedBranchName,
                 parentBranchId: this._state.selection.parentBranchId,
                 parentBranchName: this._state.selection.parentBranchName,
-                persistentApiToken: this._state.connection.persistentApiToken
+                persistentApiToken: this._state.connection.persistentApiToken,
+                port: this._state.connection.port
             },
             connected: this._state.connection.connected,
             isStarting: this._state.connection.isStarting,
@@ -448,6 +458,7 @@ export class StateService implements IStateService {
             selectedBranchName: this._state.selection.selectedBranchName,
             parentBranchId: this._state.selection.parentBranchId,
             parentBranchName: this._state.selection.parentBranchName,
+            port: this._state.connection.port,
             loading: this._state.loading
         };
     }
@@ -457,7 +468,7 @@ export class StateService implements IStateService {
     }
 
     async updateDatabase(database: string): Promise<void> {
-        const baseConnectionString = 'postgres://neon:npg@localhost:5432<database_name>';
+        const baseConnectionString = `postgres://neon:npg@localhost:${this._state.connection.port}<database_name>`;
         const newConnectionString = database 
             ? `${baseConnectionString}/${database}`
             : baseConnectionString;
@@ -597,5 +608,16 @@ export class StateService implements IStateService {
         this._state.connection.persistentApiToken = value;
         await ConfigurationManager.updateSecureToken(this.context, 'persistentApiToken', value);
         await this.updateViewData();
+    }
+
+    async setPort(value: number): Promise<void> {
+        const config = vscode.workspace.getConfiguration('neonLocal');
+        await config.update('port', value, vscode.ConfigurationTarget.Global);
+        await this.updateState({
+            connection: {
+                ...this._state.connection,
+                port: value
+            }
+        });
     }
 } 

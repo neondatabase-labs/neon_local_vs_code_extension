@@ -53,8 +53,22 @@ export const refreshToken = async (
   
   // Validate tokenSet
   if (!tokenSet || !tokenSet.refresh_token) {
+    console.debug('🚨 Token validation failed:', {
+      hasTokenSet: !!tokenSet,
+      tokenSetType: typeof tokenSet,
+      tokenSetKeys: tokenSet ? Object.keys(tokenSet) : 'no tokenSet',
+      hasRefreshToken: !!tokenSet?.refresh_token,
+      refreshTokenType: typeof tokenSet?.refresh_token,
+      refreshTokenLength: tokenSet?.refresh_token?.length
+    });
     throw new Error('Invalid token set or missing refresh token');
   }
+  
+  console.debug('🔍 Token validation passed:', {
+    hasAccessToken: !!tokenSet.access_token,
+    hasRefreshToken: !!tokenSet.refresh_token,
+    tokenSetKeys: Object.keys(tokenSet)
+  });
   
   console.debug('🔍 Discovering oauth server');
   
@@ -73,24 +87,59 @@ export const refreshToken = async (
   let client;
   try {
     console.debug('🔍 Creating OAuth client for token refresh');
+    // Use the EXACT same client configuration as during initial auth to prevent client mismatch
+    // For refresh operations, we use a fixed redirect URI that matches the pattern
     client = new issuer.Client({
-      client_id: clientId,
       token_endpoint_auth_method: 'none',
+      client_id: clientId,
+      response_types: ['code'],
     });
-    console.debug('🔍 Successfully created OAuth client');
+    console.debug('🔍 Successfully created OAuth client for refresh');
   } catch (error) {
     console.error('🚨 Failed to create OAuth client:', error);
     throw new Error(`Failed to create OAuth client: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   try {
-    console.debug('🔍 Refreshing token');
+    console.debug('🔍 Refreshing token with tokenSet:', {
+      hasAccessToken: !!tokenSet.access_token,
+      hasRefreshToken: !!tokenSet.refresh_token,
+      tokenSetKeys: Object.keys(tokenSet),
+      tokenType: tokenSet.token_type,
+      scope: tokenSet.scope,
+      fullTokenSetForDebug: tokenSet // Show complete tokenSet for debugging
+    });
+    
+    console.debug('🔍 Client configuration used for refresh:', {
+      issuer: client.issuer.issuer,
+      clientId: client.client_id,
+      redirectUris: client.redirect_uris,
+      responseTypes: client.response_types,
+      tokenEndpointAuthMethod: client.token_endpoint_auth_method,
+      allMetadata: client.metadata
+    });
+    
     const newTokenSet = await client.refresh(tokenSet);
-    console.debug('🔍 Successfully refreshed token');
+    console.debug('🔍 Successfully refreshed token, new tokenSet keys:', Object.keys(newTokenSet));
     return newTokenSet;
-  } catch (error) {
+  } catch (error: any) {
     console.error('🚨 Failed to refresh token:', error);
-    throw new Error(`Failed to refresh token: ${error instanceof Error ? error.message : String(error)}`);
+    
+    // Check for specific OAuth error types
+    const errorMessage = error?.message || String(error);
+    const isInvalidGrant = errorMessage.includes('invalid_grant');
+    const isExpiredToken = errorMessage.includes('expired');
+    
+    console.debug('🔍 Refresh error analysis:', {
+      isInvalidGrant,
+      isExpiredToken,
+      errorMessage,
+      errorResponse: error?.response?.data,
+      errorStatus: error?.response?.status
+    });
+    
+    // Preserve the original error message for better debugging
+    throw error;
   }
 };
 
@@ -143,7 +192,15 @@ export const auth = async ({ oauthHost, clientId, extensionUri }: AuthProps) => 
       redirect_uris: [REDIRECT_URI(listen_port)],
       response_types: ['code'],
     });
-    console.debug('🔍 Successfully created OAuth client');
+    console.debug('🔍 Successfully created OAuth client for initial auth');
+    console.debug('🔍 Initial auth client configuration:', {
+      issuer: neonOAuthClient.issuer.issuer,
+      clientId: neonOAuthClient.client_id,
+      redirectUris: neonOAuthClient.redirect_uris,
+      responseTypes: neonOAuthClient.response_types,
+      tokenEndpointAuthMethod: neonOAuthClient.token_endpoint_auth_method,
+      allMetadata: neonOAuthClient.metadata
+    });
   } catch (error) {
     console.error('🚨 Failed to create OAuth client:', error);
     throw new Error(`Failed to create OAuth client: ${error instanceof Error ? error.message : String(error)}`);

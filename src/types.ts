@@ -54,6 +54,7 @@ export interface ViewData {
         parentBranchId?: string;
         parentBranchName?: string;
         persistentApiToken?: string;
+        port: number;
     };
     connected: boolean;
     isStarting: boolean;
@@ -76,6 +77,7 @@ export interface ViewData {
     selectedBranchName?: string;
     parentBranchId?: string;
     parentBranchName?: string;
+    port: number;
     isExplicitUpdate?: boolean;
     loading: {
         orgs: boolean;
@@ -107,6 +109,7 @@ export type WebviewCommand =
     | 'startProxy'
     | 'stopProxy'
     | 'updateConnectionType'
+    | 'updatePort'
     | 'showLoading'
     | 'signInSuccess'
     | 'resetSignIn'

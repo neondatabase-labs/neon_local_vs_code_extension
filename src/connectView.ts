@@ -420,6 +420,10 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     await this._stateService.setSelectedDriver(message.driver);
                     await this.updateView();
                     break;
+                case 'updatePort':
+                    await this._stateService.setPort(message.port);
+                    await this.updateView();
+                    break;
                 case 'startProxy':
                     await this._stateService.setIsStarting(true);
                     try {
@@ -441,7 +445,8 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                                     driver: message.driver,
                                     isExisting: message.isExisting,
                                     context: this._extensionContext,
-                                    projectId: this._stateService.currentProject
+                                    projectId: this._stateService.currentProject,
+                                    port: currentState.port
                                 });
 
                                 progress.report({ message: "Updating connection state..." });
@@ -538,9 +543,21 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     } catch (error) {
                         console.error('Error starting proxy:', error);
                         if (error instanceof Error) {
-                            const errorMessage = error.message.includes('connect ENOENT /var/run/docker.sock') 
-                                ? 'Make sure that Docker is running.'
-                                : error.message;
+                            // Detect Docker not running errors across different operating systems (Unix & Windows)
+                            const dockerNotRunningPattern = /connect ENOENT.*(docker\.sock|docker_engine|pipe)/i;
+                            
+                            // Detect port collision errors (works for any port number)
+                            const portCollisionPattern = /Bind for 0\.0\.0\.0:\d+ failed: port is already allocated/i;
+                            
+                            let errorMessage: string;
+                            if (dockerNotRunningPattern.test(error.message)) {
+                                errorMessage = 'Make sure that Docker is running.';
+                            } else if (portCollisionPattern.test(error.message)) {
+                                errorMessage = 'The selected database port is already in use on your system, select a different port and try to connect again';
+                            } else {
+                                errorMessage = error.message;
+                            }
+                            
                             vscode.window.showErrorMessage(`Failed to start proxy: ${errorMessage}`);
                         }
                     } finally {
@@ -724,7 +741,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             if (!isAuthenticated) {
                 console.log('ConnectViewProvider: Not authenticated, showing sign-in message');
                 if (this._view && this._signInView) {
-                    this._view.webview.html = this._signInView.getHtml("Sign in to Neon in the Connect view", false);
+                    this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account to connect to your database", true);
                 }
                 return;
             }
@@ -767,7 +784,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             Logger.error('Failed to update view', error);
             
             if (this._view && this._signInView) {
-                this._view.webview.html = this._signInView.getHtml("ign in to your Neon account to connect to your database", true);
+                this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account to connect to your database", true);
             }
         } finally {
             this._isUpdating = false;

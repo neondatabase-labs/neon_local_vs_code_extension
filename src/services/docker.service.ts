@@ -87,6 +87,7 @@ export class DockerService {
         isExisting: boolean;
         context: vscode.ExtensionContext;
         projectId: string;
+        port: number;
     }): Promise<void> {
         try {
             console.log('Starting container with options:', options);
@@ -462,6 +463,7 @@ export class DockerService {
         isExisting: boolean;
         context: vscode.ExtensionContext;
         projectId: string;
+        port: number;
     }): Promise<void> {
         // Get API key from secure storage
         const persistentApiToken = await ConfigurationManager.getSecureToken(options.context, 'persistentApiToken');
@@ -486,7 +488,7 @@ export class DockerService {
                 ],
                 HostConfig: {
                     PortBindings: {
-                        '5432/tcp': [{ HostPort: '5432' }]
+                        '5432/tcp': [{ HostPort: options.port.toString() }]
                     }
                 }
             };
@@ -539,7 +541,7 @@ export class DockerService {
             ],
             HostConfig: {
                 PortBindings: {
-                    '5432/tcp': [{ HostPort: '5432' }]
+                    '5432/tcp': [{ HostPort: options.port.toString() }]
                 }
             }
         };
@@ -582,7 +584,7 @@ export class DockerService {
         console.log(`Started new container: ${containerName}`);
 
         // Set the connection string based on the driver
-        const connectionString = `postgres://neon:npg@localhost:5432/<database_name>`;
+        const connectionString = `postgres://neon:npg@localhost:${containerConfig.HostConfig.PortBindings['5432/tcp'][0].HostPort}/<database_name>`;
         await this.stateService.setConnectionInfo({
             connectionInfo: connectionString,
             selectedDatabase: ''

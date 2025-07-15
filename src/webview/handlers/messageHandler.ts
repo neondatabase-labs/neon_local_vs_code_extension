@@ -9,6 +9,7 @@ interface ConnectionState {
   currentlyConnectedBranch: string;
   selectedDatabase: string;
   selectedRole: string;
+  port: number;
 }
 
 interface SelectionState {
@@ -50,7 +51,8 @@ export const handleUpdateViewData = ({
     connectionInfo: data.connectionInfo || prev.connectionInfo,
     currentlyConnectedBranch: data.currentlyConnectedBranch || prev.currentlyConnectedBranch,
     selectedDatabase: data.selectedDatabase || prev.selectedDatabase,
-    selectedRole: data.selectedRole || prev.selectedRole
+    selectedRole: data.selectedRole || prev.selectedRole,
+    port: data.port || prev.port || 5432
   }));
 
   // Update selection state

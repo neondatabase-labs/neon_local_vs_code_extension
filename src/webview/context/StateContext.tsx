@@ -42,7 +42,8 @@ export function StateProvider({ children, vscode }: StateProviderProps) {
       selectedBranchName: undefined,
       parentBranchId: undefined,
       parentBranchName: undefined,
-      persistentApiToken: undefined
+      persistentApiToken: undefined,
+      port: 5432
     },
     connected: false,
     isStarting: false,
@@ -65,6 +66,7 @@ export function StateProvider({ children, vscode }: StateProviderProps) {
     selectedBranchName: undefined,
     parentBranchId: undefined,
     parentBranchName: undefined,
+    port: 5432,
     loading: {
       orgs: false,
       projects: false,

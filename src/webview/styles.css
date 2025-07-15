@@ -89,6 +89,36 @@ select:disabled {
   background-color: var(--vscode-dropdown-background);
 }
 
+input[type="number"] {
+  width: 100%;
+  padding: 8px;
+  margin: 4px 0 0 0;
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 4px;
+  font-size: 12px;
+  transition: border-color 0.2s, opacity 0.2s;
+  appearance: none;
+  box-sizing: border-box;
+}
+
+input[type="number"]:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+  border-color: var(--vscode-focusBorder);
+}
+
+input[type="number"]:hover:not(:disabled) {
+  border-color: var(--vscode-input-border);
+}
+
+input[type="number"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: var(--vscode-input-background);
+}
+
 button {
   width: 100%;
   padding: 8px;
@@ -512,4 +542,17 @@ button:disabled {
   display: flex;
   align-items: center;
   margin-bottom: 4px;
+}
+
+/* Port validation error styles */
+input.error {
+  border-color: var(--vscode-inputValidation-errorBorder, #e74856);
+  background-color: var(--vscode-inputValidation-errorBackground, rgba(231, 72, 86, 0.1));
+}
+
+.field-error {
+  color: var(--vscode-inputValidation-errorForeground, #e74856);
+  font-size: 12px;
+  margin-top: 4px;
+  line-height: 1.3;
 } 

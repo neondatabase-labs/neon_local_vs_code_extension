@@ -36,9 +36,11 @@ export class SignInView {
             <body>
                 <div class="container">
                     ${message ? `<div class="message">${message}</div>` : ''}
+                    ${showSignInButton ? `
                     <div class="button-container">
                         <button class="button" id="signInButton">Sign in with Neon</button>
                     </div>
+                    ` : ''}
 
                 </div>
                 <script>
