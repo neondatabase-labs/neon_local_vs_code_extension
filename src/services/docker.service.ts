@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import Docker from 'dockerode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
+import { execSync } from 'child_process';
 import { StateService } from './state.service';
 import { AuthManager } from '../auth/authManager';
 import { ConfigurationManager } from '../utils';
@@ -20,6 +22,81 @@ export class DockerService {
         this.context = context;
         this.stateService = stateService;
         this.fileService = new FileService(context);
+    }
+
+    /**
+     * Attempts to read Docker Hub credentials from the local Docker CLI configuration.
+     * Supports both legacy "auths" (base64 encoded username:password) entries **and**
+     * credential helpers / credential stores (e.g. osxkeychain, desktop, pass).
+     *
+     * Returns `null` if no credentials could be found. In that case Docker will attempt
+     * to pull the image anonymously which might still succeed but can be subject to
+     * stricter rate-limits.
+     */
+    private getDockerAuthConfig(): { username: string; password: string } | null {
+        try {
+            const cfgPath = path.join(os.homedir(), '.docker', 'config.json');
+            if (!fs.existsSync(cfgPath)) {
+                return null;
+            }
+
+            const cfgRaw = fs.readFileSync(cfgPath, 'utf8');
+            const cfg = JSON.parse(cfgRaw);
+
+            // 1. Look for inline auths (base64 encoded)
+            const registryHosts = [
+                'https://index.docker.io/v1/',
+                'https://registry-1.docker.io',
+                'registry-1.docker.io'
+            ];
+
+            for (const host of registryHosts) {
+                const entry = cfg.auths?.[host];
+                if (entry?.auth) {
+                    const decoded = Buffer.from(entry.auth, 'base64').toString();
+                    const [username, password] = decoded.split(':');
+                    if (username && password) {
+                        return { username, password };
+                    }
+                }
+            }
+
+            // 2. Fall back to generic credential store
+            const tryCredHelper = (helperName: string): { username: string; password: string } | null => {
+                try {
+                    const helperCmd = `docker-credential-${helperName}`;
+                    const output = execSync(`${helperCmd} get`, {
+                        input: 'https://index.docker.io/v1/\n',
+                        stdio: ['pipe', 'pipe', 'ignore']
+                    }).toString();
+                    const creds = JSON.parse(output);
+                    if (creds?.Username && creds?.Secret) {
+                        return { username: creds.Username, password: creds.Secret };
+                    }
+                } catch (err) {
+                    // Ignore helper errors – simply treat as no credentials
+                }
+                return null;
+            };
+
+            if (cfg.credsStore) {
+                const res = tryCredHelper(cfg.credsStore);
+                if (res) return res;
+            }
+
+            if (cfg.credHelpers && typeof cfg.credHelpers === 'object') {
+                const helperName = cfg.credHelpers['https://index.docker.io/v1/'] || cfg.credHelpers['registry-1.docker.io'];
+                if (helperName) {
+                    const res = tryCredHelper(helperName);
+                    if (res) return res;
+                }
+            }
+
+            return null;
+        } catch (err) {
+            console.error('Failed to read Docker credentials:', err);
+            return null;
+        }
     }
 
     async checkContainerStatus(): Promise<boolean> {
@@ -225,8 +302,11 @@ export class DockerService {
         try {
             await this.docker.getImage('neondatabase/neon_local:latest').inspect();
         } catch {
+            const authConfig = this.getDockerAuthConfig();
+            const pullOpts = authConfig ? { authconfig: authConfig } : {};
+
             await new Promise((resolve, reject) => {
-                this.docker.pull('neondatabase/neon_local:latest', {}, (err: any, stream: any) => {
+                this.docker.pull('neondatabase/neon_local:latest', pullOpts, (err: any, stream: any) => {
                     if (err) {
                         reject(err);
                         return;
