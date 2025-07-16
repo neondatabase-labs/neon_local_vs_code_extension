@@ -551,7 +551,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                             
                             let errorMessage: string;
                             if (dockerNotRunningPattern.test(error.message)) {
-                                errorMessage = 'Make sure that Docker is running.';
+                                errorMessage = 'Make sure that Docker is installed and running before trying to connect.';
                             } else if (portCollisionPattern.test(error.message)) {
                                 errorMessage = 'The selected database port is already in use on your system, select a different port and try to connect again';
                             } else {
