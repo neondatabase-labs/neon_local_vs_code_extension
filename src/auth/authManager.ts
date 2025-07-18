@@ -195,12 +195,9 @@ export class AuthManager {
       this._refreshPromise = null;
       console.error('AuthManager: Token refresh failed (will keep existing tokenSet):', error);
 
-      // If the error is invalid_grant or similar we likely cannot refresh again, but
-      // the current access token may still be usable (until it actually expires).
-      // We therefore KEEP the tokens and report success to the caller so user stays
-      // logged-in.  A later API 401 will trigger sign-out flow.
-
-      return true;
+      // If we cannot refresh (e.g. invalid_grant), signal failure to caller so they
+      // can transition the user to a signed-out state instead of retrying forever.
+      return false;
     } finally {
       // clear promise when done
       this._refreshPromise = null;
