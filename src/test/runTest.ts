@@ -3,15 +3,15 @@ import { runTests } from '@vscode/test-electron';
 
 async function main() {
     try {
-        console.log('Starting test runner...');
+        console.debug('Starting test runner...');
         
         // The folder containing the Extension Manifest package.json
         const extensionDevelopmentPath = path.resolve(__dirname, '../../');
-        console.log('Extension development path:', extensionDevelopmentPath);
+        console.debug('Extension development path:', extensionDevelopmentPath);
         
         // The path to the extension test runner script
         const extensionTestsPath = path.resolve(__dirname, './suite/index');
-        console.log('Extension tests path:', extensionTestsPath);
+        console.debug('Extension tests path:', extensionTestsPath);
 
         // Download VS Code, unzip it and run the integration test
         await runTests({

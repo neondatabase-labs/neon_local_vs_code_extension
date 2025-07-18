@@ -33,7 +33,7 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
 
         // Listen for authentication state changes
         this._authManager.onDidChangeAuthentication(async (isAuthenticated) => {
-            console.log('DatabaseViewProvider: Authentication state changed', { isAuthenticated });
+            console.debug('DatabaseViewProvider: Authentication state changed', { isAuthenticated });
             if (isAuthenticated) {
                 // When signing in, ensure we update the view with fresh data
                 if (this._view) {
@@ -85,17 +85,17 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
 
         // Register this view with the manager
         const viewId = this._webviewService.registerWebview(webviewView.webview, 'databaseView');
-        console.log(`DatabaseViewProvider: Registered webview with ID: ${viewId}`);
+        console.debug(`DatabaseViewProvider: Registered webview with ID: ${viewId}`);
 
         // Initial update with a small delay to ensure proper registration
         setTimeout(async () => {
             try {
                 // Use AuthManager to check authentication state consistently
                 const isAuthenticated = await this._authManager.isAuthenticatedAsync();
-                console.log('DatabaseViewProvider: Authentication state check', { isAuthenticated });
+                console.debug('DatabaseViewProvider: Authentication state check', { isAuthenticated });
 
                 if (!isAuthenticated) {
-                    console.log('DatabaseViewProvider: Not authenticated, showing sign-in message');
+                    console.debug('DatabaseViewProvider: Not authenticated, showing sign-in message');
                     if (this._view && this._signInView) {
                         this._view.webview.html = this._signInView.getHtml("Please sign in to your Neon account in the Connect view", false);
                     }
@@ -103,7 +103,7 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
                 }
 
                 // User is authenticated (either via OAuth or persistent API key), show database view
-                console.log('DatabaseViewProvider: User is authenticated, showing database view');
+                console.debug('DatabaseViewProvider: User is authenticated, showing database view');
                 if (this._view) {
                     this._view.webview.html = this.getWebviewContent(this._view.webview);
                     const data = await this._stateService.getViewData();
@@ -178,7 +178,7 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
             const apiKey = await ConfigurationManager.getSecureToken(this._extensionContext, 'apiKey');
             const refreshToken = await ConfigurationManager.getSecureToken(this._extensionContext, 'refreshToken');
             
-            console.log('DatabaseViewProvider: Checking tokens for update', { 
+            console.debug('DatabaseViewProvider: Checking tokens for update', { 
                 hasPersistentApiToken: !!persistentApiToken,
                 hasApiKey: !!apiKey, 
                 hasRefreshToken: !!refreshToken
@@ -186,7 +186,7 @@ export class DatabaseViewProvider implements vscode.WebviewViewProvider {
 
             // If no valid tokens, show sign-in message
             if (!persistentApiToken && !apiKey && !refreshToken) {
-                console.log('DatabaseViewProvider: No tokens found, showing sign-in message');
+                console.debug('DatabaseViewProvider: No tokens found, showing sign-in message');
                 if (this._signInView) {
                     this._view.webview.html = this._signInView.getHtml("Please sign in to your Neon account in the Connect view", false);
                 }

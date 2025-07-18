@@ -87,7 +87,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
 
         // Register this view with the manager
         const viewId = this._webviewService.registerWebview(webviewView.webview, 'connectView');
-        console.log(`ConnectViewProvider: Registered webview with ID: ${viewId}`);
+        console.debug(`ConnectViewProvider: Registered webview with ID: ${viewId}`);
 
         // Initial update with a small delay to ensure proper registration
         setTimeout(async () => {
@@ -95,10 +95,10 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 // Ensure AuthManager has completed initialization (incl. silent refresh)
                 await this._authManager.ready();
                 const isAuthenticated = await this._authManager.isAuthenticatedAsync();
-                console.log('ConnectViewProvider: Authentication state check', { isAuthenticated });
+                console.debug('ConnectViewProvider: Authentication state check', { isAuthenticated });
 
                 if (!isAuthenticated) {
-                    console.log('ConnectViewProvider: Not authenticated, showing sign-in');
+                    console.debug('ConnectViewProvider: Not authenticated, showing sign-in');
                     if (this._view && this._signInView) {
                         this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account to connect to your database", true);
                     }
@@ -106,7 +106,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                 }
 
                 // User is authenticated (either via OAuth or persistent API key), show connect view and initialize
-                console.log('ConnectViewProvider: User is authenticated, showing connect view');
+                console.debug('ConnectViewProvider: User is authenticated, showing connect view');
                 if (this._view) {
                     this._view.webview.html = this.getWebviewContent(this._view.webview);
                 }
@@ -147,7 +147,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                                 !currentOrgIds.every((id, index) => id === newOrgIds[index]));
             
             if (orgsChanged) {
-                console.log('Different organizations detected after sign-in, clearing state');
+                console.debug('Different organizations detected after sign-in, clearing state');
                 await this._stateService.clearState();
             }
             
@@ -238,7 +238,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
 
                     if (token) {
                         // Validate the token by making an API call
-                        console.log('🔍 Validating imported API token...');
+                        console.debug('🔍 Validating imported API token...');
                         
                         try {
                             // Show progress while validating
@@ -250,20 +250,20 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                                 // Create API service and test the token directly (no storage needed)
                                 const testApiService = new NeonApiService(this._extensionContext);
                                 
-                                console.log('📡 Testing API token with validation call...');
+                                console.debug('📡 Testing API token with validation call...');
                                 const isValid = await testApiService.validateToken(token);
                                 
                                 if (!isValid) {
                                     throw new Error('Invalid API token');
                                 }
                                 
-                                console.log('✅ API token validation successful');
+                                console.debug('✅ API token validation successful');
                                 
                                 // Token is valid, proceed with storing it permanently
                                 await this._authManager.setPersistentApiToken(token);
                                 await this._stateService.setPersistentApiToken(token);
                                 
-                                console.log('✅ API token imported and stored successfully');
+                                console.debug('✅ API token imported and stored successfully');
                             });
                             
                             // The authentication state change listener will handle the UI update
@@ -277,7 +277,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                             );
                             
                             // Don't store the invalid token
-                            console.log('❌ API token not imported due to validation failure');
+                            console.debug('❌ API token not imported due to validation failure');
                         }
                     }
                     break;
@@ -499,22 +499,22 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                                 if (message.isExisting) {
                                     // For existing branches, use the selected branch ID
                                     actualBranchId = message.branchId;
-                                    console.log('🔍 Using existing branch ID for API calls:', actualBranchId);
+                                    console.debug('🔍 Using existing branch ID for API calls:', actualBranchId);
                                 } else {
                                     // For ephemeral branches, get the branch ID from the .branches file
-                                    console.log('🔍 Getting ephemeral branch ID from .branches file...');
+                                    console.debug('🔍 Getting ephemeral branch ID from .branches file...');
                                     const ephemeralBranchId = await this._dockerService.checkBranchesFile(this._extensionContext);
                                     if (!ephemeralBranchId) {
                                         throw new Error('Failed to get ephemeral branch ID from .branches file');
                                     }
                                     actualBranchId = ephemeralBranchId;
-                                    console.log('✅ Using ephemeral branch ID for API calls:', actualBranchId);
+                                    console.debug('✅ Using ephemeral branch ID for API calls:', actualBranchId);
                                 }
 
                                 // Fetch and update databases and roles
                                 const apiService = new NeonApiService(this._extensionContext);
                                 const projectId = this._stateService.currentProject;
-                                console.log('🔍 Making API calls with projectId:', projectId, 'branchId:', actualBranchId);
+                                console.debug('🔍 Making API calls with projectId:', projectId, 'branchId:', actualBranchId);
                                 
                                 const [databases, roles] = await Promise.all([
                                     apiService.getDatabases(projectId, actualBranchId),
@@ -584,7 +584,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         await vscode.commands.executeCommand('neon-local-connect.launchPsql');
         break;
                 case 'updateConnectionType':
-                    console.log('ConnectViewProvider: Handling connection type update:', {
+                    console.debug('ConnectViewProvider: Handling connection type update:', {
                         newType: message.connectionType,
                         currentType: this._lastRequestedConnectionType
                     });
@@ -725,22 +725,22 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
     }
 
     public async updateView(): Promise<void> {
-        console.log('ConnectViewProvider: Starting updateView');
+        console.debug('ConnectViewProvider: Starting updateView');
         if (!this._view || this._isUpdating) {
-            console.log('ConnectViewProvider: Skipping update - view not ready or already updating');
+            console.debug('ConnectViewProvider: Skipping update - view not ready or already updating');
             return;
         }
 
         this._isUpdating = true;
-        console.log('ConnectViewProvider: Set _isUpdating flag');
+        console.debug('ConnectViewProvider: Set _isUpdating flag');
 
         try {
             // Use AuthManager to check authentication state consistently
             const isAuthenticated = await this._authManager.isAuthenticatedAsync();
-            console.log('ConnectViewProvider: Authentication state check in updateView', { isAuthenticated });
+            console.debug('ConnectViewProvider: Authentication state check in updateView', { isAuthenticated });
 
             if (!isAuthenticated) {
-                console.log('ConnectViewProvider: Not authenticated, showing sign-in message');
+                console.debug('ConnectViewProvider: Not authenticated, showing sign-in message');
                 if (this._view && this._signInView) {
                     this._view.webview.html = this._signInView.getHtml("Sign in to your Neon account to connect to your database", true);
                 }
@@ -748,9 +748,9 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             }
 
             // User is authenticated (either via OAuth or persistent API key), show connect view
-            console.log('ConnectViewProvider: User is authenticated, showing connect view');
+            console.debug('ConnectViewProvider: User is authenticated, showing connect view');
             if (this._view.webview.html.includes('sign-in-button')) {
-                console.log('ConnectViewProvider: Transitioning from sign-in to connect view');
+                console.debug('ConnectViewProvider: Transitioning from sign-in to connect view');
                 this._view.webview.html = this.getWebviewContent(this._view.webview);
                 
                 // Initialize state with empty selections
@@ -777,7 +777,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
             }
 
             // Get the current view data
-            console.log('ConnectViewProvider: Getting view data');
+            console.debug('ConnectViewProvider: Getting view data');
             const viewData = await this._stateService.getViewData();
             await this._webviewService.updateWebview(this._view, viewData);
         } catch (error) {

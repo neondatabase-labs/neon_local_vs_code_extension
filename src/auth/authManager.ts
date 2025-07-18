@@ -49,7 +49,7 @@ export class AuthManager {
       this._tokenSet = undefined;
     }
     
-    console.log('AuthManager: Initializing with tokenSet from globalState:', {
+    console.debug('AuthManager: Initializing with tokenSet from globalState:', {
       hasRawTokenSet: !!rawTokenSet,
       rawTokenSetType: typeof rawTokenSet,
       rawTokenSetKeys: rawTokenSet ? Object.keys(rawTokenSet) : 'none',
@@ -142,13 +142,13 @@ export class AuthManager {
   async refreshTokenIfNeeded(force: boolean = false): Promise<boolean> {
     // If a refresh is already in progress, wait for it instead of starting another
     if (this._refreshPromise) {
-      console.log('AuthManager: Awaiting ongoing token refresh');
+      console.debug('AuthManager: Awaiting ongoing token refresh');
       return this._refreshPromise;
     }
 
     // No refresh token → nothing we can do
     if (!this._tokenSet?.refresh_token) {
-      console.log('AuthManager: refreshTokenIfNeeded → no refresh_token – skip refresh');
+      console.debug('AuthManager: refreshTokenIfNeeded → no refresh_token – skip refresh');
       return false;
     }
 
@@ -159,7 +159,7 @@ export class AuthManager {
     const REFRESH_BUFFER = 60; // seconds before expiry we proactively refresh
 
     if (!force && expiresAtSeconds && expiresAtSeconds - nowSeconds > REFRESH_BUFFER) {
-      console.log('AuthManager: Access token is still valid, skip refresh. Expires in', (expiresAtSeconds - nowSeconds), 'seconds');
+      console.debug('AuthManager: Access token is still valid, skip refresh. Expires in', (expiresAtSeconds - nowSeconds), 'seconds');
       return true; // token still valid and not forced
     }
 
@@ -172,7 +172,7 @@ export class AuthManager {
         extensionUri: this.context.extensionUri
       };
 
-      console.log('Attempting to refresh token...');
+      console.debug('Attempting to refresh token...');
       const newTokenSet = await refreshToken(authProps, this._tokenSet);
       
       this._tokenSet = newTokenSet;
@@ -186,7 +186,7 @@ export class AuthManager {
         await this.secureStorage.storeRefreshToken(newTokenSet.refresh_token);
       }
       
-      console.log('Token refresh successful');
+      console.debug('Token refresh successful');
       return true;
       })();
       const result = await this._refreshPromise;
@@ -250,7 +250,7 @@ export class AuthManager {
   }
 
   async initializeAuthState(): Promise<void> {
-    console.log('AuthManager: Starting initializeAuthState...');
+    console.debug('AuthManager: Starting initializeAuthState...');
     
     // First, migrate any tokens from the old configuration-based storage
     await this.secureStorage.migrateFromConfig();
@@ -261,55 +261,55 @@ export class AuthManager {
     const persistentToken = await this.getPersistentApiToken();
     const storedGlobalTokenSet = this.context.globalState.get<any>('neon.tokenSet');
     
-    console.log('AuthManager: DETAILED Token inventory:');
-    console.log('  - Has globalState tokenSet:', !!storedGlobalTokenSet);
-    console.log('  - GlobalState tokenSet keys:', storedGlobalTokenSet ? Object.keys(storedGlobalTokenSet) : 'none');
-    console.log('  - GlobalState access token length:', storedGlobalTokenSet?.access_token?.length || 'none');
-    console.log('  - GlobalState refresh token length:', storedGlobalTokenSet?.refresh_token?.length || 'none');
-    console.log('  - Has secure access token:', !!secureAccessToken);
-    console.log('  - Secure access token length:', secureAccessToken?.length || 'none');
-    console.log('  - Has secure refresh token:', !!secureRefreshToken);
-    console.log('  - Secure refresh token length:', secureRefreshToken?.length || 'none');
-    console.log('  - Has persistent token:', !!persistentToken);
+    console.debug('AuthManager: DETAILED Token inventory:');
+    console.debug('  - Has globalState tokenSet:', !!storedGlobalTokenSet);
+    console.debug('  - GlobalState tokenSet keys:', storedGlobalTokenSet ? Object.keys(storedGlobalTokenSet) : 'none');
+    console.debug('  - GlobalState access token length:', storedGlobalTokenSet?.access_token?.length || 'none');
+    console.debug('  - GlobalState refresh token length:', storedGlobalTokenSet?.refresh_token?.length || 'none');
+    console.debug('  - Has secure access token:', !!secureAccessToken);
+    console.debug('  - Secure access token length:', secureAccessToken?.length || 'none');
+    console.debug('  - Has secure refresh token:', !!secureRefreshToken);
+    console.debug('  - Secure refresh token length:', secureRefreshToken?.length || 'none');
+    console.debug('  - Has persistent token:', !!persistentToken);
     
     // Log actual token values (first/last 10 chars for security)
     if (secureAccessToken) {
-      console.log('  - Secure access token sample:', secureAccessToken.substring(0, 10) + '...' + secureAccessToken.substring(secureAccessToken.length - 10));
+      console.debug('  - Secure access token sample:', secureAccessToken.substring(0, 10) + '...' + secureAccessToken.substring(secureAccessToken.length - 10));
     }
     if (secureRefreshToken) {
-      console.log('  - Secure refresh token sample:', secureRefreshToken.substring(0, 10) + '...' + secureRefreshToken.substring(secureRefreshToken.length - 10));
+      console.debug('  - Secure refresh token sample:', secureRefreshToken.substring(0, 10) + '...' + secureRefreshToken.substring(secureRefreshToken.length - 10));
       
       // Validate the refresh token from secure storage
       const refreshTokenValidation = this.validateRefreshToken(secureRefreshToken);
-      console.log('  - Secure refresh token validation:', refreshTokenValidation);
+      console.debug('  - Secure refresh token validation:', refreshTokenValidation);
     }
     if (storedGlobalTokenSet?.access_token) {
-      console.log('  - GlobalState access token sample:', storedGlobalTokenSet.access_token.substring(0, 10) + '...' + storedGlobalTokenSet.access_token.substring(storedGlobalTokenSet.access_token.length - 10));
+      console.debug('  - GlobalState access token sample:', storedGlobalTokenSet.access_token.substring(0, 10) + '...' + storedGlobalTokenSet.access_token.substring(storedGlobalTokenSet.access_token.length - 10));
     }
     if (storedGlobalTokenSet?.refresh_token) {
-      console.log('  - GlobalState refresh token sample:', storedGlobalTokenSet.refresh_token.substring(0, 10) + '...' + storedGlobalTokenSet.refresh_token.substring(storedGlobalTokenSet.refresh_token.length - 10));
+      console.debug('  - GlobalState refresh token sample:', storedGlobalTokenSet.refresh_token.substring(0, 10) + '...' + storedGlobalTokenSet.refresh_token.substring(storedGlobalTokenSet.refresh_token.length - 10));
       
       // Validate the refresh token from globalState
       const globalRefreshTokenValidation = this.validateRefreshToken(storedGlobalTokenSet.refresh_token);
-      console.log('  - GlobalState refresh token validation:', globalRefreshTokenValidation);
+      console.debug('  - GlobalState refresh token validation:', globalRefreshTokenValidation);
     }
     
     // Compare tokens between storage locations
     if (secureRefreshToken && storedGlobalTokenSet?.refresh_token) {
       const tokensMatch = secureRefreshToken === storedGlobalTokenSet.refresh_token;
-      console.log('  - Refresh tokens match between secure storage and globalState:', tokensMatch);
+      console.debug('  - Refresh tokens match between secure storage and globalState:', tokensMatch);
       if (!tokensMatch) {
-        console.log('  - ⚠️  REFRESH TOKEN MISMATCH DETECTED!');
-        console.log('    - Secure storage length:', secureRefreshToken.length);
-        console.log('    - GlobalState length:', storedGlobalTokenSet.refresh_token.length);
-        console.log('    - First 50 chars secure:', secureRefreshToken.substring(0, 50));
-        console.log('    - First 50 chars global:', storedGlobalTokenSet.refresh_token.substring(0, 50));
+        console.debug('  - ⚠️  REFRESH TOKEN MISMATCH DETECTED!');
+        console.debug('    - Secure storage length:', secureRefreshToken.length);
+        console.debug('    - GlobalState length:', storedGlobalTokenSet.refresh_token.length);
+        console.debug('    - First 50 chars secure:', secureRefreshToken.substring(0, 50));
+        console.debug('    - First 50 chars global:', storedGlobalTokenSet.refresh_token.substring(0, 50));
       }
     }
     
     // Check if we need to reconstruct the tokenSet from secure storage
     if (!this._tokenSet && (secureAccessToken || secureRefreshToken)) {
-      console.log('AuthManager: Reconstructing tokenSet from secure storage');
+      console.debug('AuthManager: Reconstructing tokenSet from secure storage');
       // Create a more complete tokenSet that openid-client expects
       // Try to get additional metadata from the stored tokenSet
       const storedTokenSet = this.context.globalState.get<any>('neon.tokenSet') || {};
@@ -334,64 +334,64 @@ export class AuthManager {
         delete this._tokenSet.refresh_token;
       }
       
-      console.log('AuthManager: Reconstructed tokenSet structure:');
-      console.log('  - Keys:', Object.keys(this._tokenSet));
-      console.log('  - Token type:', this._tokenSet.token_type);
-      console.log('  - Has access_token:', !!this._tokenSet.access_token);
-      console.log('  - Has refresh_token:', !!this._tokenSet.refresh_token);
-      console.log('  - Access token matches secure storage:', this._tokenSet.access_token === secureAccessToken);
-      console.log('  - Refresh token matches secure storage:', this._tokenSet.refresh_token === secureRefreshToken);
+      console.debug('AuthManager: Reconstructed tokenSet structure:');
+      console.debug('  - Keys:', Object.keys(this._tokenSet));
+      console.debug('  - Token type:', this._tokenSet.token_type);
+      console.debug('  - Has access_token:', !!this._tokenSet.access_token);
+      console.debug('  - Has refresh_token:', !!this._tokenSet.refresh_token);
+      console.debug('  - Access token matches secure storage:', this._tokenSet.access_token === secureAccessToken);
+      console.debug('  - Refresh token matches secure storage:', this._tokenSet.refresh_token === secureRefreshToken);
       
       // Store in globalState for consistency
       await this.context.globalState.update('neon.tokenSet', this._tokenSet);
-      console.log('AuthManager: TokenSet reconstructed and saved to globalState');
+      console.debug('AuthManager: TokenSet reconstructed and saved to globalState');
     } else if (this._tokenSet) {
-      console.log('AuthManager: Using existing tokenSet from constructor');
-      console.log('  - Existing tokenSet keys:', Object.keys(this._tokenSet));
-      console.log('  - Access token length:', this._tokenSet.access_token?.length || 'none');
-      console.log('  - Refresh token length:', this._tokenSet.refresh_token?.length || 'none');
+      console.debug('AuthManager: Using existing tokenSet from constructor');
+      console.debug('  - Existing tokenSet keys:', Object.keys(this._tokenSet));
+      console.debug('  - Access token length:', this._tokenSet.access_token?.length || 'none');
+      console.debug('  - Refresh token length:', this._tokenSet.refresh_token?.length || 'none');
     }
     
     const wasAuthenticated = this._isAuthenticated;
     
     // Persistent token takes precedence over OAuth token
     if (persistentToken) {
-      console.log('AuthManager: Using persistent API token for authentication');
+      console.debug('AuthManager: Using persistent API token for authentication');
       this._isAuthenticated = true;
     } else if (this._tokenSet?.refresh_token) {
       // If we have a refresh token but no persistent token, attempt silent refresh
-      console.log('AuthManager: Attempting silent token refresh on extension startup...');
-      console.log('AuthManager: Pre-refresh token analysis:');
-      console.log('  - Refresh token type:', typeof this._tokenSet.refresh_token);
-      console.log('  - Refresh token length:', this._tokenSet.refresh_token.length);
-      console.log('  - Refresh token starts with:', this._tokenSet.refresh_token.substring(0, 20));
-      console.log('  - Access token type:', typeof this._tokenSet.access_token);
-      console.log('  - Access token length:', this._tokenSet.access_token?.length || 'none');
+      console.debug('AuthManager: Attempting silent token refresh on extension startup...');
+      console.debug('AuthManager: Pre-refresh token analysis:');
+      console.debug('  - Refresh token type:', typeof this._tokenSet.refresh_token);
+      console.debug('  - Refresh token length:', this._tokenSet.refresh_token.length);
+      console.debug('  - Refresh token starts with:', this._tokenSet.refresh_token.substring(0, 20));
+      console.debug('  - Access token type:', typeof this._tokenSet.access_token);
+      console.debug('  - Access token length:', this._tokenSet.access_token?.length || 'none');
       
       try {
         const refreshAttempt = await this.refreshTokenIfNeeded();
         // refreshAttempt may be false if we skipped due to token still valid or missing refresh token
         // maintain existing authenticated state unless we explicitly signed out elsewhere
         if (refreshAttempt) {
-          console.log('AuthManager: Silent token refresh successful');
+          console.debug('AuthManager: Silent token refresh successful');
         } else {
-          console.log('AuthManager: Silent token refresh failed or was not possible – signing user out to avoid stale credentials.');
+          console.debug('AuthManager: Silent token refresh failed or was not possible – signing user out to avoid stale credentials.');
           // Clear tokens and force the user to authenticate again.
           // We purposely **do not** sign out if a persistent API token exists (handled earlier).
           await this.signOut();
         }
       } catch (error) {
         // Silent refresh failed - log but don't show error to user
-        console.log('AuthManager: Silent token refresh failed during startup:', error);
+        console.debug('AuthManager: Silent token refresh failed during startup:', error);
         this._isAuthenticated = false;
       }
     } else {
       // No tokens available
-      console.log('AuthManager: No tokens available for authentication');
+      console.debug('AuthManager: No tokens available for authentication');
       this._isAuthenticated = false;
     }
     
-    console.log('AuthManager: Final authentication state:', {
+    console.debug('AuthManager: Final authentication state:', {
       wasAuthenticated,
       isAuthenticated: this._isAuthenticated,
       stateChanged: wasAuthenticated !== this._isAuthenticated

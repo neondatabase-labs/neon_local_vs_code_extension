@@ -396,25 +396,25 @@
         // Message handler
         window.addEventListener('message', event => {
             const message = event.data;
-            console.log('Received message:', message);
+            console.debug('Received message:', message);
 
             switch (message.command) {
                 case 'updateOrgs':
-                    console.log('Updating orgs:', message.orgs);
+                    console.debug('Updating orgs:', message.orgs);
                     updateSelect('org', message.orgs);
                     if (message.selectedOrg) {
                         document.getElementById('org').value = message.selectedOrg;
                     }
                     break;
                 case 'updateProjects':
-                    console.log('Updating projects:', message.projects);
+                    console.debug('Updating projects:', message.projects);
                     updateSelect('project', message.projects);
                     if (message.selectedProject) {
                         document.getElementById('project').value = message.selectedProject;
                     }
                     break;
                 case 'updateBranches':
-                    console.log('Updating branches:', message.branches);
+                    console.debug('Updating branches:', message.branches);
                     // Update both branch selects with the same data
                     updateSelect('branch', message.branches);
                     updateSelect('parent-branch', message.branches);
@@ -471,7 +471,7 @@
         });
 
         function updateSelect(selectId, items) {
-            console.log('Updating select:', selectId, 'with items:', items);
+            console.debug('Updating select:', selectId, 'with items:', items);
             const select = document.getElementById(selectId);
             if (!select) {
                 console.error('Select element not found:', selectId);

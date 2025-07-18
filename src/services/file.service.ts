@@ -29,7 +29,7 @@ export class FileService {
 
     private get neonLocalDir(): string {
         const neonLocalPath = path.join(this.context.globalStorageUri.fsPath, '.neon_local');
-        console.log('Neon Local Connect directory path:', neonLocalPath);
+        console.debug('Neon Local Connect directory path:', neonLocalPath);
         return neonLocalPath;
     }
 
@@ -40,23 +40,23 @@ export class FileService {
             }
 
             if (!fs.existsSync(this.branchesFilePath)) {
-                console.log('Branches file does not exist at:', this.branchesFilePath);
+                console.debug('Branches file does not exist at:', this.branchesFilePath);
                 return undefined;
             }
 
             const content = await fs.promises.readFile(this.branchesFilePath, 'utf-8');
-            console.log('Read .branches file at path:', this.branchesFilePath);
-            console.log('Raw .branches file content:', content);
+            console.debug('Read .branches file at path:', this.branchesFilePath);
+            console.debug('Raw .branches file content:', content);
             
             const data = JSON.parse(content) as BranchesFile;
-            console.log('Parsed .branches file data:', JSON.stringify(data, null, 2));
+            console.debug('Parsed .branches file data:', JSON.stringify(data, null, 2));
             
             if (!data.main?.branch_id) {
                 console.warn('No main branch ID found in branches file. Data structure:', JSON.stringify(data));
                 return undefined;
             }
             
-            console.log('Successfully extracted branch ID:', data.main.branch_id);
+            console.debug('Successfully extracted branch ID:', data.main.branch_id);
             return data.main.branch_id;
         } catch (error) {
             console.error('Error reading branches file:', error);
@@ -72,9 +72,9 @@ export class FileService {
         try {
             if (fs.existsSync(this.branchesFilePath)) {
                 await fs.promises.unlink(this.branchesFilePath);
-                console.log('Successfully deleted .branches file at:', this.branchesFilePath);
+                console.debug('Successfully deleted .branches file at:', this.branchesFilePath);
             } else {
-                console.log('Branches file does not exist, no cleanup needed');
+                console.debug('Branches file does not exist, no cleanup needed');
             }
         } catch (error) {
             console.error('Error deleting branches file:', error);

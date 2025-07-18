@@ -3,38 +3,38 @@ import * as vscode from 'vscode';
 import { NeonLocalManager } from '../../types';
 import { NeonLocalExtension } from '../../extension';
 
-console.log('Loading test file...');
+console.debug('Loading test file...');
 
 describe('Extension Test Suite', () => {
-    console.log('Setting up test suite...');
+    console.debug('Setting up test suite...');
     let manager: NeonLocalManager;
 
     before(async () => {
-        console.log('Running before hook...');
+        console.debug('Running before hook...');
         // List all installed extensions
         const extensions = vscode.extensions.all;
-        console.log('Installed extensions:', extensions.map(ext => ext.id));
+        console.debug('Installed extensions:', extensions.map(ext => ext.id));
     });
 
     after(() => {
-        console.log('Running after hook...');
+        console.debug('Running after hook...');
     });
 
     it('should pass basic array test', () => {
-        console.log('Running basic array test...');
+        console.debug('Running basic array test...');
         assert.strictEqual(-1, [1, 2, 3].indexOf(5));
         assert.strictEqual(-1, [1, 2, 3].indexOf(0));
     });
 
     it('should have the extension present', async () => {
-        console.log('Checking for extension...');
+        console.debug('Checking for extension...');
         // List all extensions again to see what's available
         const allExtensions = vscode.extensions.all;
-        console.log('Available extensions:', allExtensions.map(ext => ext.id));
+        console.debug('Available extensions:', allExtensions.map(ext => ext.id));
         
         // Try to find our extension with the correct ID
         const ext = vscode.extensions.getExtension('undefined_publisher.neon-local-connect');
-        console.log('Found extension:', ext?.id);
+        console.debug('Found extension:', ext?.id);
         
         if (!ext) {
             console.error('Extension not found. Available extensions:', allExtensions.map(ext => ext.id));
@@ -44,14 +44,14 @@ describe('Extension Test Suite', () => {
     });
 
     it('should activate the extension', async () => {
-        console.log('Attempting to activate extension...');
+        console.debug('Attempting to activate extension...');
         const ext = vscode.extensions.getExtension('undefined_publisher.neon-local-connect');
         assert.ok(ext, 'Extension should be present');
         
         try {
             await ext?.activate();
             assert.strictEqual(ext?.isActive, true, 'Extension should be active');
-            console.log('Extension activated successfully');
+            console.debug('Extension activated successfully');
         } catch (error) {
             console.error('Error activating extension:', error);
             throw error;
@@ -59,12 +59,12 @@ describe('Extension Test Suite', () => {
     });
 
     it('should register commands', async () => {
-        console.log('Checking registered commands...');
+        console.debug('Checking registered commands...');
         const commands = await vscode.commands.getCommands(true);
-        console.log('All registered commands:', commands);
+        console.debug('All registered commands:', commands);
         
         const neonCommands = commands.filter(cmd => cmd.startsWith('neon-local-connect.'));
-        console.log('Found Neon commands:', neonCommands);
+        console.debug('Found Neon commands:', neonCommands);
         
         // Check for specific commands we know should be registered
         const expectedCommands = [
@@ -133,7 +133,7 @@ describe('Extension Test Suite', () => {
                 },
                 globalState: {
                     get: (key: string) => {
-                        console.log('Getting state for key:', key);
+                        console.debug('Getting state for key:', key);
                         if (key === 'neonLocal.currentProject') {
                             return 'test-project';
                         }
@@ -192,7 +192,7 @@ describe('Extension Test Suite', () => {
             (testManager as any).getActiveWebview = () => mockWebview;
             
             // Debug log the state
-            console.log('Test manager state:', {
+            console.debug('Test manager state:', {
                 currentProject: (testManager as any).currentProject,
                 currentOrg: (testManager as any).currentOrg,
                 currentBranch: (testManager as any).currentBranch
@@ -243,7 +243,7 @@ describe('Extension Test Suite', () => {
                 },
                 globalState: {
                     get: (key: string) => {
-                        console.log('Getting state for key:', key);
+                        console.debug('Getting state for key:', key);
                         if (key === 'neonLocal.currentProject') {
                             return 'test-project';
                         }

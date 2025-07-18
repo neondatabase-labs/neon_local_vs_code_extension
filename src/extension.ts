@@ -31,15 +31,15 @@ export async function activate(context: vscode.ExtensionContext) {
   try {
     const isRunning = await dockerService.checkContainerStatus();
     if (isRunning) {
-      console.log('Container is already running, checking if it is ready...');
+      console.debug('Container is already running, checking if it is ready...');
       
       // Check if the container is ready by looking at the logs
       const isReady = await dockerService.checkContainerReady();
       if (!isReady) {
-        console.log('Container is not ready (no ready message found), stopping it...');
+        console.debug('Container is not ready (no ready message found), stopping it...');
         try {
           await dockerService.stopContainer();
-          console.log('Container stopped successfully');
+          console.debug('Container stopped successfully');
         } catch (stopError) {
           console.error('Error stopping unready container:', stopError);
         }
@@ -49,25 +49,25 @@ export async function activate(context: vscode.ExtensionContext) {
         await stateService.setCurrentlyConnectedBranch('');
         await stateService.setDatabases([]);
         await stateService.setRoles([]);
-        console.log('State reset to disconnected after stopping unready container');
+        console.debug('State reset to disconnected after stopping unready container');
       } else {
-        console.log('Container is ready, updating state...');
+        console.debug('Container is ready, updating state...');
         
         // First try to get branch ID from .branches file
         const branchId = await dockerService.checkBranchesFile(context);
         
         if (branchId) {
-          console.log('✅ Using branch ID from .branches file:', branchId);
+          console.debug('✅ Using branch ID from .branches file:', branchId);
           await stateService.setIsProxyRunning(true);
           await stateService.setCurrentlyConnectedBranch(branchId);
 
           // Fetch and update databases and roles
           try {
             const projectId = await stateService.getCurrentProjectId();
-            console.log('🔍 Extension startup - projectId:', projectId, 'branchId:', branchId);
+            console.debug('🔍 Extension startup - projectId:', projectId, 'branchId:', branchId);
             
             if (projectId) {
-              console.log('📊 Fetching databases and roles for startup...');
+              console.debug('📊 Fetching databases and roles for startup...');
               const [databases, roles] = await Promise.all([
                 apiService.getDatabases(projectId, branchId),
                 apiService.getRoles(projectId, branchId)
@@ -76,7 +76,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 stateService.setDatabases(databases),
                 stateService.setRoles(roles)
               ]);
-              console.log('✅ Updated databases and roles on startup');
+              console.debug('✅ Updated databases and roles on startup');
             } else {
               console.warn('⚠️  No projectId found during startup');
             }
@@ -85,20 +85,20 @@ export async function activate(context: vscode.ExtensionContext) {
           }
         } else {
           // Fallback to container info if .branches file doesn't have the ID
-          console.log('⚠️  No branch ID in .branches file, falling back to container info...');
+          console.debug('⚠️  No branch ID in .branches file, falling back to container info...');
           const containerInfo = await dockerService.getContainerInfo();
           if (containerInfo) {
-            console.log('✅ Using branch ID from container info:', containerInfo.branchId);
+            console.debug('✅ Using branch ID from container info:', containerInfo.branchId);
             await stateService.setIsProxyRunning(true);
             await stateService.setCurrentlyConnectedBranch(containerInfo.branchId);
 
             // Fetch and update databases and roles
             try {
               const projectId = containerInfo.projectId;
-              console.log('🔍 Extension startup (container fallback) - projectId:', projectId, 'branchId:', containerInfo.branchId);
+              console.debug('🔍 Extension startup (container fallback) - projectId:', projectId, 'branchId:', containerInfo.branchId);
               
               if (projectId) {
-                console.log('📊 Fetching databases and roles for startup (from container info)...');
+                console.debug('📊 Fetching databases and roles for startup (from container info)...');
                 const [databases, roles] = await Promise.all([
                   apiService.getDatabases(projectId, containerInfo.branchId),
                   apiService.getRoles(projectId, containerInfo.branchId)
@@ -107,7 +107,7 @@ export async function activate(context: vscode.ExtensionContext) {
                   stateService.setDatabases(databases),
                   stateService.setRoles(roles)
                 ]);
-                console.log('✅ Updated databases and roles on startup (from container info)');
+                console.debug('✅ Updated databases and roles on startup (from container info)');
               } else {
                 console.warn('⚠️  No projectId found in container info during startup');
               }
@@ -121,10 +121,10 @@ export async function activate(context: vscode.ExtensionContext) {
         
         // Start the status check to keep state in sync
         await dockerService.startStatusCheck();
-        console.log('Started status check for existing container');
+        console.debug('Started status check for existing container');
       }
     } else {
-      console.log('No running container found on startup');
+      console.debug('No running container found on startup');
       await stateService.setIsProxyRunning(false);
     }
   } catch (error) {
@@ -346,10 +346,10 @@ export async function activate(context: vscode.ExtensionContext) {
             const connectionType = viewData.connectionType;
             const branchName = connectionType === 'existing' ? viewData.selectedBranchName : branchId;
             
-            console.log('Reset from parent - Project ID:', projectId);
-            console.log('Reset from parent - Branch ID:', branchId);
-            console.log('Reset from parent - Branch Name:', branchName);
-            console.log('Reset from parent - Connection Type:', connectionType);
+            console.debug('Reset from parent - Project ID:', projectId);
+            console.debug('Reset from parent - Branch ID:', branchId);
+            console.debug('Reset from parent - Branch Name:', branchName);
+            console.debug('Reset from parent - Connection Type:', connectionType);
             
             if (!projectId || !branchId) {
                 throw new Error('Project ID or Branch ID not found');

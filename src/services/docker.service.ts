@@ -139,7 +139,7 @@ export class DockerService {
             try {
                 const isRunning = await this.checkContainerStatus();
                 if (!isRunning) {
-                    console.log('Container is no longer running, updating state...');
+                    console.debug('Container is no longer running, updating state...');
                     await this.stateService.setIsProxyRunning(false);
                     // Delete the .branches file when container is no longer running
                     await this.fileService.deleteBranchesFile();
@@ -167,7 +167,7 @@ export class DockerService {
         port: number;
     }): Promise<void> {
         try {
-            console.log('Starting container with options:', options);
+            console.debug('Starting container with options:', options);
             
             // Create the .neon_local directory if it doesn't exist
             const neonLocalPath = path.join(options.context.globalStorageUri.fsPath, '.neon_local');
@@ -183,7 +183,7 @@ export class DockerService {
 
             // For new branches, we need to wait for the .branches file to be populated
             if (!options.isExisting) {
-                console.log('🔍 Waiting for ephemeral branch .branches file to be populated...');
+                console.debug('🔍 Waiting for ephemeral branch .branches file to be populated...');
                 
                 // Wait for the .branches file to be populated with the ephemeral branch ID
                 const branchId = await this.waitForBranchesFile(options.context);
@@ -191,12 +191,12 @@ export class DockerService {
                     throw new Error('Failed to get ephemeral branch ID from .branches file within timeout period');
                 }
                 
-                console.log('✅ Ephemeral branch .branches file populated with branch ID:', branchId);
+                console.debug('✅ Ephemeral branch .branches file populated with branch ID:', branchId);
             } else {
                 // For existing branches, check if we have a branch ID in the file
                 const branchId = await this.checkBranchesFile(options.context);
                 if (branchId) {
-                    console.log('✅ Using existing branch ID from .branches file:', branchId);
+                    console.debug('✅ Using existing branch ID from .branches file:', branchId);
                 }
             }
 
@@ -204,14 +204,14 @@ export class DockerService {
             await this.stateService.setIsProxyRunning(true);
             await this.stateService.setIsStarting(false);
 
-            console.log('Container started successfully');
+            console.debug('Container started successfully');
         } catch (error) {
             console.error('Error starting container:', error);
             await this.stateService.setIsStarting(false);
             
             // If this is a branch limit error, clean up the container
             if (error instanceof Error && error.message.includes('Unable to create ephemeral branch, as you have reached your Branch limit')) {
-                console.log('Branch limit error detected, cleaning up container...');
+                console.debug('Branch limit error detected, cleaning up container...');
                 try {
                     //await this.cleanupContainer();
                 } catch (cleanupError) {
@@ -245,7 +245,7 @@ export class DockerService {
             // Delete the .branches file
             await this.fileService.deleteBranchesFile();
             
-            console.log('Container stopped successfully');
+            console.debug('Container stopped successfully');
         } catch (error) {
             // If the container doesn't exist, that's fine - just update the state
             if ((error as any).statusCode === 404) {
@@ -270,13 +270,13 @@ export class DockerService {
     private async cleanupContainer(): Promise<void> {
         try {
             const container = await this.docker.getContainer(this.containerName);
-            console.log('Stopping and removing container due to error...');
+            console.debug('Stopping and removing container due to error...');
             
             try {
                 await container.stop({ t: 20 }); // 20 second grace period
             } catch (stopError) {
                 // Container might already be stopped, that's fine
-                console.log('Container may already be stopped:', stopError);
+                console.debug('Container may already be stopped:', stopError);
             }
             
             await container.remove({ force: true });
@@ -284,11 +284,11 @@ export class DockerService {
             // Delete the .branches file
             await this.fileService.deleteBranchesFile();
             
-            console.log('Container cleaned up successfully');
+            console.debug('Container cleaned up successfully');
         } catch (error) {
             // If the container doesn't exist, that's fine
             if ((error as any).statusCode === 404) {
-                console.log('Container does not exist, no cleanup needed');
+                console.debug('Container does not exist, no cleanup needed');
                 // Delete the .branches file even if container doesn't exist
                 await this.fileService.deleteBranchesFile();
                 return;
@@ -328,26 +328,26 @@ export class DockerService {
             const neonLocalPath = path.join(context.globalStorageUri.fsPath, '.neon_local');
             const branchesPath = path.join(neonLocalPath, '.branches');
             
-            console.log('🔍 Checking .branches file at:', branchesPath);
+            console.debug('🔍 Checking .branches file at:', branchesPath);
             
             if (!fs.existsSync(branchesPath)) {
-                console.log('⚠️  .branches file does not exist yet');
+                console.debug('⚠️  .branches file does not exist yet');
                 return false;
             }
             
             const content = await fs.promises.readFile(branchesPath, 'utf-8');
-            console.log('📄 Raw .branches file content:', content);
+            console.debug('📄 Raw .branches file content:', content);
             
             if (!content.trim()) {
-                console.log('⚠️  .branches file is empty');
+                console.debug('⚠️  .branches file is empty');
                 return false;
             }
             
             const data = JSON.parse(content);
-            console.log('📊 Parsed .branches file data:', JSON.stringify(data, null, 2));
+            console.debug('📊 Parsed .branches file data:', JSON.stringify(data, null, 2));
             
             if (!data || Object.keys(data).length === 0) {
-                console.log('⚠️  No data in branches file');
+                console.debug('⚠️  No data in branches file');
                 return false;
             }
             
@@ -357,12 +357,12 @@ export class DockerService {
             );
             
             if (!branchKey) {
-                console.log('❌ No branch ID found in branches file. Data structure:', JSON.stringify(data));
+                console.debug('❌ No branch ID found in branches file. Data structure:', JSON.stringify(data));
                 return false;
             }
             
             const branchId = data[branchKey].branch_id;
-            console.log('✅ Found branch ID in .branches file:', branchId, 'from key:', branchKey);
+            console.debug('✅ Found branch ID in .branches file:', branchId, 'from key:', branchKey);
             
             // Update the state with the branch ID from the .branches file
             await this.stateService.setCurrentlyConnectedBranch(branchId);
@@ -378,20 +378,20 @@ export class DockerService {
         const maxAttempts = 30; // 30 attempts, 1 second apart = 30 seconds timeout
         let attempts = 0;
         
-        console.log('🔍 Starting to wait for .branches file to be populated...');
+        console.debug('🔍 Starting to wait for .branches file to be populated...');
         
         while (attempts < maxAttempts) {
-            console.log(`📊 Attempt ${attempts + 1}/${maxAttempts} to check .branches file`);
+            console.debug(`📊 Attempt ${attempts + 1}/${maxAttempts} to check .branches file`);
             
             const branchId = await this.checkBranchesFile(context);
             if (branchId) {
-                console.log(`✅ .branches file populated after ${attempts + 1} attempts with branch ID:`, branchId);
+                console.debug(`✅ .branches file populated after ${attempts + 1} attempts with branch ID:`, branchId);
                 return branchId;
             }
             
             attempts++;
             if (attempts < maxAttempts) {
-                console.log(`⏳ .branches file not ready, waiting 1 second before retry...`);
+                console.debug(`⏳ .branches file not ready, waiting 1 second before retry...`);
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
@@ -410,7 +410,7 @@ export class DockerService {
                 const containerInfo = await container.inspect();
                 
                 if (containerInfo.State.Running) {
-                    console.log('Container is running, checking logs for readiness...');
+                    console.debug('Container is running, checking logs for readiness...');
                     // Container is running, now wait for the .branches file to be populated
                     const logs = await container.logs({
                         stdout: true,
@@ -434,10 +434,10 @@ export class DockerService {
                     
                     // Check if the logs indicate the container is ready
                     if (logStr.includes('Neon Local is ready')) {
-                        console.log('Container is ready');
+                        console.debug('Container is ready');
                         return;
                     } else {
-                        console.log('Container not yet ready, waiting for ready message...');
+                        console.debug('Container not yet ready, waiting for ready message...');
                     }
                 }
                 
@@ -469,15 +469,15 @@ export class DockerService {
             });
             
             const logStr = logs.toString();
-            console.log('Checking container readiness, logs:', logStr);
+            console.debug('Checking container readiness, logs:', logStr);
             
             // Check if the ready message is present
             if (logStr.includes('Neon Local is ready')) {
-                console.log('Container is ready');
+                console.debug('Container is ready');
                 return true;
             }
             
-            console.log('Container is not ready - no ready message found');
+            console.debug('Container is not ready - no ready message found');
             return false;
         } catch (error) {
             console.error('Error checking container readiness:', error);
@@ -492,13 +492,13 @@ export class DockerService {
         isParentBranch: boolean;
     } | null> {
         try {
-            console.log('🔍 Getting container info for:', this.containerName);
+            console.debug('🔍 Getting container info for:', this.containerName);
             const container = await this.docker.getContainer(this.containerName);
             const containerInfo = await container.inspect();
             
             // Extract environment variables
             const envVars = containerInfo.Config.Env;
-            console.log('📊 Container environment variables:', envVars);
+            console.debug('📊 Container environment variables:', envVars);
             
             const getEnvValue = (key: string) => {
                 const envVar = envVars.find((env: string) => env.startsWith(`${key}=`));
@@ -511,7 +511,7 @@ export class DockerService {
             const driver = getEnvValue('DRIVER');
             const isParentBranch = Boolean(getEnvValue('PARENT_BRANCH_ID'));
             
-            console.log('🔍 Extracted container info:', {
+            console.debug('🔍 Extracted container info:', {
                 branchId,
                 projectId,
                 driver,
@@ -598,7 +598,7 @@ export class DockerService {
         // refresh token and cause an "invalid_grant" error.
         const refreshSuccess = await authManager.refreshTokenIfNeeded();
         if (!refreshSuccess) {
-            console.log('DockerService: Token refresh failed – signing user out.');
+            console.debug('DockerService: Token refresh failed – signing user out.');
             await authManager.signOut();
             throw new Error('Failed to refresh authentication token. Please sign in again.');
         }
@@ -654,7 +654,7 @@ export class DockerService {
                     // ignore
                 }
                 await oldContainer.remove({ force: true });
-                console.log(`Removed existing container: ${containerName}`);
+                console.debug(`Removed existing container: ${containerName}`);
                 
                 // Delete the .branches file when removing existing container
                 await this.fileService.deleteBranchesFile();
@@ -666,7 +666,7 @@ export class DockerService {
         // Create and start new container
         const container = await this.docker.createContainer(containerConfig);
         await container.start();
-        console.log(`Started new container: ${containerName}`);
+        console.debug(`Started new container: ${containerName}`);
 
         // Set the connection string based on the driver
         const connectionString = `postgres://neon:npg@localhost:${containerConfig.HostConfig.PortBindings['5432/tcp'][0].HostPort}/<database_name>`;

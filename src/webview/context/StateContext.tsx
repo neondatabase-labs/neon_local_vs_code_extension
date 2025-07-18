@@ -84,7 +84,7 @@ export function StateProvider({ children, vscode }: StateProviderProps) {
     const message = event.data;
     const timestamp = Date.now();
     
-    console.log('StateContext: Received message from extension:', {
+    console.debug('StateContext: Received message from extension:', {
       command: message.command,
       timestamp: new Date(timestamp).toISOString(),
       timeSinceLastUpdate: timestamp - lastStateUpdateRef.current
@@ -92,7 +92,7 @@ export function StateProvider({ children, vscode }: StateProviderProps) {
     
     switch (message.command) {
       case 'updateViewData':
-        console.log('StateContext: Processing updateViewData message:', {
+        console.debug('StateContext: Processing updateViewData message:', {
           connected: message.data?.connected,
           isStarting: message.data?.isStarting,
           connectionType: message.data?.connectionType,
@@ -111,7 +111,7 @@ export function StateProvider({ children, vscode }: StateProviderProps) {
             }
           };
           
-          console.log('StateContext: State updated:', {
+          console.debug('StateContext: State updated:', {
             previousConnected: prevState.connected,
             newConnected: newState.connected,
             previousIsStarting: prevState.isStarting,
@@ -127,31 +127,31 @@ export function StateProvider({ children, vscode }: StateProviderProps) {
         break;
         
       case 'clearState':
-        console.log('StateContext: Processing clearState message - reloading window');
+        console.debug('StateContext: Processing clearState message - reloading window');
         window.location.reload();
         break;
         
       default:
-        console.log('StateContext: Received unknown message command:', message.command);
+        console.debug('StateContext: Received unknown message command:', message.command);
     }
   }, []);
 
   // Set up message event listener with proper cleanup
   useEffect(() => {
-    console.log('StateContext: Setting up message event listener');
+    console.debug('StateContext: Setting up message event listener');
     
     if (messageHandlerRef.current) {
-      console.log('StateContext: Removing existing message handler');
+      console.debug('StateContext: Removing existing message handler');
       window.removeEventListener('message', messageHandlerRef.current);
     }
     
     messageHandlerRef.current = messageHandler;
     window.addEventListener('message', messageHandler);
     
-    console.log('StateContext: Message event listener attached');
+    console.debug('StateContext: Message event listener attached');
     
     return () => {
-      console.log('StateContext: Cleaning up message event listener');
+      console.debug('StateContext: Cleaning up message event listener');
       if (messageHandlerRef.current) {
         window.removeEventListener('message', messageHandlerRef.current);
         messageHandlerRef.current = null;
@@ -162,14 +162,14 @@ export function StateProvider({ children, vscode }: StateProviderProps) {
   // Handle initial data request
   useEffect(() => {
     if (!hasReceivedInitialData && !isInitializedRef.current) {
-      console.log('StateContext: Requesting initial data from extension');
+      console.debug('StateContext: Requesting initial data from extension');
       isInitializedRef.current = true;
       
       try {
         vscode.postMessage({
           command: 'requestInitialData'
         });
-        console.log('StateContext: Initial data request sent');
+        console.debug('StateContext: Initial data request sent');
       } catch (error) {
         console.error('StateContext: Error requesting initial data:', error);
       }
@@ -178,16 +178,16 @@ export function StateProvider({ children, vscode }: StateProviderProps) {
 
   // Log when component mounts/unmounts
   useEffect(() => {
-    console.log('StateContext: StateProvider mounted');
+    console.debug('StateContext: StateProvider mounted');
     
     return () => {
-      console.log('StateContext: StateProvider unmounting');
+      console.debug('StateContext: StateProvider unmounting');
     };
   }, []);
 
   // Create a stable updateState function
   const updateState = useCallback((newState: Partial<ViewData>) => {
-    console.log('StateContext: Local state update requested:', {
+    console.debug('StateContext: Local state update requested:', {
       hasConnectionUpdate: !!newState.connection,
       connected: newState.connected,
       isStarting: newState.isStarting,
@@ -206,7 +206,7 @@ export function StateProvider({ children, vscode }: StateProviderProps) {
         }
       };
       
-      console.log('StateContext: Local state updated:', {
+      console.debug('StateContext: Local state updated:', {
         stateChanged: JSON.stringify(prevState) !== JSON.stringify(updatedState),
         connected: updatedState.connected,
         isStarting: updatedState.isStarting
@@ -218,7 +218,7 @@ export function StateProvider({ children, vscode }: StateProviderProps) {
 
   // Log state changes for debugging
   useEffect(() => {
-    console.log('StateContext: State changed:', {
+    console.debug('StateContext: State changed:', {
       connected: state.connected,
       isStarting: state.isStarting,
       connectionType: state.connectionType,

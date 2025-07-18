@@ -53,7 +53,7 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
 
         // Register this view with the manager
         const viewId = this._webviewService.registerWebview(webviewView.webview, 'actionsView');
-        console.log(`ActionsViewProvider: Registered webview with ID: ${viewId}`);
+        console.debug(`ActionsViewProvider: Registered webview with ID: ${viewId}`);
 
         // Initial update with a small delay to ensure proper registration
         setTimeout(() => {
@@ -138,7 +138,7 @@ export class ActionsViewProvider implements vscode.WebviewViewProvider {
                 this._lastUpdateData.isExplicitUpdate;
 
             if (needsUpdate) {
-                console.log('ActionsView: Updating view with new data:', {
+                console.debug('ActionsView: Updating view with new data:', {
                     connected: data.connected,
                     connectionType: data.connectionType,
                     selectedBranchId: data.selectedBranchId,

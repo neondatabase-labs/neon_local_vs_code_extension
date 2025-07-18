@@ -100,7 +100,7 @@ export class Logger {
     }
 
     static info(message: string): void {
-        console.log(message);
+        console.debug(message);
         vscode.window.showInformationMessage(message);
     }
 } 

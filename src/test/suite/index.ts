@@ -3,7 +3,7 @@ import Mocha from 'mocha';
 import { glob } from 'glob';
 
 export function run(): Promise<void> {
-    console.log('>>> Test runner started');
+    console.debug('>>> Test runner started');
     
     // Create the mocha test with BDD interface
     const mocha = new Mocha({
@@ -16,13 +16,13 @@ export function run(): Promise<void> {
     });
 
     const testsRoot = path.resolve(__dirname, '..');
-    console.log('Tests root directory:', testsRoot);
+    console.debug('Tests root directory:', testsRoot);
 
     return new Promise((resolve, reject) => {
         // Look for .js files since we're running compiled tests
         glob('**/**.test.js', { cwd: testsRoot })
             .then(files => {
-                console.log('Found test files:', files);
+                console.debug('Found test files:', files);
                 
                 if (files.length === 0) {
                     return reject(new Error('No test files found'));
@@ -31,11 +31,11 @@ export function run(): Promise<void> {
                 // Add files to the test suite
                 files.forEach(f => {
                     const fullPath = path.resolve(testsRoot, f);
-                    console.log('Adding test file:', fullPath);
+                    console.debug('Adding test file:', fullPath);
                     try {
                         // Add the file to Mocha directly
                         mocha.addFile(fullPath);
-                        console.log('Successfully added test file:', fullPath);
+                        console.debug('Successfully added test file:', fullPath);
                     } catch (err) {
                         console.error('Error adding test file:', err);
                         reject(err);
@@ -43,14 +43,14 @@ export function run(): Promise<void> {
                 });
 
                 try {
-                    console.log('Starting test execution...');
+                    console.debug('Starting test execution...');
                     // Run the mocha test
                     mocha.run((failures: number) => {
                         if (failures > 0) {
                             console.error(`${failures} tests failed.`);
                             reject(new Error(`${failures} tests failed.`));
                         } else {
-                            console.log('All tests passed!');
+                            console.debug('All tests passed!');
                             resolve();
                         }
                     });

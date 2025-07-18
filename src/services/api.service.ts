@@ -42,7 +42,7 @@ export class NeonApiService {
 
     // Validation method that doesn't use auto-refresh to avoid infinite loops
     public async validateToken(token: string): Promise<boolean> {
-        console.log('🔍 Validating token with direct API call (no auto-refresh)...');
+        console.debug('🔍 Validating token with direct API call (no auto-refresh)...');
         
         return new Promise((resolve) => {
             const options: https.RequestOptions = {
@@ -63,20 +63,20 @@ export class NeonApiService {
                 });
 
                 res.on('end', () => {
-                    console.log(`📡 Validation response: ${res.statusCode}`);
+                    console.debug(`📡 Validation response: ${res.statusCode}`);
                     
                     if (res.statusCode === 200) {
-                        console.log('✅ Token validation successful');
+                        console.debug('✅ Token validation successful');
                         resolve(true);
                     } else {
-                        console.log(`❌ Token validation failed with status ${res.statusCode}: ${responseData}`);
+                        console.debug(`❌ Token validation failed with status ${res.statusCode}: ${responseData}`);
                         resolve(false);
                     }
                 });
             });
 
             req.on('error', (error) => {
-                console.log(`❌ Token validation failed with error: ${error.message}`);
+                console.debug(`❌ Token validation failed with error: ${error.message}`);
                 resolve(false);
             });
 
@@ -117,7 +117,7 @@ export class NeonApiService {
                 }
             };
 
-            console.log('Making request:', {
+            console.debug('Making request:', {
                 method,
                 path: `/api/v2${path}`,
                 headers: options.headers,
@@ -132,7 +132,7 @@ export class NeonApiService {
                     });
 
                     res.on('end', async () => {
-                        console.log('Response received:', {
+                        console.debug('Response received:', {
                             statusCode: res.statusCode,
                             headers: res.headers,
                             data: responseData
@@ -144,7 +144,7 @@ export class NeonApiService {
                             // a new token or re-authenticate.
                             const persistentApiToken = await this.authManager.getPersistentApiToken();
                             if (persistentApiToken) {
-                                console.log('401 received while using persistent API token – signing out.');
+                                console.debug('401 received while using persistent API token – signing out.');
                                 await this.authManager.signOut();
                                 reject(new Error('Session expired. Please sign in again.'));
                                 return;
@@ -154,14 +154,14 @@ export class NeonApiService {
                             // refreshed once (attempt >= 1) and still receive 401, sign the user out
                             // to avoid an infinite loop.
                             if (attempt >= 1) {
-                                console.log('Received 401 after token refresh – signing out to prevent loop.');
+                                console.debug('Received 401 after token refresh – signing out to prevent loop.');
                                 await this.authManager.signOut();
                                 reject(new Error('Session expired. Please sign in again.'));
                                 return;
                             }
 
                             try {
-                                console.log('Token expired, attempting refresh...');
+                                console.debug('Token expired, attempting refresh...');
                                 const success = await this.authManager.refreshTokenIfNeeded(true);
                                 
                                 if (!success) {
@@ -213,7 +213,7 @@ export class NeonApiService {
 
                 if (data) {
                     const jsonData = JSON.stringify(data);
-                    console.log('Sending request body:', jsonData);
+                    console.debug('Sending request body:', jsonData);
                     req.write(jsonData);
                 }
                 req.end();
@@ -226,13 +226,13 @@ export class NeonApiService {
 
     public async getOrgs(): Promise<NeonOrg[]> {
         try {
-            console.log('Fetching organizations...');
+            console.debug('Fetching organizations...');
             const response = await this.makeRequest<any>('/users/me/organizations');
-            console.log('Raw organizations response:', JSON.stringify(response, null, 2));
+            console.debug('Raw organizations response:', JSON.stringify(response, null, 2));
 
             // Ensure we return an array of organizations
             let orgs = Array.isArray(response) ? response : response.organizations || [];
-            console.log('Organizations array before processing:', JSON.stringify(orgs, null, 2));
+            console.debug('Organizations array before processing:', JSON.stringify(orgs, null, 2));
             
             // Check if user has access to personal account by attempting to get projects
             try {
@@ -245,7 +245,7 @@ export class NeonApiService {
             } catch (error) {
                 // If we get the specific error about org_id being required, don't add personal account
                 if (error instanceof Error && error.message.includes('org_id is required')) {
-                    console.log('User does not have access to personal account, skipping...');
+                    console.debug('User does not have access to personal account, skipping...');
                 } else {
                     // For other errors, still add personal account as it might be a temporary issue
                     orgs = [
@@ -255,7 +255,7 @@ export class NeonApiService {
                 }
             }
 
-            console.log('Final processed organizations:', JSON.stringify(orgs, null, 2));
+            console.debug('Final processed organizations:', JSON.stringify(orgs, null, 2));
             return orgs;
         } catch (error: unknown) {
             console.error('Error fetching organizations:', error);
@@ -264,7 +264,7 @@ export class NeonApiService {
     }
 
     public async getProjects(orgId: string): Promise<NeonProject[]> {
-        console.log(`Fetching projects from URL: /projects for orgId: ${orgId}`);
+        console.debug(`Fetching projects from URL: /projects for orgId: ${orgId}`);
         let retryCount = 0;
         const maxRetries = 3;
         const retryDelay = 1000;
@@ -273,10 +273,10 @@ export class NeonApiService {
             try {
                 // For personal account, don't include org_id parameter
                 const path = orgId === 'personal_account' ? '/projects' : `/projects?org_id=${orgId}`;
-                console.log(`Fetching projects from path: ${path}`);
+                console.debug(`Fetching projects from path: ${path}`);
                 
                 const response = await this.makeRequest<any>(path);
-                console.log('Raw API response:', response);
+                console.debug('Raw API response:', response);
 
                 // Handle different response formats
                 let projects: NeonProject[] = [];
@@ -290,11 +290,11 @@ export class NeonApiService {
                     projects = [response];
                 }
 
-                console.log('Processed projects:', projects);
+                console.debug('Processed projects:', projects);
                 return projects;
             } catch (error) {
                 retryCount++;
-                console.log(`Attempt ${retryCount} failed: ${error}`);
+                console.debug(`Attempt ${retryCount} failed: ${error}`);
                 
                 if (retryCount === maxRetries) {
                     throw new Error(`Failed to fetch projects: ${error}`);
@@ -309,15 +309,15 @@ export class NeonApiService {
 
     public async getBranches(projectId: string): Promise<NeonBranch[]> {
         try {
-            console.log(`🔍 API Request - getBranches: projectId="${projectId}"`);
-            console.log(`📡 Making API request to: /projects/${projectId}/branches`);
+            console.debug(`🔍 API Request - getBranches: projectId="${projectId}"`);
+            console.debug(`📡 Making API request to: /projects/${projectId}/branches`);
             
             const response = await this.makeRequest<any>(`/projects/${projectId}/branches`);
-            console.log(`✅ getBranches response:`, response);
+            console.debug(`✅ getBranches response:`, response);
             
             // Ensure we return an array of branches
             const branches = Array.isArray(response) ? response : response.branches || [];
-            console.log(`🌿 Processed branches (${branches.length} items):`, branches.map((b: any) => ({ id: b.id, name: b.name })));
+            console.debug(`🌿 Processed branches (${branches.length} items):`, branches.map((b: any) => ({ id: b.id, name: b.name })));
             
             return branches;
         } catch (error: unknown) {
@@ -328,15 +328,15 @@ export class NeonApiService {
 
     public async getDatabases(projectId: string, branchId: string): Promise<NeonDatabase[]> {
         try {
-            console.log(`🔍 API Request - getDatabases: projectId="${projectId}", branchId="${branchId}"`);
-            console.log(`📡 Making API request to: /projects/${projectId}/branches/${branchId}/databases`);
+            console.debug(`🔍 API Request - getDatabases: projectId="${projectId}", branchId="${branchId}"`);
+            console.debug(`📡 Making API request to: /projects/${projectId}/branches/${branchId}/databases`);
             
             const response = await this.makeRequest<any>(`/projects/${projectId}/branches/${branchId}/databases`);
-            console.log(`✅ getDatabases response:`, response);
+            console.debug(`✅ getDatabases response:`, response);
             
             // Ensure we return an array of databases
             const databases = Array.isArray(response) ? response : response.databases || [];
-            console.log(`📊 Processed databases (${databases.length} items):`, databases);
+            console.debug(`📊 Processed databases (${databases.length} items):`, databases);
             
             return databases;
         } catch (error: unknown) {
@@ -347,15 +347,15 @@ export class NeonApiService {
 
     public async getRoles(projectId: string, branchId: string): Promise<NeonRole[]> {
         try {
-            console.log(`🔍 API Request - getRoles: projectId="${projectId}", branchId="${branchId}"`);
-            console.log(`📡 Making API request to: /projects/${projectId}/branches/${branchId}/roles`);
+            console.debug(`🔍 API Request - getRoles: projectId="${projectId}", branchId="${branchId}"`);
+            console.debug(`📡 Making API request to: /projects/${projectId}/branches/${branchId}/roles`);
             
             const response = await this.makeRequest<any>(`/projects/${projectId}/branches/${branchId}/roles`);
-            console.log(`✅ getRoles response:`, response);
+            console.debug(`✅ getRoles response:`, response);
             
             // Ensure we return an array of roles
             const roles = Array.isArray(response) ? response : response.roles || [];
-            console.log(`👥 Processed roles (${roles.length} items):`, roles);
+            console.debug(`👥 Processed roles (${roles.length} items):`, roles);
             
             return roles;
         } catch (error: unknown) {
@@ -377,7 +377,7 @@ export class NeonApiService {
     public async getBranchEndpoint(projectId: string, branchId: string): Promise<string> {
         try {
             const response = await this.makeRequest<EndpointsResponse>(`/projects/${projectId}/branches/${branchId}/endpoints`);
-            console.log('Branch endpoints response:', response);
+            console.debug('Branch endpoints response:', response);
             
             if (!response.endpoints || !Array.isArray(response.endpoints) || response.endpoints.length === 0) {
                 console.error('No endpoints found in response:', response);
@@ -406,7 +406,7 @@ export class NeonApiService {
 
     public async resetBranchToParent(projectId: string, branchId: string): Promise<void> {
         try {
-            console.log(`Resetting branch ${branchId} in project ${projectId} to parent state`);
+            console.debug(`Resetting branch ${branchId} in project ${projectId} to parent state`);
             await this.makeRequest<void>(
                 `/projects/${projectId}/branches/${branchId}/reset_to_parent`,
                 'POST'

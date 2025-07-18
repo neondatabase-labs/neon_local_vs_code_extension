@@ -69,7 +69,7 @@ export class SecureTokenStorage {
         // Migrate access token
         const accessToken = config.get<string>('apiKey');
         if (accessToken) {
-            console.log('SecureTokenStorage: Migrating access token from config to secure storage');
+            console.debug('SecureTokenStorage: Migrating access token from config to secure storage');
             await this.storeAccessToken(accessToken);
             await config.update('apiKey', undefined, true);
             migrationPerformed = true;
@@ -78,7 +78,7 @@ export class SecureTokenStorage {
         // Migrate refresh token
         const refreshToken = config.get<string>('refreshToken');
         if (refreshToken) {
-            console.log('SecureTokenStorage: Migrating refresh token from config to secure storage');
+            console.debug('SecureTokenStorage: Migrating refresh token from config to secure storage');
             await this.storeRefreshToken(refreshToken);
             await config.update('refreshToken', undefined, true);
             migrationPerformed = true;
@@ -87,16 +87,16 @@ export class SecureTokenStorage {
         // Migrate persistent API token
         const persistentToken = config.get<string>('persistentApiToken');
         if (persistentToken) {
-            console.log('SecureTokenStorage: Migrating persistent API token from config to secure storage');
+            console.debug('SecureTokenStorage: Migrating persistent API token from config to secure storage');
             await this.storePersistentApiToken(persistentToken);
             await config.update('persistentApiToken', undefined, true);
             migrationPerformed = true;
         }
 
         if (migrationPerformed) {
-            console.log('SecureTokenStorage: Token migration completed successfully');
+            console.debug('SecureTokenStorage: Token migration completed successfully');
         } else {
-            console.log('SecureTokenStorage: No tokens found in config to migrate');
+            console.debug('SecureTokenStorage: No tokens found in config to migrate');
         }
     }
 } 

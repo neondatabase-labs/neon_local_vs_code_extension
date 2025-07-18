@@ -510,7 +510,7 @@ export class StateService implements IStateService {
     }
 
     public async updateState(newState: Partial<State>): Promise<void> {
-        console.log('Updating state:', {
+        console.debug('Updating state:', {
             current: this._state,
             updates: newState
         });
@@ -531,7 +531,7 @@ export class StateService implements IStateService {
         };
         await this.saveState();
         await this.updateViewData();
-        console.log('State updated:', this._state);
+        console.debug('State updated:', this._state);
     }
 
     getConnectionType(): 'existing' | 'new' {

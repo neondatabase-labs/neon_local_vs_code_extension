@@ -45,7 +45,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
   // Update lastConnectedState when connection state changes
   useEffect(() => {
     lastConnectedState.current = state.connection.connected;
-    console.log('Connection state changed:', {
+    console.debug('Connection state changed:', {
       connected: state.connection.connected,
       isStarting: state.connection.isStarting,
       lastConnectedState: lastConnectedState.current,
@@ -67,14 +67,14 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
   // Handle messages from the extension
   useEffect(() => {
     if (!messageHandlerRef.current) {
-      console.log('Setting up message handler');
+      console.debug('Setting up message handler');
       messageHandlerRef.current = (event: MessageEvent) => {
         const message = event.data;
-        console.log('Received message from extension:', message);
+        console.debug('Received message from extension:', message);
         
         switch (message.command) {
           case 'updateViewData':
-            console.log('Handling updateViewData:', message.data);
+            console.debug('Handling updateViewData:', message.data);
             updateState({
               ...message.data,
               connection: {
@@ -86,7 +86,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
             break;
             
           case 'clearState':
-            console.log('Clearing state');
+            console.debug('Clearing state');
             window.location.reload();
             break;
 
@@ -131,10 +131,10 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
   };
 
   const handleOrgSelection = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    console.log('Organization selection changed:', event.target.value);
+    console.debug('Organization selection changed:', event.target.value);
     const orgId = event.target.value;
     const selectedOrg = state.orgs.find(org => org.id === orgId);
-    console.log('Found org:', selectedOrg);
+    console.debug('Found org:', selectedOrg);
     
     // Clear all downstream selections and update state
     updateState({
@@ -373,7 +373,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
     setIsProcessingCommand(false);
   }, [state.connection.connected, state.connection.isStarting]);
 
-  console.log('state', state.connection);
+  console.debug('state', state.connection);
   return (
     <div className="app">
       {isConnected ? (
