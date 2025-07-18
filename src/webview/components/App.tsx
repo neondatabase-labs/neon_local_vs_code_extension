@@ -35,6 +35,8 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
   const messageHandlerRef = useRef<((event: MessageEvent) => void) | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
   const [isProcessingCommand, setIsProcessingCommand] = useState(false);
+  // Ref to synchronously block rapid double-clicks before React state updates
+  const processingRef = useRef(false);
   const [portInputValue, setPortInputValue] = useState<string>('');
   const [portError, setPortError] = useState<string | null>(null);
   
@@ -325,9 +327,12 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
   };
 
   const handleStartProxy = () => {
-    if (isProcessingCommand) {
+    // Synchronously block if a start/stop operation is already in progress
+    if (processingRef.current) {
       return;
     }
+
+    processingRef.current = true;
     setIsProcessingCommand(true);
     vscode.postMessage({
       command: 'startProxy',
@@ -345,9 +350,11 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
   };
 
   const handleStopProxy = () => {
-    if (isProcessingCommand) {
+    if (processingRef.current) {
       return;
     }
+
+    processingRef.current = true;
     setIsProcessingCommand(true);
     vscode.postMessage({
       command: 'stopProxy'
@@ -368,10 +375,15 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
     }
   };
 
-  // Add effect to reset processing state when connection state changes
+  // Clear the processing lock ONLY when the extension reports that it is no longer
+  // in the "starting" phase.  This prevents the Connect button from being
+  // re-enabled too early (while the container is still launching).
   useEffect(() => {
-    setIsProcessingCommand(false);
-  }, [state.connection.connected, state.connection.isStarting]);
+    if (!state.connection.isStarting) {
+      processingRef.current = false;
+      setIsProcessingCommand(false);
+    }
+  }, [state.connection.isStarting, state.connection.connected]);
 
   console.debug('state', state.connection);
   return (
