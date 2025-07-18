@@ -15,6 +15,7 @@ export class AuthManager {
   private _onDidChangeAuthentication = new vscode.EventEmitter<boolean>();
   private secureStorage: SecureTokenStorage;
   private _refreshPromise: Promise<boolean> | null = null;
+  private _initializationPromise: Promise<void>;
 
   readonly onDidChangeAuthentication = this._onDidChangeAuthentication.event;
 
@@ -62,8 +63,8 @@ export class AuthManager {
     
     // Initialize authentication state - will be updated when tokens are loaded
     this._isAuthenticated = !!this._tokenSet;
-    // Initialize auth state asynchronously
-    this.initializeAuthState().catch(console.error);
+    // Begin async initialization and keep a handle so callers can await readiness
+    this._initializationPromise = this.initializeAuthState().catch(console.error);
   }
 
   static getInstance(context: vscode.ExtensionContext): AuthManager {
@@ -138,7 +139,7 @@ export class AuthManager {
     }
   }
 
-  async refreshTokenIfNeeded(): Promise<boolean> {
+  async refreshTokenIfNeeded(force: boolean = false): Promise<boolean> {
     // If a refresh is already in progress, wait for it instead of starting another
     if (this._refreshPromise) {
       console.log('AuthManager: Awaiting ongoing token refresh');
@@ -157,9 +158,9 @@ export class AuthManager {
     const nowSeconds = Math.floor(Date.now() / 1000);
     const REFRESH_BUFFER = 60; // seconds before expiry we proactively refresh
 
-    if (expiresAtSeconds && expiresAtSeconds - nowSeconds > REFRESH_BUFFER) {
+    if (!force && expiresAtSeconds && expiresAtSeconds - nowSeconds > REFRESH_BUFFER) {
       console.log('AuthManager: Access token is still valid, skip refresh. Expires in', (expiresAtSeconds - nowSeconds), 'seconds');
-      return true; // token still valid
+      return true; // token still valid and not forced
     }
 
     try {
@@ -374,7 +375,10 @@ export class AuthManager {
         if (refreshAttempt) {
           console.log('AuthManager: Silent token refresh successful');
         } else {
-          console.log('AuthManager: Silent token refresh was not performed or failed, keeping existing authentication state');
+          console.log('AuthManager: Silent token refresh failed or was not possible – signing user out to avoid stale credentials.');
+          // Clear tokens and force the user to authenticate again.
+          // We purposely **do not** sign out if a persistent API token exists (handled earlier).
+          await this.signOut();
         }
       } catch (error) {
         // Silent refresh failed - log but don't show error to user
@@ -397,5 +401,14 @@ export class AuthManager {
     if (wasAuthenticated !== this._isAuthenticated) {
       this._onDidChangeAuthentication.fire(this._isAuthenticated);
     }
+  }
+
+  /**
+   * Returns a promise that resolves once the AuthManager has finished evaluating stored
+   * credentials (including any silent refresh attempts).  Call this before querying
+   * `isAuthenticated` on extension start-up to ensure the value is final.
+   */
+  public async ready(): Promise<void> {
+    await this._initializationPromise;
   }
 } 

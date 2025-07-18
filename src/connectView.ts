@@ -92,7 +92,8 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
         // Initial update with a small delay to ensure proper registration
         setTimeout(async () => {
             try {
-                // Use AuthManager to check authentication state consistently
+                // Ensure AuthManager has completed initialization (incl. silent refresh)
+                await this._authManager.ready();
                 const isAuthenticated = await this._authManager.isAuthenticatedAsync();
                 console.log('ConnectViewProvider: Authentication state check', { isAuthenticated });
 

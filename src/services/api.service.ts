@@ -95,7 +95,11 @@ export class NeonApiService {
         return persistentApiToken || apiKey || null;
     }
 
-    private async makeRequest<T>(path: string, method: string = 'GET', data?: any): Promise<T> {
+    // The `attempt` parameter tracks how many times we have retried the same request after a 401.
+    // 0 = first attempt, 1 = after one refresh attempt. We sign the user out if a second 401 is
+    // encountered because either (a) their persistent API token was revoked or (b) refreshing the
+    // OAuth token did not yield valid credentials. This prevents infinite retry loops.
+    private async makeRequest<T>(path: string, method: string = 'GET', data?: any, attempt: number = 0): Promise<T> {
         try {
             const token = await this.getToken();
             if (!token) {
@@ -135,9 +139,30 @@ export class NeonApiService {
                         });
 
                         if (res.statusCode === 401) {
+                            // If the user is currently relying on a persistent API token we cannot
+                            // refresh it – the only remedy is to sign them out so they can provide
+                            // a new token or re-authenticate.
+                            const persistentApiToken = await this.authManager.getPersistentApiToken();
+                            if (persistentApiToken) {
+                                console.log('401 received while using persistent API token – signing out.');
+                                await this.authManager.signOut();
+                                reject(new Error('Session expired. Please sign in again.'));
+                                return;
+                            }
+
+                            // For OAuth flows, allow a single refresh+retry cycle. If we already
+                            // refreshed once (attempt >= 1) and still receive 401, sign the user out
+                            // to avoid an infinite loop.
+                            if (attempt >= 1) {
+                                console.log('Received 401 after token refresh – signing out to prevent loop.');
+                                await this.authManager.signOut();
+                                reject(new Error('Session expired. Please sign in again.'));
+                                return;
+                            }
+
                             try {
                                 console.log('Token expired, attempting refresh...');
-                                const success = await this.authManager.refreshTokenIfNeeded();
+                                const success = await this.authManager.refreshTokenIfNeeded(true);
                                 
                                 if (!success) {
                                     await this.authManager.signOut();
@@ -152,9 +177,10 @@ export class NeonApiService {
                                     return;
                                 }
 
-                                // Retry the request with the new token
+                                // Retry the request once with the refreshed token. We increment the
+                                // `attempt` counter so that any subsequent 401 will trigger logout.
                                 try {
-                                    const result = await this.makeRequest<T>(path, method, data);
+                                    const result = await this.makeRequest<T>(path, method, data, attempt + 1);
                                     resolve(result);
                                 } catch (error) {
                                     reject(error);
