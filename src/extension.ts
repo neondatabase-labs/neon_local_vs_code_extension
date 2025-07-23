@@ -174,6 +174,87 @@ export async function activate(context: vscode.ExtensionContext) {
       vscode.window.showInformationMessage(
         `WebView Stats - Panels: ${stats.panels}, Views: ${stats.views}, Messages: ${stats.messageStats.successful} success / ${stats.messageStats.failed} failed`
       );
+    }),
+    vscode.commands.registerCommand('neon-local-connect.configureOAuthPort', async () => {
+      try {
+        // Get current configuration
+        const config = vscode.workspace.getConfiguration('neonLocal');
+        const currentPort = config.get<number | string>('oauthCallbackPort', 'auto');
+        
+        // Show quick pick for common options
+        const quickPickItems = [
+          {
+            label: 'Auto (Recommended)',
+            description: 'Let the system choose an available port automatically',
+            detail: 'This is the safest option and avoids port conflicts',
+            value: 'auto'
+          },
+          {
+            label: 'Custom Port',
+            description: 'Specify a specific port number',
+            detail: 'Enter a port number between 1024 and 65535',
+            value: 'custom'
+          }
+        ];
+
+        const selection = await vscode.window.showQuickPick(quickPickItems, {
+          placeHolder: `Current setting: ${currentPort}`,
+          title: 'Configure OAuth Callback Port',
+          ignoreFocusOut: true
+        });
+
+        if (!selection) {
+          return; // User cancelled
+        }
+
+        let newPortValue: string | number;
+
+        if (selection.value === 'auto') {
+          newPortValue = 'auto';
+        } else {
+          // Custom port - show input box
+          const portInput = await vscode.window.showInputBox({
+            prompt: 'Enter a port number (1024-65535)',
+            placeHolder: 'e.g., 8080',
+            value: typeof currentPort === 'number' ? currentPort.toString() : '',
+            validateInput: (value) => {
+              if (!value || value.trim() === '') {
+                return 'Port number is required';
+              }
+              
+              const portNumber = parseInt(value.trim(), 10);
+              if (isNaN(portNumber)) {
+                return 'Port must be a valid number';
+              }
+              
+              if (portNumber < 1024 || portNumber > 65535) {
+                return 'Port must be between 1024 and 65535';
+              }
+              
+              return undefined; // Valid
+            },
+            ignoreFocusOut: true
+          });
+
+          if (!portInput) {
+            return; // User cancelled
+          }
+
+          newPortValue = parseInt(portInput.trim(), 10);
+        }
+
+        // Update the configuration
+        await config.update('oauthCallbackPort', newPortValue, vscode.ConfigurationTarget.Global);
+
+        // Show confirmation
+        const portDisplay = newPortValue === 'auto' ? 'auto (dynamic)' : `${newPortValue} (static)`;
+        vscode.window.showInformationMessage(
+          `OAuth callback port set to: ${portDisplay}. This will take effect on the next authentication.`
+        );
+
+      } catch (error) {
+        vscode.window.showErrorMessage(`Failed to configure OAuth port: ${error instanceof Error ? error.message : String(error)}`);
+      }
     })
   );
 

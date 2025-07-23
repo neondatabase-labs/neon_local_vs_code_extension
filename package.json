@@ -2,7 +2,7 @@
   "name": "neon-local-connect",
   "displayName": "Neon Local Connect",
   "description": "Local development environment for Neon Databases with branch management",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "publisher": "databricks",
   "repository": {
     "type": "git",
@@ -51,6 +51,10 @@
       {
         "command": "neon-local-connect.launchPsql",
         "title": "Neon Local Connect: Launch PSQL"
+      },
+      {
+        "command": "neon-local-connect.configureOAuthPort",
+        "title": "Neon Local Connect: Configure OAuth Port"
       }
     ],
     "configuration": {
@@ -112,6 +116,15 @@
           "minimum": 1024,
           "maximum": 65535,
           "description": "Local port to use for the database proxy container",
+          "scope": "application"
+        },
+        "neonLocal.oauthCallbackPort": {
+          "type": [
+            "number",
+            "string"
+          ],
+          "default": "auto",
+          "description": "Port for OAuth callback server. Set to 'auto' for dynamic port assignment, or specify a port number (1024-65535)",
           "scope": "application"
         }
       }

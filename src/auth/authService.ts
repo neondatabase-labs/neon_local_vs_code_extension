@@ -3,7 +3,7 @@ import { createReadStream } from 'fs';
 import { AddressInfo } from 'net';
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { CONFIG } from '../constants';
+import { CONFIG, OAUTH } from '../constants';
 
 // oauth server timeouts
 const SERVER_TIMEOUT = 10_000;
@@ -31,6 +31,46 @@ export type AuthProps = {
   oauthHost: string;
   clientId: string;
   extensionUri: vscode.Uri;
+};
+
+/**
+ * Gets the configured OAuth callback port from VS Code settings
+ * @returns The configured port number or 0 for auto (dynamic) port assignment
+ */
+const getConfiguredOAuthPort = (): number => {
+  const config = vscode.workspace.getConfiguration(CONFIG.EXTENSION_NAME);
+  const configuredPort = config.get<number | string>(CONFIG.SETTINGS.OAUTH_CALLBACK_PORT, OAUTH.DEFAULT_PORT_AUTO);
+  
+  console.debug('🔍 OAuth port configuration:', { configuredPort, type: typeof configuredPort });
+  
+  // Handle 'auto' setting or string 'auto'
+  if (configuredPort === OAUTH.DEFAULT_PORT_AUTO || configuredPort === 'auto') {
+    console.debug('🔍 Using dynamic OAuth port (auto)');
+    return 0; // 0 means let the OS choose an available port
+  }
+  
+  // Handle numeric port
+  if (typeof configuredPort === 'number') {
+    if (configuredPort >= OAUTH.MIN_PORT && configuredPort <= OAUTH.MAX_PORT) {
+      console.debug('🔍 Using configured OAuth port:', configuredPort);
+      return configuredPort;
+    } else {
+      console.warn('⚠️  OAuth port out of range, falling back to auto:', configuredPort);
+      return 0;
+    }
+  }
+  
+  // Handle string numbers
+  if (typeof configuredPort === 'string') {
+    const portNumber = parseInt(configuredPort, 10);
+    if (!isNaN(portNumber) && portNumber >= OAUTH.MIN_PORT && portNumber <= OAUTH.MAX_PORT) {
+      console.debug('🔍 Using configured OAuth port (parsed from string):', portNumber);
+      return portNumber;
+    }
+  }
+  
+  console.warn('⚠️  Invalid OAuth port configuration, falling back to auto:', configuredPort);
+  return 0; // Fallback to dynamic port
 };
 
 export const refreshToken = async (
@@ -176,11 +216,34 @@ export const auth = async ({ oauthHost, clientId, extensionUri }: AuthProps) => 
   // Start HTTP server and wait till /callback is hit
   //
   console.debug('🔍 Starting HTTP Server for callback');
+  const configuredPort = getConfiguredOAuthPort();
   const server = createServer();
-  server.listen(0, '127.0.0.1', function (this: typeof server) {
-    console.debug(`🔍 Listening on port ${(this.address() as AddressInfo).port}`);
+  
+  // Try to listen on the configured port, with error handling for port conflicts
+  const listenPromise = new Promise<void>((resolve, reject) => {
+    const errorHandler = (error: any) => {
+      if (error.code === 'EADDRINUSE' && configuredPort !== 0) {
+        console.warn(`⚠️  OAuth port ${configuredPort} is already in use, falling back to dynamic port`);
+        server.removeListener('error', errorHandler);
+        server.listen(0, '127.0.0.1', function (this: typeof server) {
+          console.debug(`🔍 Listening on fallback port ${(this.address() as AddressInfo).port}`);
+          resolve();
+        });
+      } else {
+        reject(error);
+      }
+    };
+    
+    server.once('error', errorHandler);
+    server.listen(configuredPort, '127.0.0.1', function (this: typeof server) {
+      const actualPort = (this.address() as AddressInfo).port;
+      console.debug(`🔍 Listening on OAuth callback port ${actualPort}${configuredPort === 0 ? ' (auto)' : ' (configured)'}`);
+      server.removeListener('error', errorHandler);
+      resolve();
+    });
   });
-  await new Promise((resolve) => server.once('listening', resolve));
+  
+  await listenPromise;
   const listen_port = (server.address() as AddressInfo).port;
 
   let neonOAuthClient;
