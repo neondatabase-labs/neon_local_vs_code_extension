@@ -4,6 +4,7 @@ import { StateService } from './services/state.service';
 import { ConnectViewProvider } from './connectView';
 import { DatabaseViewProvider } from './databaseView';
 import { ActionsViewProvider } from './actionsView';
+import { SchemaViewProvider } from './schemaView';
 import { DockerService } from './services/docker.service';
 import { ViewData } from './types';
 import { NeonApiService } from './services/api.service';
@@ -153,6 +154,11 @@ export async function activate(context: vscode.ExtensionContext) {
     context.extensionUri,
     webviewService,
     stateService
+  );
+  const schemaViewProvider = new SchemaViewProvider(
+    context,
+    stateService,
+    authManager
   );
 
   // Register core commands
@@ -479,6 +485,22 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider('neonLocalDatabase', databaseViewProvider),
     vscode.window.registerWebviewViewProvider('neonLocalActions', actionsViewProvider)
   );
+
+  // Update context for schema view visibility
+  const updateSchemaViewContext = async () => {
+    const viewData = await stateService.getViewData();
+    vscode.commands.executeCommand('setContext', 'neonLocal.connected', viewData.connected);
+  };
+
+  // Initial context update
+  updateSchemaViewContext();
+
+  // Listen for connection state changes to update context
+  const originalSetIsProxyRunning = stateService.setIsProxyRunning.bind(stateService);
+  stateService.setIsProxyRunning = async (value: boolean) => {
+    await originalSetIsProxyRunning(value);
+    vscode.commands.executeCommand('setContext', 'neonLocal.connected', value);
+  };
 
   context.subscriptions.push(...disposables);
 } 
