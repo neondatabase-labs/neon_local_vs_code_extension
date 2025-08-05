@@ -2,7 +2,7 @@
   "name": "neon-local-connect",
   "displayName": "Neon Local Connect",
   "description": "Local development environment for Neon Databases with branch management",
-  "version": "1.0.7",
+  "version": "1.0.19",
   "publisher": "databricks",
   "repository": {
     "type": "git",
@@ -21,6 +21,10 @@
     "onCommand:neon-local-connect.configure",
     "onCommand:neon-local-connect.stopProxy",
     "onCommand:neon-local-connect.clearAuth",
+    "onCommand:neon-local-connect.forceTokenRefresh",
+    "onCommand:neon-local-connect.testRefreshTiming",
+    "onCommand:neon-local-connect.debugOAuthIssuer",
+    "onCommand:neon-local-connect.testTokenStates",
     "onView:neonLocalConnect",
     "onView:neonLocalActions"
   ],
@@ -55,6 +59,22 @@
       {
         "command": "neon-local-connect.configureOAuthPort",
         "title": "Neon Local Connect: Configure OAuth Port"
+      },
+      {
+        "command": "neon-local-connect.forceTokenRefresh",
+        "title": "Neon Local Connect: Force Token Refresh (Testing)"
+      },
+      {
+        "command": "neon-local-connect.testRefreshTiming",
+        "title": "Neon Local Connect: Test Refresh Timing (Debug)"
+      },
+      {
+        "command": "neon-local-connect.debugOAuthIssuer",
+        "title": "Neon Local Connect: Debug OAuth Issuer (Debug)"
+      },
+      {
+        "command": "neon-local-connect.testTokenStates",
+        "title": "Neon Local Connect: Test Token States (Debug)"
       }
     ],
     "configuration": {

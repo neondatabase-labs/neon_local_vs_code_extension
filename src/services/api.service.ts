@@ -162,7 +162,7 @@ export class NeonApiService {
 
                             try {
                                 console.debug('Token expired, attempting refresh...');
-                                const success = await this.authManager.refreshTokenIfNeeded(true);
+                                const success = await this.authManager.refreshTokenIfNeeded(true, 'api.service.401');
                                 
                                 if (!success) {
                                     await this.authManager.signOut();

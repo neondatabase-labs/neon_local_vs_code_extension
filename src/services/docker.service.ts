@@ -596,7 +596,7 @@ export class DockerService {
         // Only refresh if access token is close to expiry; avoid forcing immediately after a
         // successful silent refresh during extension startup which would invalidate the just-issued
         // refresh token and cause an "invalid_grant" error.
-        const refreshSuccess = await authManager.refreshTokenIfNeeded();
+                    const refreshSuccess = await authManager.refreshTokenIfNeeded(false, 'docker.service');
         if (!refreshSuccess) {
             console.debug('DockerService: Token refresh failed – signing user out.');
             await authManager.signOut();

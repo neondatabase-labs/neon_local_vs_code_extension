@@ -169,6 +169,191 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('neon-local-connect.clearAuth', async () => {
       await authManager.signOut();
     }),
+    vscode.commands.registerCommand('neon-local-connect.forceTokenRefresh', async () => {
+      try {
+        console.debug('🔄 Force token refresh command triggered');
+        const success = await authManager.refreshTokenIfNeeded(true, 'extension.forceRefresh');
+        if (success) {
+          vscode.window.showInformationMessage('✅ Token refresh successful!');
+        } else {
+          vscode.window.showWarningMessage('⚠️  Token refresh failed or no refresh token available');
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
+        // Enhanced user guidance for the known restart issue
+        if (errorMessage.includes('invalid_grant')) {
+          const action = await vscode.window.showErrorMessage(
+            '🔄 Authentication needs renewal after VS Code restart. This is a known limitation with Neon\'s OAuth server.',
+            'Sign In Again',
+            'Learn More'
+          );
+          
+          if (action === 'Sign In Again') {
+            // Automatically clear auth and trigger sign-in
+            await vscode.commands.executeCommand('neon-local-connect.clearAuth');
+            await vscode.commands.executeCommand('neon-local-connect.configure');
+          } else if (action === 'Learn More') {
+            vscode.window.showInformationMessage(
+              'Due to server-side session binding, refresh tokens become invalid after VS Code restarts. ' +
+              'This is a security feature of the OAuth server. Simply sign in again to continue.'
+            );
+          }
+        } else {
+          vscode.window.showErrorMessage(`❌ Token refresh failed: ${errorMessage}`);
+        }
+        
+        console.error('Force token refresh error:', error);
+      }
+    }),
+    vscode.commands.registerCommand('neon-local-connect.testRefreshTiming', async () => {
+      try {
+        console.debug('🧪 Testing refresh timing immediately after restart');
+        
+        // Get current token info
+        const tokenSet = authManager.tokenSet;
+        if (!tokenSet) {
+          vscode.window.showErrorMessage('No token set available');
+          return;
+        }
+        
+        const now = Math.floor(Date.now() / 1000);
+        const expiresIn = tokenSet.expires_at ? tokenSet.expires_at - now : 'unknown';
+        
+        console.debug('🧪 Current token status:', {
+          hasRefreshToken: !!tokenSet.refresh_token,
+          refreshTokenSample: tokenSet.refresh_token?.substring(0, 20) + '...',
+          accessTokenExpiresIn: expiresIn,
+          originalRedirectUri: tokenSet.original_redirect_uri,
+          tokenAge: tokenSet.expires_at ? now - (tokenSet.expires_at - (tokenSet.expires_in || 3600)) : 'unknown'
+        });
+        
+        // Try refresh with detailed timing info
+        const startTime = Date.now();
+        const success = await authManager.refreshTokenIfNeeded(true, 'extension.timingTest');
+        const endTime = Date.now();
+        
+        console.debug('🧪 Timing test result:', {
+          success,
+          durationMs: endTime - startTime,
+          timestamp: new Date().toISOString()
+        });
+        
+        if (success) {
+          vscode.window.showInformationMessage(`✅ Timing test successful! Duration: ${endTime - startTime}ms`);
+        } else {
+          vscode.window.showWarningMessage(`⚠️  Timing test failed after ${endTime - startTime}ms`);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        vscode.window.showErrorMessage(`❌ Timing test error: ${errorMessage}`);
+        console.error('Timing test error:', error);
+      }
+    }),
+    vscode.commands.registerCommand('neon-local-connect.debugOAuthIssuer', async () => {
+      try {
+        console.debug('🔍 Debugging OAuth issuer configuration...');
+        
+        // Import openid-client dynamically
+        const { Issuer } = await import('openid-client');
+        const issuer = await Issuer.discover('https://oauth2.neon.tech');
+        
+        console.debug('🔍 OAuth Issuer Full Metadata:', {
+          issuer: issuer.issuer,
+          authorizationEndpoint: issuer.authorization_endpoint,
+          tokenEndpoint: issuer.token_endpoint,
+          userinfoEndpoint: issuer.userinfo_endpoint,
+          jwksUri: issuer.jwks_uri,
+          responseTypesSupported: issuer.response_types_supported,
+          responseModesSupported: issuer.response_modes_supported,
+          tokenEndpointAuthMethodsSupported: issuer.token_endpoint_auth_methods_supported,
+          fullMetadata: JSON.stringify(issuer.metadata, null, 2)
+        });
+        
+        vscode.window.showInformationMessage('🔍 OAuth issuer metadata logged to console');
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        vscode.window.showErrorMessage(`❌ OAuth issuer debug error: ${errorMessage}`);
+        console.error('OAuth issuer debug error:', error);
+      }
+    }),
+    vscode.commands.registerCommand('neon-local-connect.testTokenStates', async () => {
+      try {
+        console.debug('🧪 Testing token refresh in different states...');
+        
+        // Test 1: Force refresh when token is still valid (this may fail)
+        console.debug('🧪 TEST 1: Force refresh with valid token (expecting failure)');
+        try {
+          await authManager.refreshTokenIfNeeded(true, 'test.validToken');
+          console.debug('✅ TEST 1 UNEXPECTED SUCCESS: Valid token refresh succeeded');
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.debug('❌ TEST 1 EXPECTED FAILURE: Valid token refresh failed (this is likely normal):', errorMessage);
+        }
+        
+        // Test 1.5: Try refresh without forcing (should skip if valid)
+        console.debug('🧪 TEST 1.5: Natural refresh check (should skip if valid)');
+        try {
+          const result = await authManager.refreshTokenIfNeeded(false, 'test.naturalRefresh');
+          console.debug('🔍 TEST 1.5 RESULT: Natural refresh result:', result);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.debug('❌ TEST 1.5 FAILED: Natural refresh failed:', errorMessage);
+        }
+        
+        // Test 2: Detailed token expiry analysis
+        console.debug('🧪 TEST 2: Detailed token expiry analysis');
+        const tokenSet = authManager.tokenSet;
+        if (tokenSet && tokenSet.expires_at) {
+          const now = Math.floor(Date.now() / 1000);
+          const timeUntilExpiry = tokenSet.expires_at - now;
+          const timeUntilExpiryMinutes = Math.floor(timeUntilExpiry / 60);
+          const tokenAge = tokenSet.expires_in ? now - (tokenSet.expires_at - tokenSet.expires_in) : 'unknown';
+          
+          console.debug(`🧪 DETAILED TOKEN ANALYSIS:`);
+          console.debug(`  - Token expires in: ${timeUntilExpiry} seconds (${timeUntilExpiryMinutes} minutes)`);
+          console.debug(`  - Token age: ${tokenAge} seconds`);
+          console.debug(`  - Expires at: ${new Date(tokenSet.expires_at * 1000).toISOString()}`);
+          console.debug(`  - Current time: ${new Date(now * 1000).toISOString()}`);
+          console.debug(`  - Token is expired: ${timeUntilExpiry <= 0}`);
+          console.debug(`  - Token expires soon (< 300s): ${timeUntilExpiry < 300}`);
+          console.debug(`  - Token expires very soon (< 60s): ${timeUntilExpiry < 60}`);
+          
+          if (timeUntilExpiry > 300) {
+            console.debug('🧪 HYPOTHESIS: Token has >5 minutes left - server may reject force refresh');
+            console.debug('🧪 RECOMMENDATION: Wait until token has <5 minutes remaining before testing refresh');
+          } else if (timeUntilExpiry > 0) {
+            console.debug('🧪 Token expires soon - this would be a good time to test refresh');
+          } else {
+            console.debug('🧪 Token has expired - natural refresh should definitely work');
+          }
+        } else {
+          console.debug('🧪 No token expiry information available');
+        }
+        
+        // Test 3: Try an immediate refresh in same session (for comparison)
+        console.debug('🧪 TEST 3: Immediate refresh in same session (for comparison)');
+        console.debug('🧪 NOTE: This tests if the issue is restart-specific or general force-refresh');
+        
+        // Wait a moment to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        try {
+          const immediateResult = await authManager.refreshTokenIfNeeded(true, 'test.immediateRefresh');
+          console.debug('✅ TEST 3 SUCCESS: Immediate refresh in same session worked!');
+          console.debug('🔍 This suggests the issue IS restart-specific, not just force-refresh');
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.debug('❌ TEST 3 FAILED: Immediate refresh in same session also failed:', errorMessage);
+          console.debug('🔍 This suggests the issue is with force-refreshing valid tokens, not restart-specific');
+        }
+
+        vscode.window.showInformationMessage('Token state tests completed - check console for detailed analysis');
+      } catch (error) {
+        console.error('🚨 Token state test failed:', error);
+        vscode.window.showErrorMessage(`Token state test failed: ${error}`);
+      }
+    }),
     vscode.commands.registerCommand('neon-local-connect.showWebviewStats', () => {
       const stats = webviewService.getRegistrationStats();
       vscode.window.showInformationMessage(

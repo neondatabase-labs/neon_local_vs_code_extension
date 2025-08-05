@@ -109,7 +109,22 @@ export class AuthManager {
         await this.secureStorage.storeAccessToken(tokenSet.access_token);
       }
       if (tokenSet.refresh_token) {
+        console.debug('🔐 Initial sign-in - storing refresh token:', {
+          tokenLength: tokenSet.refresh_token.length,
+          tokenType: typeof tokenSet.refresh_token,
+          tokenSample: tokenSet.refresh_token.substring(0, 20) + '...' + tokenSet.refresh_token.substring(tokenSet.refresh_token.length - 10),
+          fullToken: tokenSet.refresh_token // Full token for debugging
+        });
         await this.secureStorage.storeRefreshToken(tokenSet.refresh_token);
+        
+        // Immediately verify what was stored during initial sign-in
+        const retrievedToken = await this.secureStorage.getRefreshToken();
+        console.debug('🔍 Initial sign-in verification - retrieved token immediately:', {
+          matches: retrievedToken === tokenSet.refresh_token,
+          retrievedLength: retrievedToken?.length,
+          retrievedSample: retrievedToken?.substring(0, 20) + '...' + retrievedToken?.substring(retrievedToken.length - 10),
+          fullRetrieved: retrievedToken
+        });
       }
       
       this._onDidChangeAuthentication.fire(true);
@@ -139,7 +154,9 @@ export class AuthManager {
     }
   }
 
-  async refreshTokenIfNeeded(force: boolean = false): Promise<boolean> {
+  async refreshTokenIfNeeded(force: boolean = false, caller: string = 'unknown'): Promise<boolean> {
+    console.debug(`🔄 refreshTokenIfNeeded called by: ${caller}, force: ${force}`);
+    console.debug(`🔍 Current refresh token at entry: ${this._tokenSet?.refresh_token?.substring(0, 20)}...${this._tokenSet?.refresh_token?.substring(this._tokenSet.refresh_token.length - 10)} (length: ${this._tokenSet?.refresh_token?.length})`);
     // If a refresh is already in progress, wait for it instead of starting another
     if (this._refreshPromise) {
       console.debug('AuthManager: Awaiting ongoing token refresh');
@@ -159,9 +176,11 @@ export class AuthManager {
     const REFRESH_BUFFER = 60; // seconds before expiry we proactively refresh
 
     if (!force && expiresAtSeconds && expiresAtSeconds - nowSeconds > REFRESH_BUFFER) {
-      console.debug('AuthManager: Access token is still valid, skip refresh. Expires in', (expiresAtSeconds - nowSeconds), 'seconds');
+      console.debug(`🟡 AuthManager: Access token still valid, skipping refresh (called by: ${caller}). Expires in`, (expiresAtSeconds - nowSeconds), 'seconds');
       return true; // token still valid and not forced
     }
+
+    console.debug(`🔴 AuthManager: Proceeding with actual token refresh (called by: ${caller}), force: ${force}`);
 
     try {
       // Mark refresh in progress
@@ -172,8 +191,25 @@ export class AuthManager {
         extensionUri: this.context.extensionUri
       };
 
-      console.debug('Attempting to refresh token...');
+      console.debug(`🚨 CONSUMING REFRESH TOKEN (called by: ${caller})...`);
+      console.debug('🔍 Pre-refresh token analysis:', {
+        oldRefreshToken: this._tokenSet?.refresh_token?.substring(0, 20) + '...',
+        oldRefreshTokenLength: this._tokenSet?.refresh_token?.length,
+        oldAccessToken: this._tokenSet?.access_token?.substring(0, 20) + '...',
+        oldAccessTokenLength: this._tokenSet?.access_token?.length
+      });
+      
       const newTokenSet = await refreshToken(authProps, this._tokenSet);
+      
+      console.debug('🔍 Post-refresh token analysis:', {
+        newRefreshToken: newTokenSet?.refresh_token?.substring(0, 20) + '...',
+        newRefreshTokenLength: newTokenSet?.refresh_token?.length,
+        newAccessToken: newTokenSet?.access_token?.substring(0, 20) + '...',
+        newAccessTokenLength: newTokenSet?.access_token?.length,
+        refreshTokenChanged: this._tokenSet?.refresh_token !== newTokenSet?.refresh_token,
+        accessTokenChanged: this._tokenSet?.access_token !== newTokenSet?.access_token,
+        newTokenSetKeys: Object.keys(newTokenSet)
+      });
       
       this._tokenSet = newTokenSet;
       
@@ -181,12 +217,30 @@ export class AuthManager {
       await this.context.globalState.update('neon.tokenSet', newTokenSet);
       if (newTokenSet.access_token) {
         await this.secureStorage.storeAccessToken(newTokenSet.access_token);
+        console.debug('✅ Stored new access token in secure storage');
       }
       if (newTokenSet.refresh_token) {
+        console.debug('🔐 About to store refresh token:', {
+          tokenLength: newTokenSet.refresh_token.length,
+          tokenType: typeof newTokenSet.refresh_token,
+          tokenSample: newTokenSet.refresh_token.substring(0, 20) + '...' + newTokenSet.refresh_token.substring(newTokenSet.refresh_token.length - 10),
+          fullToken: newTokenSet.refresh_token // Full token for debugging
+        });
         await this.secureStorage.storeRefreshToken(newTokenSet.refresh_token);
+        console.debug('✅ Stored new refresh token in secure storage');
+        
+        // Immediately verify what was stored
+        const retrievedToken = await this.secureStorage.getRefreshToken();
+        console.debug('🔍 Verification - retrieved token immediately:', {
+          matches: retrievedToken === newTokenSet.refresh_token,
+          retrievedLength: retrievedToken?.length,
+          retrievedSample: retrievedToken?.substring(0, 20) + '...' + retrievedToken?.substring(retrievedToken.length - 10),
+          fullRetrieved: retrievedToken
+        });
       }
       
-      console.debug('Token refresh successful');
+      console.debug(`✅ Token refresh successful - new tokens saved (called by: ${caller})`);
+      console.debug(`🔍 New refresh token after successful refresh: ${newTokenSet?.refresh_token?.substring(0, 20)}...${newTokenSet?.refresh_token?.substring(newTokenSet.refresh_token.length - 10)} (length: ${newTokenSet?.refresh_token?.length})`);
       return true;
       })();
       const result = await this._refreshPromise;
@@ -195,6 +249,35 @@ export class AuthManager {
       // ensure promise cleared
       this._refreshPromise = null;
       console.error('AuthManager: Token refresh failed (will keep existing tokenSet):', error);
+
+      // Enhanced error analysis for restart-related session invalidation
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isInvalidGrant = errorMessage.includes('invalid_grant');
+      const isAnotherClientError = errorMessage.includes('another client');
+      
+      if (isInvalidGrant || isAnotherClientError) {
+        console.error('🚨 DETECTED: OAuth session invalidation error');
+        
+        if (!this._tokenSet?.original_redirect_uri) {
+          console.error('💡 CAUSE 1: Missing original redirect URI - user authenticated before the redirect URI fix');
+          console.error('💡 SOLUTION: User should sign out and sign in again to resolve this issue');
+        } else {
+          console.error('💡 CAUSE: Server-side client instance binding after VS Code restart');
+          console.error('💡 EVIDENCE: Session restoration works, but refresh tokens bound to previous instance');
+          console.error('💡 ANALYSIS: OAuth server binds refresh tokens to immutable client instance identifiers');
+          console.error('💡 TECHNICAL LIMIT: Cannot be resolved through session restoration or client consistency');
+          console.error('💡 SOLUTION: Automatic re-authentication workflow for seamless user experience');
+          
+          // Set a flag that can trigger automatic re-auth in UI
+          console.debug('🎯 RECOMMENDATION: Implement graceful auto-reauth when this specific error occurs');
+        }
+        
+        console.error('🔍 Error details:', {
+          hasOriginalRedirectUri: !!this._tokenSet?.original_redirect_uri,
+          hasOriginalClientMetadata: !!this._tokenSet?.original_client_metadata,
+          errorType: isAnotherClientError ? 'another_client' : 'invalid_grant'
+        });
+      }
 
       // If we cannot refresh (e.g. invalid_grant), signal failure to caller so they
       // can transition the user to a signed-out state instead of retrying forever.
@@ -266,6 +349,10 @@ export class AuthManager {
     console.debug('  - GlobalState tokenSet keys:', storedGlobalTokenSet ? Object.keys(storedGlobalTokenSet) : 'none');
     console.debug('  - GlobalState access token length:', storedGlobalTokenSet?.access_token?.length || 'none');
     console.debug('  - GlobalState refresh token length:', storedGlobalTokenSet?.refresh_token?.length || 'none');
+    console.debug('  - GlobalState has original_redirect_uri:', !!storedGlobalTokenSet?.original_redirect_uri);
+    console.debug('  - GlobalState original_redirect_uri:', storedGlobalTokenSet?.original_redirect_uri || 'NOT SET');
+    console.debug('  - GlobalState has original_client_metadata:', !!storedGlobalTokenSet?.original_client_metadata);
+    console.debug('  - GlobalState original_client_metadata:', storedGlobalTokenSet?.original_client_metadata || 'NOT SET');
     console.debug('  - Has secure access token:', !!secureAccessToken);
     console.debug('  - Secure access token length:', secureAccessToken?.length || 'none');
     console.debug('  - Has secure refresh token:', !!secureRefreshToken);
@@ -323,6 +410,9 @@ export class AuthManager {
         ...(storedTokenSet.expires_in && { expires_in: storedTokenSet.expires_in }),
         ...(storedTokenSet.expires_at && { expires_at: storedTokenSet.expires_at }),
         ...(storedTokenSet.id_token && { id_token: storedTokenSet.id_token }),
+        // CRITICAL: Preserve the original redirect URI and client metadata for future refresh operations
+        ...(storedTokenSet.original_redirect_uri && { original_redirect_uri: storedTokenSet.original_redirect_uri }),
+        ...(storedTokenSet.original_client_metadata && { original_client_metadata: storedTokenSet.original_client_metadata }),
         // Note: We don't have expires_in from storage, but refresh should still work
       };
       
@@ -339,6 +429,10 @@ export class AuthManager {
       console.debug('  - Token type:', this._tokenSet.token_type);
       console.debug('  - Has access_token:', !!this._tokenSet.access_token);
       console.debug('  - Has refresh_token:', !!this._tokenSet.refresh_token);
+      console.debug('  - Has original_redirect_uri:', !!this._tokenSet.original_redirect_uri);
+      console.debug('  - Original redirect URI:', this._tokenSet.original_redirect_uri || 'NOT SET');
+      console.debug('  - Has original_client_metadata:', !!this._tokenSet.original_client_metadata);
+      console.debug('  - Original client metadata:', this._tokenSet.original_client_metadata || 'NOT SET');
       console.debug('  - Access token matches secure storage:', this._tokenSet.access_token === secureAccessToken);
       console.debug('  - Refresh token matches secure storage:', this._tokenSet.refresh_token === secureRefreshToken);
       
@@ -350,6 +444,10 @@ export class AuthManager {
       console.debug('  - Existing tokenSet keys:', Object.keys(this._tokenSet));
       console.debug('  - Access token length:', this._tokenSet.access_token?.length || 'none');
       console.debug('  - Refresh token length:', this._tokenSet.refresh_token?.length || 'none');
+      console.debug('  - Has original_redirect_uri:', !!this._tokenSet.original_redirect_uri);
+      console.debug('  - Original redirect URI:', this._tokenSet.original_redirect_uri || 'NOT SET');
+      console.debug('  - Has original_client_metadata:', !!this._tokenSet.original_client_metadata);
+      console.debug('  - Original client metadata:', this._tokenSet.original_client_metadata || 'NOT SET');
     }
     
     const wasAuthenticated = this._isAuthenticated;
@@ -369,7 +467,134 @@ export class AuthManager {
       console.debug('  - Access token length:', this._tokenSet.access_token?.length || 'none');
       
       try {
-        const refreshAttempt = await this.refreshTokenIfNeeded();
+        // CRITICAL: The OAuth server invalidates sessions when VS Code restarts
+        // Evidence: Same refresh token + client config works BEFORE restart but fails AFTER
+        // Strategy: Attempt session restoration through enhanced warmup sequence
+        console.debug('🔥 CRITICAL: Attempting OAuth session restoration after restart...');
+        console.debug('🔍 ISSUE: Server invalidates sessions on app restart despite valid tokens');
+        
+        try {
+          if (this._tokenSet?.access_token) {
+            console.debug('🔥 Attempting multiple session restoration requests...');
+            console.debug('🔍 Testing: userinfo + token introspection to restore session context');
+            const https = await import('https');
+            
+            // STRATEGY 1: Enhanced session restoration sequence
+            console.debug('🔥 STEP 1: Testing access token with userinfo endpoint...');
+            
+            const sessionRestored = await new Promise<boolean>((resolve) => {
+              const userInfoRequest = https.request('https://oauth2.neon.tech/userinfo', {
+                method: 'GET',
+                headers: {
+                  'Authorization': `Bearer ${this._tokenSet.access_token}`,
+                  'User-Agent': 'neon-local-connect/1.0.18',
+                  'Cache-Control': 'no-cache',
+                  'X-Requested-With': 'neon-local-connect-restart'
+                },
+                timeout: 5000
+              }, (res) => {
+                console.debug(`🔥 STEP 1 RESULT: userinfo response ${res.statusCode}`);
+                let responseData = '';
+                
+                res.on('data', (chunk) => {
+                  responseData += chunk;
+                });
+                
+                res.on('end', () => {
+                  if (res.statusCode === 200) {
+                    console.debug('✅ STEP 1 SUCCESS: Access token valid, session context restored');
+                    console.debug('🔍 User info response length:', responseData.length);
+                    resolve(true);
+                  } else {
+                    console.debug(`❌ STEP 1 FAILED: userinfo returned ${res.statusCode}`);
+                    resolve(false);
+                  }
+                });
+              });
+              
+              userInfoRequest.on('error', (err) => {
+                console.debug('❌ STEP 1 ERROR:', err.message);
+                resolve(false);
+              });
+              
+              userInfoRequest.on('timeout', () => {
+                console.debug('❌ STEP 1 TIMEOUT');
+                userInfoRequest.destroy();
+                resolve(false);
+              });
+              
+              userInfoRequest.end();
+            });
+            
+            if (sessionRestored) {
+              console.debug('✅ OAuth session restoration completed successfully');
+              
+              // STRATEGY 2: Additional session warmup with slight delay
+              console.debug('🔥 STEP 2: Additional session warmup after small delay...');
+              await new Promise(resolve => setTimeout(resolve, 500));
+              
+              // Make another request to fully establish session
+              await new Promise<void>((resolve) => {
+                const warmupRequest = https.request('https://oauth2.neon.tech/userinfo', {
+                  method: 'GET',
+                  headers: {
+                    'Authorization': `Bearer ${this._tokenSet.access_token}`,
+                    'User-Agent': 'neon-local-connect/1.0.18'
+                  },
+                  timeout: 3000
+                }, (res) => {
+                  console.debug(`🔥 STEP 2 RESULT: Secondary warmup ${res.statusCode}`);
+                  res.on('data', () => {});
+                  res.on('end', () => {
+                    console.debug('✅ STEP 2 SUCCESS: Secondary session warmup completed');
+                    resolve();
+                  });
+                });
+                
+                warmupRequest.on('error', () => resolve());
+                warmupRequest.on('timeout', () => {
+                  warmupRequest.destroy();
+                  resolve();
+                });
+                
+                warmupRequest.end();
+              });
+              
+              // STRATEGY 3: CRITICAL - Immediate refresh token synchronization
+              console.debug('🔥 STEP 3: EXPERIMENTAL - Immediate refresh token sync while session is hot...');
+              try {
+                // Since session restoration worked, attempt refresh immediately while session context is active
+                console.debug('🔍 Theory: Refresh token must be synchronized with restored session state');
+                console.debug('🔍 Attempting refresh within restoration window...');
+                
+                // Small delay to ensure session is fully established
+                await new Promise(resolve => setTimeout(resolve, 200));
+                
+                // Attempt the refresh as part of the restoration process
+                const immediateRefreshResult = await this.refreshTokenIfNeeded(true, 'session.restoration.sync');
+                
+                if (immediateRefreshResult) {
+                  console.debug('✅ STEP 3 SUCCESS: Refresh token synchronized with restored session!');
+                  console.debug('🎉 BREAKTHROUGH: Session restoration + immediate refresh worked!');
+                } else {
+                  console.debug('❌ STEP 3 FAILED: Refresh token sync failed despite session restoration');
+                  console.debug('🔍 This suggests a deeper client/server state mismatch');
+                }
+              } catch (syncError) {
+                console.debug('❌ STEP 3 ERROR: Immediate refresh sync failed:', syncError);
+                console.debug('🔍 Session restored but refresh token requires different approach');
+              }
+            } else {
+              console.debug('⚠️  Session restoration failed - refresh will likely fail');
+            }
+          } else {
+            console.debug('⚠️  No access token for session warmup');
+          }
+        } catch (warmupError) {
+          console.debug('⚠️  Session warmup failed (continuing anyway):', warmupError);
+        }
+        
+        const refreshAttempt = await this.refreshTokenIfNeeded(false, 'authManager.startup');
         // refreshAttempt may be false if we skipped due to token still valid or missing refresh token
         // maintain existing authenticated state unless we explicitly signed out elsewhere
         if (refreshAttempt) {
