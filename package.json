@@ -55,6 +55,25 @@
       {
         "command": "neon-local-connect.configureOAuthPort",
         "title": "Neon Local Connect: Configure OAuth Port"
+      },
+      {
+        "command": "neonLocal.schema.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "neonLocal.schema.copyName",
+        "title": "Copy Name"
+      },
+
+      {
+        "command": "neonLocal.schema.openSqlQuery",
+        "title": "Open SQL Query"
+      },
+      {
+        "command": "neonLocal.schema.queryTable",
+        "title": "Query Table",
+        "icon": "$(play)"
       }
     ],
     "configuration": {
@@ -144,10 +163,42 @@
           "type": "webview",
           "id": "neonLocalConnect",
           "name": "Connect"
+        },
+        {
+          "type": "tree",
+          "id": "neonLocalSchema",
+          "name": "Database Schema",
+          "when": "neonLocal.connected"
         }
       ]
     },
-    "menus": {}
+    "menus": {
+      "view/title": [
+        {
+          "command": "neonLocal.schema.refresh",
+          "when": "view == neonLocalSchema",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "neonLocal.schema.copyName",
+          "when": "view == neonLocalSchema",
+          "group": "1_copy"
+        },
+
+        {
+          "command": "neonLocal.schema.openSqlQuery",
+          "when": "view == neonLocalSchema",
+          "group": "4_query"
+        },
+        {
+          "command": "neonLocal.schema.queryTable",
+          "when": "view == neonLocalSchema && (viewItem == table || viewItem == view)",
+          "group": "4_query"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -166,6 +217,7 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.10.0",
     "@types/opener": "^1.4.3",
+    "@types/pg": "^8.10.9",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@types/sinon": "^17.0.4",
@@ -210,6 +262,7 @@
     "dockerode": "^4.0.2",
     "opener": "^1.5.2",
     "openid-client": "^5.7.0",
+    "pg": "^8.11.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   }
