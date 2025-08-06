@@ -303,6 +303,34 @@ export class TableDataPanel {
             gap: 8px;
         }
 
+        .table-indicator {
+            display: flex;
+            align-items: center;
+            padding: 4px 8px;
+            background-color: var(--vscode-toolbar-activeBackground, var(--vscode-tab-activeBackground));
+            color: var(--vscode-badge-foreground);
+            border: 1px solid var(--vscode-badge-background);
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            margin-right: 8px;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        .table-indicator .table-icon {
+            width: 12px;
+            height: 12px;
+            margin-right: 4px;
+            flex-shrink: 0;
+        }
+
+        .table-indicator .table-icon svg {
+            width: 100%;
+            height: 100%;
+            color: var(--vscode-badge-foreground);
+        }
+
         .btn {
             background-color: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
@@ -730,11 +758,19 @@ export class TableDataPanel {
 <body>
     <div class="toolbar">
         <div class="toolbar-left">
-            <h3 style="margin: 0;">Table: ${this.schema}.${this.tableName}</h3>
-        </div>
-        <div class="toolbar-right">
             <button class="btn" id="addRowBtn">Add Row</button>
             <button class="btn btn-secondary" id="refreshBtn">Refresh</button>
+            <span class="table-indicator" title="Current table">
+                <span class="table-icon">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M1 3.5A2.5 2.5 0 0 1 3.5 1h9A2.5 2.5 0 0 1 15 3.5v9a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 1 12.5v-9Z" stroke="currentColor" stroke-width="1" fill="none"/>
+                        <path d="M1 6h14M1 10h14M6 1v14" stroke="currentColor" stroke-width="1"/>
+                    </svg>
+                </span>
+                <span>${this.schema}.${this.tableName}</span>
+            </span>
+        </div>
+        <div class="toolbar-right">
             <button class="btn btn-secondary" id="openNeonConsoleBtn" title="Open this table in Neon console">Open in Neon console</button>
         </div>
     </div>

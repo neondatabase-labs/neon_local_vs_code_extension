@@ -332,6 +332,38 @@ export class SqlQueryPanel {
             background-color: var(--vscode-button-secondaryHoverBackground) !important;
         }
 
+        .database-indicator {
+            display: flex;
+            align-items: center;
+            padding: 4px 8px;
+            background-color: var(--vscode-toolbar-activeBackground, var(--vscode-tab-activeBackground));
+            color: var(--vscode-badge-foreground);
+            border: 1px solid var(--vscode-badge-background);
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            margin-right: 8px;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        .database-indicator:empty {
+            display: none;
+        }
+
+        .database-indicator .db-icon {
+            width: 12px;
+            height: 12px;
+            margin-right: 4px;
+            flex-shrink: 0;
+        }
+
+        .database-indicator .db-icon svg {
+            width: 100%;
+            height: 100%;
+            color: var(--vscode-badge-foreground);
+        }
+
         .query-editor {
             flex: 1;
             min-height: 100px;
@@ -645,6 +677,7 @@ export class SqlQueryPanel {
                 <div class="toolbar-left">
                     <button id="executeBtn">Run Query</button>
                     <button id="exportBtn" disabled>Export Results</button>
+                    <span id="databaseIndicator" class="database-indicator" title="Current database"></span>
                     <span id="statusText"></span>
                 </div>
                 <div class="toolbar-right">
@@ -705,6 +738,7 @@ export class SqlQueryPanel {
         const executeBtn = document.getElementById('executeBtn');
         const exportBtn = document.getElementById('exportBtn');
         const openNeonConsoleBtn = document.getElementById('openNeonConsoleBtn');
+        const databaseIndicator = document.getElementById('databaseIndicator');
         const resultsContainer = document.getElementById('resultsContainer');
         const resultsInfo = document.getElementById('resultsInfo');
         const statusBar = document.getElementById('statusBar');
@@ -823,6 +857,18 @@ export class SqlQueryPanel {
                 case 'initialize':
                     if (message.query) {
                         queryEditor.value = message.query;
+                    }
+                    if (message.database) {
+                        databaseIndicator.innerHTML = 
+                            '<span class="db-icon">' +
+                                '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+                                    '<path d="M13 4C13 2.5 10.3 1 8 1S3 2.5 3 4v8c0 1.5 2.7 3 5 3s5-1.5 5-3V4z" stroke="currentColor" stroke-width="1" fill="none"/>' +
+                                    '<path d="M13 4c0 1.5-2.7 3-5 3S3 5.5 3 4" stroke="currentColor" stroke-width="1" fill="none"/>' +
+                                    '<path d="M13 8c0 1.5-2.7 3-5 3S3 9.5 3 8" stroke="currentColor" stroke-width="1" fill="none"/>' +
+                                '</svg>' +
+                            '</span>' +
+                            '<span>' + message.database + '</span>';
+                        databaseIndicator.title = 'Current database: ' + message.database;
                     }
                     updateStatus('Ready');
                     break;
