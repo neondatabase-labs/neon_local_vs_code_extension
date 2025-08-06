@@ -417,10 +417,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     }
                     await this.updateView();
                     break;
-                case 'updateDriver':
-                    await this._stateService.setSelectedDriver(message.driver);
-                    await this.updateView();
-                    break;
+
                 case 'updatePort':
                     await this._stateService.setPort(message.port);
                     await this.updateView();
