@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { Client } from 'pg';
 import { StateService } from './state.service';
+import { ConnectionPoolService, ManagedClient } from './connectionPool.service';
 
 export interface QueryResult {
     columns: string[];
@@ -18,35 +19,21 @@ export interface QueryError {
 }
 
 export class SqlQueryService {
+    private connectionPool: ConnectionPoolService;
+
     constructor(
         private stateService: StateService,
         private context: vscode.ExtensionContext
-    ) {}
+    ) {
+        this.connectionPool = new ConnectionPoolService(stateService);
+    }
 
-    private async getConnection(database?: string): Promise<Client> {
-        const viewData = await this.stateService.getViewData();
-        
-        if (!viewData.connected) {
-            throw new Error('Database is not connected. Please connect first.');
-        }
-
-        const client = new Client({
-            host: 'localhost',
-            port: viewData.port,
-            database: database || viewData.selectedDatabase || 'postgres',
-            user: 'neon',
-            password: 'npg',
-            ssl: {
-                rejectUnauthorized: false // Accept self-signed certificates
-            }
-        });
-
-        await client.connect();
-        return client;
+    private async getConnection(database?: string): Promise<ManagedClient> {
+        return await this.connectionPool.getConnection(database);
     }
 
     async executeQuery(sql: string, database?: string): Promise<QueryResult> {
-        let client: Client | null = null;
+        let client: ManagedClient | null = null;
         const startTime = Date.now();
         
         try {
@@ -95,7 +82,7 @@ export class SqlQueryService {
             throw queryError;
         } finally {
             if (client) {
-                await client.end();
+                client.release();
             }
         }
     }
@@ -115,7 +102,7 @@ export class SqlQueryService {
         indexes: any[];
         constraints: any[];
     }> {
-        let client: Client | null = null;
+        let client: ManagedClient | null = null;
         
         try {
             client = await this.getConnection(database);
@@ -166,7 +153,7 @@ export class SqlQueryService {
             throw error;
         } finally {
             if (client) {
-                await client.end();
+                client.release();
             }
         }
     }

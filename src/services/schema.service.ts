@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { Client } from 'pg';
 import { StateService } from './state.service';
+import { ConnectionPoolService, ManagedClient } from './connectionPool.service';
 
 export interface SchemaItem {
     id: string;
@@ -46,39 +47,22 @@ export interface FunctionInfo {
 }
 
 export class SchemaService {
+    private connectionPool: ConnectionPoolService;
+
     constructor(
         private stateService: StateService,
         private context: vscode.ExtensionContext
-    ) {}
+    ) {
+        this.connectionPool = new ConnectionPoolService(stateService);
+    }
 
-    private async getConnection(database?: string): Promise<Client> {
-        const viewData = await this.stateService.getViewData();
-        
-        if (!viewData.connected) {
-            throw new Error('Database is not connected. Please connect first.');
-        }
-
-        const client = new Client({
-            host: 'localhost',
-            port: viewData.port,
-            database: database || viewData.selectedDatabase || 'postgres',
-            user: 'neon',
-            password: 'npg',
-            ssl: {
-                rejectUnauthorized: false // Accept self-signed certificates
-            }
-        });
-
-        await client.connect();
-        return client;
+    private async getConnection(database?: string): Promise<ManagedClient> {
+        return await this.connectionPool.getConnection(database);
     }
 
     async getDatabases(): Promise<SchemaItem[]> {
-        let client: Client | null = null;
         try {
-            client = await this.getConnection('postgres'); // Connect to postgres database to list all databases
-            
-            const result = await client.query(`
+            const result = await this.connectionPool.executeQuery(`
                 SELECT 
                     datname as name,
                     pg_size_pretty(pg_database_size(datname)) as size
@@ -86,7 +70,7 @@ export class SchemaService {
                 WHERE datistemplate = false 
                     AND datname NOT IN ('postgres', 'template0', 'template1')
                 ORDER BY datname
-            `);
+            `, [], 'postgres'); // Connect to postgres database to list all databases
 
             return result.rows.map((row, index) => ({
                 id: `db_${row.name}`,
@@ -98,26 +82,23 @@ export class SchemaService {
             }));
         } catch (error) {
             console.error('Error fetching databases:', error);
-            throw error;
-        } finally {
-            if (client) {
-                await client.end();
+            // Provide a more user-friendly error message
+            if (error instanceof Error && error.message.includes('AggregateError')) {
+                throw new Error('Unable to connect to the database proxy. Please ensure the Neon proxy container is running and accessible.');
             }
+            throw error;
         }
     }
 
     async getSchemas(database: string): Promise<SchemaItem[]> {
-        let client: Client | null = null;
         try {
-            client = await this.getConnection(database);
-            
-            const result = await client.query(`
+            const result = await this.connectionPool.executeQuery(`
                 SELECT 
                     schema_name as name
                 FROM information_schema.schemata 
                 WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_toast', 'pg_toast_temp_1')
                 ORDER BY schema_name
-            `);
+            `, [], database);
 
             return result.rows.map((row) => ({
                 id: `schema_${database}_${row.name}`,
@@ -129,19 +110,12 @@ export class SchemaService {
         } catch (error) {
             console.error('Error fetching schemas:', error);
             throw error;
-        } finally {
-            if (client) {
-                await client.end();
-            }
         }
     }
 
     async getTables(database: string, schema: string): Promise<SchemaItem[]> {
-        let client: Client | null = null;
         try {
-            client = await this.getConnection(database);
-            
-            const result = await client.query(`
+            const result = await this.connectionPool.executeQuery(`
                 SELECT 
                     table_name as name,
                     table_type
@@ -149,7 +123,7 @@ export class SchemaService {
                 WHERE table_schema = $1
                     AND table_type IN ('BASE TABLE', 'VIEW', 'MATERIALIZED VIEW')
                 ORDER BY table_type, table_name
-            `, [schema]);
+            `, [schema], database);
 
             return result.rows.map((row) => ({
                 id: `table_${database}_${schema}_${row.name}`,
@@ -163,19 +137,12 @@ export class SchemaService {
         } catch (error) {
             console.error('Error fetching tables:', error);
             throw error;
-        } finally {
-            if (client) {
-                await client.end();
-            }
         }
     }
 
     async getColumns(database: string, schema: string, table: string): Promise<SchemaItem[]> {
-        let client: Client | null = null;
         try {
-            client = await this.getConnection(database);
-            
-            const result = await client.query(`
+            const result = await this.connectionPool.executeQuery(`
                 SELECT 
                     c.column_name as name,
                     c.data_type,
@@ -205,7 +172,7 @@ export class SchemaService {
                 ) fk ON c.column_name = fk.column_name
                 WHERE c.table_schema = $1 AND c.table_name = $2
                 ORDER BY c.ordinal_position
-            `, [schema, table]);
+            `, [schema, table], database);
 
             return result.rows.map((row) => ({
                 id: `column_${database}_${schema}_${table}_${row.name}`,
@@ -226,19 +193,12 @@ export class SchemaService {
         } catch (error) {
             console.error('Error fetching columns:', error);
             throw error;
-        } finally {
-            if (client) {
-                await client.end();
-            }
         }
     }
 
     async getIndexes(database: string, schema: string, table: string): Promise<SchemaItem[]> {
-        let client: Client | null = null;
         try {
-            client = await this.getConnection(database);
-            
-            const result = await client.query(`
+            const result = await this.connectionPool.executeQuery(`
                 SELECT 
                     i.indexname as name,
                     i.indexdef,
@@ -248,7 +208,7 @@ export class SchemaService {
                 LEFT JOIN pg_constraint c ON c.conname = i.indexname
                 WHERE i.schemaname = $1 AND i.tablename = $2
                 ORDER BY is_primary DESC, is_unique DESC, i.indexname
-            `, [schema, table]);
+            `, [schema, table], database);
 
             return result.rows.map((row) => ({
                 id: `index_${database}_${schema}_${table}_${row.name}`,
@@ -264,20 +224,13 @@ export class SchemaService {
         } catch (error) {
             console.error('Error fetching indexes:', error);
             throw error;
-        } finally {
-            if (client) {
-                await client.end();
-            }
         }
     }
 
     async getFunctions(database: string, schema: string): Promise<SchemaItem[]> {
-        let client: Client | null = null;
         try {
-            client = await this.getConnection(database);
-            
             // Try a simplified query first
-            const result = await client.query(`
+            const result = await this.connectionPool.executeQuery(`
                 SELECT 
                     routine_name as name,
                     data_type as return_type
@@ -285,7 +238,7 @@ export class SchemaService {
                 WHERE routine_schema = $1
                     AND routine_type = 'FUNCTION'
                 ORDER BY routine_name
-            `, [schema]);
+            `, [schema], database);
 
             return result.rows.map((row) => ({
                 id: `function_${database}_${schema}_${row.name}`,
@@ -300,19 +253,12 @@ export class SchemaService {
             console.error('Error fetching functions:', error);
             // If functions are not supported, return empty array instead of throwing
             return [];
-        } finally {
-            if (client) {
-                await client.end();
-            }
         }
     }
 
     async getTriggers(database: string, schema: string, table: string): Promise<SchemaItem[]> {
-        let client: Client | null = null;
         try {
-            client = await this.getConnection(database);
-            
-            const result = await client.query(`
+            const result = await this.connectionPool.executeQuery(`
                 SELECT 
                     trigger_name as name,
                     event_manipulation,
@@ -320,7 +266,7 @@ export class SchemaService {
                 FROM information_schema.triggers 
                 WHERE event_object_schema = $1 AND event_object_table = $2
                 ORDER BY trigger_name
-            `, [schema, table]);
+            `, [schema, table], database);
 
             return result.rows.map((row) => ({
                 id: `trigger_${database}_${schema}_${table}_${row.name}`,
@@ -336,26 +282,23 @@ export class SchemaService {
             console.error('Error fetching triggers:', error);
             // If triggers are not supported, return empty array instead of throwing
             return [];
-        } finally {
-            if (client) {
-                await client.end();
-            }
         }
     }
 
     async testConnection(): Promise<boolean> {
-        let client: Client | null = null;
         try {
-            client = await this.getConnection();
-            const result = await client.query('SELECT 1');
-            return result.rows.length > 0;
+            return await this.connectionPool.testConnection();
         } catch (error) {
             console.error('Connection test failed:', error);
             return false;
-        } finally {
-            if (client) {
-                await client.end();
-            }
+        }
+    }
+
+    async cleanup(): Promise<void> {
+        try {
+            await this.connectionPool.closeAll();
+        } catch (error) {
+            console.error('Error during schema service cleanup:', error);
         }
     }
 }

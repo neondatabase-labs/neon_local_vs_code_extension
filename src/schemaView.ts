@@ -3,6 +3,7 @@ import { SchemaService, SchemaItem } from './services/schema.service';
 import { StateService } from './services/state.service';
 import { AuthManager } from './auth/authManager';
 import { SqlQueryPanel } from './sqlQueryPanel';
+import { TableDataPanel } from './tableDataPanel';
 
 export class SchemaTreeItem extends vscode.TreeItem {
     constructor(
@@ -127,8 +128,9 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
         private stateService: StateService,
         private authManager: AuthManager
     ) {
-        // Listen for connection state changes
+        // Listen for authentication state changes
         this.authManager.onDidChangeAuthentication((isAuthenticated) => {
+            console.debug('Schema tree: Authentication state changed', { isAuthenticated });
             if (!isAuthenticated) {
                 this.clearCache();
                 this.refresh();
@@ -141,7 +143,7 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
         this._onDidChangeTreeData.fire();
     }
 
-    private clearCache(): void {
+    public clearCache(): void {
         this.schemaCache.clear();
     }
 
@@ -267,14 +269,16 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
 export class SchemaViewProvider {
     private treeDataProvider: SchemaTreeProvider;
     private treeView: vscode.TreeView<SchemaItem>;
+    private lastConnectionState: boolean = false;
+    private schemaService: SchemaService;
 
     constructor(
         private context: vscode.ExtensionContext,
         private stateService: StateService,
         private authManager: AuthManager
     ) {
-        const schemaService = new SchemaService(stateService, context);
-        this.treeDataProvider = new SchemaTreeProvider(schemaService, stateService, authManager);
+        this.schemaService = new SchemaService(stateService, context);
+        this.treeDataProvider = new SchemaTreeProvider(this.schemaService, stateService, authManager);
         
         this.treeView = vscode.window.createTreeView('neonLocalSchema', {
             treeDataProvider: this.treeDataProvider,
@@ -301,13 +305,44 @@ export class SchemaViewProvider {
             }),
             vscode.commands.registerCommand('neonLocal.schema.queryTable', (item: SchemaItem) => {
                 this.queryTable(item);
+            }),
+            vscode.commands.registerCommand('neonLocal.schema.viewTableData', (item: SchemaItem) => {
+                this.viewTableData(item);
             })
         );
     }
 
     private setupEventListeners(): void {
-        // Listen for connection state changes to refresh the tree
+        // Register a command to listen for connection state changes
+        this.context.subscriptions.push(
+            vscode.commands.registerCommand('neonLocal.schema.onConnectionStateChanged', async (viewData) => {
+                const wasConnectedBefore = this.lastConnectionState;
+                const isConnectedNow = viewData?.connected || false;
+                
+                console.debug('Schema view: Connection state changed', {
+                    wasConnectedBefore,
+                    isConnectedNow,
+                    shouldRefresh: isConnectedNow && (!wasConnectedBefore || isConnectedNow !== wasConnectedBefore)
+                });
+                
+                // Update the last known connection state
+                this.lastConnectionState = isConnectedNow;
+                
+                // Refresh the schema tree when connection is established or changes
+                if (isConnectedNow) {
+                    console.debug('Schema view: Refreshing due to connection established');
+                    this.treeDataProvider.refresh();
+                } else if (wasConnectedBefore && !isConnectedNow) {
+                    console.debug('Schema view: Clearing cache due to connection lost');
+                    this.treeDataProvider.clearCache();
+                    this.treeDataProvider.refresh();
+                }
+            })
+        );
+
+        // Store initial connection state
         this.stateService.getViewData().then(viewData => {
+            this.lastConnectionState = viewData.connected;
             if (viewData.connected) {
                 this.treeDataProvider.refresh();
             }
@@ -393,6 +428,30 @@ export class SchemaViewProvider {
         console.debug('QueryTable - Generated query:', query);
         
         SqlQueryPanel.createOrShow(this.context, this.stateService, query, database);
+    }
+
+    private viewTableData(item: SchemaItem): void {
+        if (item.type !== 'table') {
+            return;
+        }
+
+        // Parse ID: table_database_schema_tablename
+        const parts = item.id.split('_');
+        const database = parts[1];
+        const schema = parts[2];
+        // The table name is everything after the third underscore
+        const tableName = parts.slice(3).join('_');
+        
+        // Debug logging
+        console.debug('ViewTableData - Item ID:', item.id);
+        console.debug('ViewTableData - Parts:', parts);
+        console.debug('ViewTableData - Database:', database, 'Schema:', schema, 'Table:', tableName);
+        
+        TableDataPanel.createOrShow(this.context, this.stateService, schema, tableName, database);
+    }
+
+    getSchemaService(): SchemaService {
+        return this.schemaService;
     }
 
     dispose(): void {
