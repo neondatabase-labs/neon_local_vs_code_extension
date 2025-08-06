@@ -7,7 +7,7 @@ export class TableDataPanel {
     private readonly panel: vscode.WebviewPanel;
     private disposables: vscode.Disposable[] = [];
     private currentPage = 0;
-    private readonly pageSize = 100;
+    private pageSize = 100;
     private tableData: TableDataResult | null = null;
 
     public static createOrShow(
@@ -77,6 +77,12 @@ export class TableDataPanel {
         switch (message.command) {
             case 'loadPage':
                 this.currentPage = message.page;
+                await this.loadTableData();
+                break;
+
+            case 'changeLimitSize':
+                this.pageSize = message.limit;
+                this.currentPage = 0; // Reset to first page when changing limit
                 await this.loadTableData();
                 break;
 
@@ -177,6 +183,17 @@ export class TableDataPanel {
                 }
                 break;
 
+            case 'openNeonConsole':
+                try {
+                    await this.openNeonConsole();
+                } catch (error) {
+                    this.sendMessage({
+                        command: 'error',
+                        error: error instanceof Error ? error.message : 'Failed to open Neon console'
+                    });
+                }
+                break;
+
             case 'refresh':
                 await this.loadTableData();
                 break;
@@ -214,6 +231,34 @@ export class TableDataPanel {
 
     private sendMessage(message: any) {
         this.panel.webview.postMessage(message);
+    }
+
+    private async openNeonConsole(): Promise<void> {
+        try {
+            // Get the current project and branch IDs
+            const viewData = await this.stateService.getViewData();
+            const projectId = viewData.connection?.selectedProjectId;
+            const branchId = viewData.connectionType === 'new' ? 
+                viewData.currentlyConnectedBranch : 
+                viewData.connection?.selectedBranchId;
+            
+            if (!projectId || !branchId) {
+                throw new Error('Project ID or Branch ID not found');
+            }
+
+            // Use the database from the table data panel context
+            const database = this.database || viewData.selectedDatabase || 'postgres';
+            
+            // Construct the Neon console URL for the specific table
+            // The URL pattern might be different for specific tables, using the general tables view with filters
+            const tableViewUrl = `https://console.neon.tech/app/projects/${projectId}/branches/${branchId}/tables?database=${database}&schema=${this.schema}&table=${this.tableName}`;
+            
+            // Open in external browser
+            await vscode.env.openExternal(vscode.Uri.parse(tableViewUrl));
+        } catch (error) {
+            console.error('Error opening Neon console:', error);
+            throw error;
+        }
     }
 
     private getWebviewContent(): string {
@@ -316,19 +361,23 @@ export class TableDataPanel {
         }
 
         th {
-            background-color: var(--vscode-list-headerBackground);
+            background-color: var(--vscode-list-headerBackground, var(--vscode-editor-background));
             font-weight: 600;
             position: sticky;
             top: 0;
             z-index: 10;
+            opacity: 1;
+            backdrop-filter: blur(0px);
         }
 
         th:first-child {
             z-index: 11;
+            background-color: var(--vscode-list-headerBackground, var(--vscode-editor-background));
+            opacity: 1;
         }
 
         .row-number {
-            background-color: var(--vscode-list-headerBackground);
+            background-color: var(--vscode-list-headerBackground, var(--vscode-editor-background));
             position: sticky;
             left: 0;
             z-index: 9;
@@ -337,6 +386,7 @@ export class TableDataPanel {
             width: 60px;
             min-width: 60px;
             max-width: 60px;
+            opacity: 1;
         }
 
         .actions-cell {
@@ -353,11 +403,12 @@ export class TableDataPanel {
         .actions-header {
             position: sticky;
             right: 0;
-            background-color: var(--vscode-list-headerBackground);
+            background-color: var(--vscode-list-headerBackground, var(--vscode-editor-background));
             z-index: 11;
             width: 60px;
             min-width: 60px;
             max-width: 60px;
+            opacity: 1;
         }
 
         tr:hover {
@@ -386,20 +437,15 @@ export class TableDataPanel {
             font-family: inherit;
         }
 
-        .pagination {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 12px;
-            background-color: var(--vscode-statusBar-background);
-            border-top: 1px solid var(--vscode-panel-border);
-            gap: 8px;
-            flex-shrink: 0;
-        }
-
         .page-info {
             color: var(--vscode-statusBar-foreground);
-            font-size: 13px;
+            font-size: 12px;
+        }
+
+        .pagination-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .status-bar {
@@ -439,7 +485,7 @@ export class TableDataPanel {
 
 
 
-        .delete-btn {
+        .action-btn {
             color: var(--vscode-foreground);
             background: none;
             border: none;
@@ -449,17 +495,43 @@ export class TableDataPanel {
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            margin: 0 2px;
         }
 
-        .delete-btn:hover {
+        .action-btn:hover {
             background-color: var(--vscode-toolbar-hoverBackground);
-            color: var(--vscode-errorForeground);
         }
 
-        .delete-btn svg {
+        .action-btn svg {
             width: 14px;
             height: 14px;
             fill: currentColor;
+        }
+
+        .edit-btn:hover {
+            color: var(--vscode-charts-blue);
+        }
+
+        .delete-btn:hover {
+            color: var(--vscode-errorForeground);
+        }
+
+        .save-btn:hover {
+            color: var(--vscode-charts-green);
+        }
+
+        .cancel-btn:hover {
+            color: var(--vscode-charts-orange);
+        }
+
+        .row-editing .editable-cell {
+            background-color: var(--vscode-input-background);
+            border: 1px solid var(--vscode-input-border);
+            cursor: pointer;
+        }
+
+        .row-editing .editable-cell:hover {
+            background-color: var(--vscode-list-activeSelectionBackground);
         }
 
         .primary-key {
@@ -597,6 +669,62 @@ export class TableDataPanel {
             justify-content: center;
             gap: 12px;
         }
+
+        /* Limit Selector */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 16px;
+            background-color: var(--vscode-statusBar-background);
+            color: var(--vscode-statusBar-foreground);
+            border-top: 1px solid var(--vscode-panel-border);
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
+        .status-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .status-center {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+            flex: 0 0 auto;
+        }
+
+        .status-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            justify-content: flex-end;
+        }
+
+        .limit-selector {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .limit-select {
+            background-color: var(--vscode-dropdown-background);
+            color: var(--vscode-dropdown-foreground);
+            border: 1px solid var(--vscode-dropdown-border);
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .limit-select:focus {
+            outline: 1px solid var(--vscode-focusBorder);
+        }
     </style>
 </head>
 <body>
@@ -607,6 +735,7 @@ export class TableDataPanel {
         <div class="toolbar-right">
             <button class="btn" id="addRowBtn">Add Row</button>
             <button class="btn btn-secondary" id="refreshBtn">Refresh</button>
+            <button class="btn btn-secondary" id="openNeonConsoleBtn" title="Open this table in Neon console">Open in Neon console</button>
         </div>
     </div>
     
@@ -614,14 +743,30 @@ export class TableDataPanel {
         <div class="loading">Loading table data...</div>
     </div>
     
-    <div class="pagination" id="pagination" style="display: none;">
-        <button class="btn btn-secondary" id="prevPageBtn" disabled>Previous</button>
-        <span class="page-info" id="pageInfo">Page 1</span>
-        <button class="btn btn-secondary" id="nextPageBtn" disabled>Next</button>
-    </div>
-    
     <div class="status-bar" id="statusBar">
-        Loading...
+        <div class="status-left">
+            <span id="statusText">Loading...</span>
+        </div>
+        <div class="status-center">
+            <div class="pagination-controls" id="pagination" style="display: none;">
+                <button class="btn btn-secondary" id="prevPageBtn" disabled>Previous</button>
+                <span class="page-info" id="pageInfo">Page 1</span>
+                <button class="btn btn-secondary" id="nextPageBtn" disabled>Next</button>
+            </div>
+        </div>
+        <div class="status-right">
+            <div class="limit-selector">
+                <label for="limitSelect">Rows per page:</label>
+                <select id="limitSelect" class="limit-select">
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100" selected>100</option>
+                    <option value="200">200</option>
+                    <option value="500">500</option>
+                    <option value="1000">1000</option>
+                </select>
+            </div>
+        </div>
     </div>
 
     <!-- Add Row Modal -->
@@ -663,16 +808,20 @@ export class TableDataPanel {
         let editingCell = null;
         let columns = [];
         let pendingDeleteRow = null;
+        let editingRowIndex = -1;
         
         // Elements
         const tableContainer = document.getElementById('tableContainer');
         const pagination = document.getElementById('pagination');
         const statusBar = document.getElementById('statusBar');
+        const statusText = document.getElementById('statusText');
         const addRowBtn = document.getElementById('addRowBtn');
         const refreshBtn = document.getElementById('refreshBtn');
+        const openNeonConsoleBtn = document.getElementById('openNeonConsoleBtn');
         const prevPageBtn = document.getElementById('prevPageBtn');
         const nextPageBtn = document.getElementById('nextPageBtn');
         const pageInfo = document.getElementById('pageInfo');
+        const limitSelect = document.getElementById('limitSelect');
         
         // Modal elements
         const addRowModal = document.getElementById('addRowModal');
@@ -690,8 +839,10 @@ export class TableDataPanel {
         // Event listeners
         addRowBtn.addEventListener('click', showAddRowModal);
         refreshBtn.addEventListener('click', refresh);
+        openNeonConsoleBtn.addEventListener('click', openNeonConsole);
         prevPageBtn.addEventListener('click', () => loadPage(currentPage - 1));
         nextPageBtn.addEventListener('click', () => loadPage(currentPage + 1));
+        limitSelect.addEventListener('change', changeLimitSize);
         closeAddModal.addEventListener('click', hideAddRowModal);
         cancelAddBtn.addEventListener('click', hideAddRowModal);
         addRowForm.addEventListener('submit', submitAddRow);
@@ -744,9 +895,19 @@ export class TableDataPanel {
             pageSize = message.pageSize;
             columns = currentData.columns;
             
+            // Update the limit selector to match the current pageSize
+            limitSelect.value = pageSize.toString();
+            
             displayTable(currentData);
             updatePagination();
             updateStatus(\`Showing \${currentData.rows.length} of \${currentData.totalCount} rows\`);
+        }
+        
+        function loadPage(page) {
+            vscode.postMessage({
+                command: 'loadPage',
+                page: page
+            });
         }
         
         function handleLoading(loading) {
@@ -826,6 +987,10 @@ export class TableDataPanel {
                 const tr = document.createElement('tr');
                 tr.dataset.rowIndex = index;
                 
+                if (editingRowIndex === index) {
+                    tr.classList.add('row-editing');
+                }
+                
                 // Row number
                 const rowNumCell = document.createElement('td');
                 rowNumCell.className = 'row-number';
@@ -847,7 +1012,11 @@ export class TableDataPanel {
                     td.title = td.textContent;
                     td.classList.add('editable-cell');
                     td.dataset.column = col.name;
-                    td.addEventListener('click', () => startCellEdit(td, row, col));
+                    
+                    // Only add click handler if row is in editing mode
+                    if (editingRowIndex === index) {
+                        td.addEventListener('click', () => startCellEdit(td, row, col));
+                    }
                     
                     if (col.isPrimaryKey) {
                         td.classList.add('primary-key');
@@ -861,13 +1030,32 @@ export class TableDataPanel {
                 // Actions cell
                 const actionsCell = document.createElement('td');
                 actionsCell.className = 'actions-cell';
-                actionsCell.innerHTML = \`
-                    <button class="delete-btn" onclick="deleteRow(\${index})" title="Delete row">
-                        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5ZM11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H2.506a.5.5 0 0 0 0 1h.5v10A1.5 1.5 0 0 0 4.5 15h7a1.5 1.5 0 0 0 1.5-1.5v-10h.5a.5.5 0 0 0 0-1H11ZM4.5 4a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-1 0v-8a.5.5 0 0 1 .5-.5ZM8 4a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-1 0v-8A.5.5 0 0 1 8 4Zm3.5 0a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-1 0v-8a.5.5 0 0 1 .5-.5Z"/>
-                        </svg>
-                    </button>
-                \`;
+                actionsCell.innerHTML = editingRowIndex === index 
+                    ? \`
+                        <button class="action-btn save-btn" onclick="saveRowEdit(\${index})" title="Save changes">
+                            <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
+                            </svg>
+                        </button>
+                        <button class="action-btn cancel-btn" onclick="cancelRowEdit(\${index})" title="Cancel changes">
+                            <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
+                            </svg>
+                        </button>
+                    \`
+                    : \`
+                        <button class="action-btn edit-btn" onclick="startRowEdit(\${index})" title="Edit row">
+                            <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M15.502 1.94a.5.5 0 0 1 0 .706L14.459 3.69l-2-2L13.502.646a.5.5 0 0 1 .707 0l1.293 1.293zm-1.75 2.456-2-2L4.939 9.21a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.813-6.814z"/>
+                                <path fill-rule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5v11z"/>
+                            </svg>
+                        </button>
+                        <button class="action-btn delete-btn" onclick="deleteRow(\${index})" title="Delete row">
+                            <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5ZM11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H2.506a.5.5 0 0 0 0 1h.5v10A1.5 1.5 0 0 0 4.5 15h7a1.5 1.5 0 0 0 1.5-1.5v-10h.5a.5.5 0 0 0 0-1H11ZM4.5 4a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-1 0v-8a.5.5 0 0 1 .5-.5ZM8 4a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-1 0v-8A.5.5 0 0 1 8 4Zm3.5 0a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-1 0v-8a.5.5 0 0 1 .5-.5Z"/>
+                            </svg>
+                        </button>
+                    \`;
                 tr.appendChild(actionsCell);
                 
                 tbody.appendChild(tr);
@@ -878,31 +1066,177 @@ export class TableDataPanel {
             tableContainer.appendChild(table);
         }
         
-        function startCellEdit(cell, row, column) {
-            if (editingCell) {
-                cancelCellEdit();
+        function startRowEdit(index) {
+            // Cancel any existing edit
+            if (editingRowIndex !== -1) {
+                cancelRowEdit(editingRowIndex);
             }
             
-            editingCell = { cell, row, column, originalValue: row[column.name] };
+            editingRowIndex = index;
             
-            const input = document.createElement('input');
-            input.className = 'cell-editor';
-            input.value = row[column.name] === null ? '' : String(row[column.name]);
-            input.type = getInputType(column.type);
+            // Re-render the table to show edit mode
+            displayTable(currentData);
             
-            input.addEventListener('blur', saveCellEdit);
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    saveCellEdit();
-                } else if (e.key === 'Escape') {
-                    cancelCellEdit();
+            // Convert all cells in this row to input fields
+            setTimeout(() => {
+                convertRowToInputs(index);
+            }, 0);
+        }
+        
+        function convertRowToInputs(index) {
+            const rowElement = document.querySelector('tr[data-row-index="' + index + '"]');
+            if (!rowElement) return;
+            
+            const editableCells = rowElement.querySelectorAll('.editable-cell');
+            const row = currentData.rows[index];
+            
+            editableCells.forEach(cell => {
+                const columnName = cell.dataset.column;
+                const column = columns.find(col => col.name === columnName);
+                if (!column) return;
+                
+                const input = document.createElement('input');
+                input.className = 'cell-editor';
+                input.value = row[column.name] === null ? '' : String(row[column.name]);
+                input.type = getInputType(column.type);
+                input.dataset.column = column.name;
+                
+                // Add keyboard navigation
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        // Move to next cell in the row
+                        const nextCell = findNextEditableCell(cell);
+                        if (nextCell) {
+                            const nextInput = nextCell.cell.querySelector('.cell-editor');
+                            if (nextInput) {
+                                nextInput.focus();
+                                nextInput.select();
+                            }
+                        } else {
+                            // If no next cell, save the row
+                            saveRowEdit(index);
+                        }
+                    } else if (e.key === 'Escape') {
+                        cancelRowEdit(index);
+                    } else if (e.key === 'Tab') {
+                        e.preventDefault();
+                        const nextCell = e.shiftKey 
+                            ? findPreviousEditableCell(cell)
+                            : findNextEditableCell(cell);
+                        if (nextCell) {
+                            const nextInput = nextCell.cell.querySelector('.cell-editor');
+                            if (nextInput) {
+                                nextInput.focus();
+                                nextInput.select();
+                            }
+                        }
+                    }
+                });
+                
+                // Replace cell content with input
+                cell.innerHTML = '';
+                cell.appendChild(input);
+            });
+            
+            // Focus the first input
+            const firstInput = rowElement.querySelector('.cell-editor');
+            if (firstInput) {
+                firstInput.focus();
+                firstInput.select();
+            }
+        }
+
+        function saveRowEdit(index) {
+            if (editingRowIndex !== index) return;
+            
+            const row = currentData.rows[index];
+            const primaryKeyValues = getPrimaryKeyValues(row);
+            const changes = {};
+            let hasChanges = false;
+            
+            // Collect all changes from the row
+            const rowElement = document.querySelector(\`tr[data-row-index="\${index}"]\`);
+            const inputs = rowElement.querySelectorAll('.cell-editor');
+            
+            inputs.forEach(input => {
+                const columnName = input.dataset.column;
+                const newValue = input.value.trim() === '' ? null : input.value;
+                const originalValue = row[columnName];
+                
+                if (newValue !== originalValue) {
+                    changes[columnName] = newValue;
+                    hasChanges = true;
                 }
             });
             
-            cell.innerHTML = '';
-            cell.appendChild(input);
-            input.focus();
-            input.select();
+            if (hasChanges) {
+                vscode.postMessage({
+                    command: 'updateRow',
+                    primaryKeyValues,
+                    newValues: changes
+                });
+            }
+            
+            editingRowIndex = -1;
+            displayTable(currentData);
+        }
+
+        function cancelRowEdit(index) {
+            if (editingRowIndex !== index) return;
+            
+            editingRowIndex = -1;
+            displayTable(currentData);
+        }
+        
+        function startCellEdit(cell, row, column) {
+            // Only allow editing if the row is in edit mode
+            if (editingRowIndex === -1) return;
+            
+            // If the cell already has an input, just focus it
+            const existingInput = cell.querySelector('.cell-editor');
+            if (existingInput) {
+                existingInput.focus();
+                existingInput.select();
+                return;
+            }
+            
+            // This function is now mainly for focusing existing inputs
+            // since convertRowToInputs handles the initial conversion
+        }
+        
+        function findNextEditableCell(currentCell) {
+            const row = currentCell.closest('tr');
+            const cells = Array.from(row.querySelectorAll('.editable-cell'));
+            const currentIndex = cells.indexOf(currentCell);
+            
+            if (currentIndex < cells.length - 1) {
+                const nextCell = cells[currentIndex + 1];
+                const rowData = currentData.rows[parseInt(row.dataset.rowIndex)];
+                const columnName = nextCell.dataset.column;
+                const column = columns.find(col => col.name === columnName);
+                
+                return { cell: nextCell, row: rowData, column };
+            }
+            
+            return null;
+        }
+        
+        function findPreviousEditableCell(currentCell) {
+            const row = currentCell.closest('tr');
+            const cells = Array.from(row.querySelectorAll('.editable-cell'));
+            const currentIndex = cells.indexOf(currentCell);
+            
+            if (currentIndex > 0) {
+                const prevCell = cells[currentIndex - 1];
+                const rowData = currentData.rows[parseInt(row.dataset.rowIndex)];
+                const columnName = prevCell.dataset.column;
+                const column = columns.find(col => col.name === columnName);
+                
+                return { cell: prevCell, row: rowData, column };
+            }
+            
+            return null;
         }
         
         function saveCellEdit() {
@@ -1051,8 +1385,8 @@ export class TableDataPanel {
             if (type.includes('int') || type.includes('serial')) return 'number';
             if (type.includes('numeric') || type.includes('decimal') || type.includes('float') || type.includes('double')) return 'number';
             if (type.includes('bool')) return 'checkbox';
-            if (type.includes('date')) return 'date';
-            if (type.includes('time')) return 'datetime-local';
+            // Treat all date/time types as text to preserve original formatting
+            // This prevents datetime-local inputs from showing placeholder text
             return 'text';
         }
         
@@ -1066,6 +1400,12 @@ export class TableDataPanel {
         function refresh() {
             vscode.postMessage({
                 command: 'refresh'
+            });
+        }
+        
+        function openNeonConsole() {
+            vscode.postMessage({
+                command: 'openNeonConsole'
             });
         }
         
@@ -1084,7 +1424,17 @@ export class TableDataPanel {
         }
         
         function updateStatus(text) {
-            statusBar.textContent = text;
+            statusText.textContent = text;
+        }
+        
+        function changeLimitSize() {
+            const newLimit = parseInt(limitSelect.value);
+            pageSize = newLimit;
+            
+            vscode.postMessage({
+                command: 'changeLimitSize',
+                limit: newLimit
+            });
         }
         
         function showErrorMessage(message) {

@@ -493,32 +493,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
             >
               {isProcessingCommand ? 'Disconnecting...' : 'Disconnect'}
             </button>
-            <div className="action-group">
-              <button
-                className="action-button"
-                onClick={() => handleAction('resetFromParent')}
-              >
-                Reset from Parent Branch
-              </button>
-              <button
-                className="action-button"
-                onClick={() => handleAction('openSqlEditor')}
-              >
-                Open SQL Editor
-              </button>
-              <button
-                className="action-button"
-                onClick={() => handleAction('openTableView')}
-              >
-                Open Table View
-              </button>
-              <button
-                className="action-button"
-                onClick={() => handleAction('launchPsql')}
-              >
-                Launch PSQL
-              </button>
-            </div>
+
           </div>
         </>
       ) : (

@@ -68,7 +68,7 @@
 
       {
         "command": "neonLocal.schema.openSqlQuery",
-        "title": "Open SQL Query"
+        "title": "Open SQL Editor"
       },
       {
         "command": "neonLocal.schema.queryTable",
@@ -79,6 +79,16 @@
         "command": "neonLocal.schema.viewTableData",
         "title": "View Table Data",
         "icon": "$(table)"
+      },
+      {
+        "command": "neonLocal.schema.resetFromParent",
+        "title": "Reset from Parent Branch",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "neonLocal.schema.launchPsql",
+        "title": "Launch PSQL",
+        "icon": "$(terminal)"
       }
     ],
     "configuration": {
@@ -191,10 +201,15 @@
           "when": "view == neonLocalSchema",
           "group": "1_copy"
         },
+        {
+          "command": "neonLocal.schema.resetFromParent",
+          "when": "view == neonLocalSchema && viewItem == connection",
+          "group": "2_reset"
+        },
 
         {
           "command": "neonLocal.schema.openSqlQuery",
-          "when": "view == neonLocalSchema",
+          "when": "view == neonLocalSchema && viewItem != table && viewItem != connection",
           "group": "4_query"
         },
         {
@@ -206,6 +221,11 @@
           "command": "neonLocal.schema.viewTableData",
           "when": "view == neonLocalSchema && viewItem == table",
           "group": "4_query"
+        },
+        {
+          "command": "neonLocal.schema.launchPsql",
+          "when": "view == neonLocalSchema && viewItem == database",
+          "group": "5_terminal"
         }
       ]
     }

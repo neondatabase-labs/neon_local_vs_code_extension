@@ -6,7 +6,7 @@ import { ConnectionPoolService, ManagedClient } from './connectionPool.service';
 export interface SchemaItem {
     id: string;
     name: string;
-    type: 'database' | 'schema' | 'table' | 'view' | 'column' | 'index' | 'function' | 'trigger';
+    type: 'connection' | 'database' | 'schema' | 'table' | 'view' | 'column' | 'index' | 'function' | 'trigger';
     parent?: string;
     children?: SchemaItem[];
     metadata?: any;

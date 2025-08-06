@@ -30,6 +30,9 @@ export class SchemaTreeItem extends vscode.TreeItem {
     private getTooltip(): string {
         const { item } = this;
         switch (item.type) {
+            case 'connection':
+                const connection = item.metadata;
+                return `Connected to: ${connection?.branchName || 'Unknown Branch'} (${connection?.projectName || 'Unknown Project'})${connection?.selectedDatabase ? `\nDatabase: ${connection.selectedDatabase}` : ''}${connection?.port ? `\nPort: ${connection.port}` : ''}`;
             case 'database':
                 return `Database: ${item.name}${item.metadata?.size ? ` (${item.metadata.size})` : ''}`;
             case 'schema':
@@ -65,6 +68,9 @@ export class SchemaTreeItem extends vscode.TreeItem {
     private getDescription(): string | undefined {
         const { item } = this;
         switch (item.type) {
+            case 'connection':
+                const connection = item.metadata;
+                return connection?.selectedDatabase || 'postgres';
             case 'column':
                 const column = item.metadata;
                 if (column?.data_type) {
@@ -88,6 +94,8 @@ export class SchemaTreeItem extends vscode.TreeItem {
 
     private getIcon(): vscode.ThemeIcon | undefined {
         switch (this.item.type) {
+            case 'connection':
+                return new vscode.ThemeIcon('plug');
             case 'database':
                 return new vscode.ThemeIcon('database');
             case 'schema':
@@ -158,6 +166,7 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
 
     private hasChildren(element: SchemaItem): boolean {
         switch (element.type) {
+            case 'connection':
             case 'database':
             case 'schema':
                 return true;
@@ -179,8 +188,8 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
             }
 
             if (!element) {
-                // Root level - show databases
-                return this.getDatabases();
+                // Root level - show connection root node
+                return this.getConnectionRoot(viewData);
             }
 
             const cacheKey = element.id;
@@ -191,6 +200,9 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
             let children: SchemaItem[] = [];
 
             switch (element.type) {
+                case 'connection':
+                    children = await this.getDatabases();
+                    break;
                 case 'database':
                     children = await this.getSchemas(element.name);
                     break;
@@ -218,6 +230,30 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
             vscode.window.showErrorMessage(`Failed to load schema: ${error instanceof Error ? error.message : 'Unknown error'}`);
             return [];
         }
+    }
+
+    private getConnectionRoot(viewData: any): SchemaItem[] {
+        const branchName = viewData.currentlyConnectedBranch || 'Unknown Branch';
+        const projectName = viewData.connection?.selectedProjectName || 'Unknown Project';
+        const orgName = viewData.connection?.selectedOrgName || 'Unknown Organization';
+        const selectedDatabase = viewData.selectedDatabase || 'postgres';
+        const port = viewData.port || 5432;
+
+        const connectionItem: SchemaItem = {
+            id: 'connection_root',
+            name: `${branchName}`,
+            type: 'connection' as const,
+            parent: undefined,
+            metadata: {
+                branchName,
+                projectName,
+                orgName,
+                selectedDatabase,
+                port
+            }
+        };
+
+        return [connectionItem];
     }
 
     private async getDatabases(): Promise<SchemaItem[]> {
@@ -308,6 +344,12 @@ export class SchemaViewProvider {
             }),
             vscode.commands.registerCommand('neonLocal.schema.viewTableData', (item: SchemaItem) => {
                 this.viewTableData(item);
+            }),
+            vscode.commands.registerCommand('neonLocal.schema.resetFromParent', () => {
+                this.resetFromParent();
+            }),
+            vscode.commands.registerCommand('neonLocal.schema.launchPsql', (item: SchemaItem) => {
+                this.launchPsql(item);
             })
         );
     }
@@ -448,6 +490,39 @@ export class SchemaViewProvider {
         console.debug('ViewTableData - Database:', database, 'Schema:', schema, 'Table:', tableName);
         
         TableDataPanel.createOrShow(this.context, this.stateService, schema, tableName, database);
+    }
+
+    private async resetFromParent(): Promise<void> {
+        // Call the existing global reset command to ensure consistent behavior
+        await vscode.commands.executeCommand('neon-local-connect.resetFromParent');
+    }
+
+    private async launchPsql(item: SchemaItem): Promise<void> {
+        if (item.type !== 'database') {
+            return;
+        }
+
+        try {
+            // Get the current view data to get proxy port
+            const viewData = await this.stateService.getViewData();
+            
+            if (!viewData.connected) {
+                throw new Error('Database is not connected. Please connect first.');
+            }
+
+            const database = item.name;
+            const port = viewData.port;
+            
+            // Use the local proxy credentials (from ConnectionPoolService)
+            const connectionString = `postgres://neon:npg@localhost:${port}/${database}`;
+
+            // Launch PSQL with the local proxy connection string
+            const terminal = vscode.window.createTerminal(`Neon PSQL - ${database}`);
+            terminal.show();
+            terminal.sendText(`psql "${connectionString}"`);
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to launch PSQL: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
     getSchemaService(): SchemaService {

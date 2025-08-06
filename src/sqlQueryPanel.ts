@@ -38,7 +38,7 @@ export class SqlQueryPanel {
         // Otherwise, create a new panel
         const panel = vscode.window.createWebviewPanel(
             'sqlQuery',
-            'SQL Query',
+            'SQL Editor',
             column || vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -117,6 +117,17 @@ export class SqlQueryPanel {
             case 'exportResults':
                 await this.exportResults(message.data, message.format);
                 break;
+
+            case 'openNeonConsole':
+                try {
+                    await this.openNeonConsole();
+                } catch (error) {
+                    this.sendMessage({
+                        command: 'error',
+                        error: error instanceof Error ? error.message : 'Failed to open Neon console'
+                    });
+                }
+                break;
         }
     }
 
@@ -129,6 +140,40 @@ export class SqlQueryPanel {
             command: 'setQuery',
             query
         });
+    }
+
+    private async openNeonConsole(): Promise<void> {
+        try {
+            // Get the current project and branch IDs
+            const viewData = await this.stateService.getViewData();
+            const projectId = viewData.connection?.selectedProjectId;
+            const branchId = viewData.connectionType === 'new' ? 
+                viewData.currentlyConnectedBranch : 
+                viewData.connection?.selectedBranchId;
+            
+            if (!projectId || !branchId) {
+                throw new Error('Project ID or Branch ID not found');
+            }
+
+            // Get available databases
+            const databases = await this.stateService.getDatabases();
+            if (!databases || databases.length === 0) {
+                throw new Error('No databases available');
+            }
+
+            // Use the current database context or default to the first available database
+            let selectedDatabase = this.database;
+            if (!selectedDatabase && databases.length > 0) {
+                selectedDatabase = databases[0].name;
+            }
+
+            // Open the SQL Editor URL in the browser
+            const sqlEditorUrl = `https://console.neon.tech/app/projects/${projectId}/branches/${branchId}/sql-editor?database=${selectedDatabase}`;
+            await vscode.env.openExternal(vscode.Uri.parse(sqlEditorUrl));
+        } catch (error) {
+            console.error('Error opening Neon console:', error);
+            throw error;
+        }
     }
 
     private async showExportDialog(data: any[]) {
@@ -201,7 +246,7 @@ export class SqlQueryPanel {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SQL Query</title>
+    <title>SQL Editor</title>
     <style>
         body {
             font-family: var(--vscode-font-family);
@@ -213,16 +258,50 @@ export class SqlQueryPanel {
             height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
+        }
+
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .query-section {
+            display: flex;
+            flex-direction: column;
+            min-height: 120px;
+            max-height: 80vh;
+            transition: all 0.3s ease-in-out;
+        }
+
+        .query-section.collapsed {
+            min-height: 0;
+            max-height: 0;
+            overflow: hidden;
         }
 
         .toolbar {
             display: flex;
             align-items: center;
+            justify-content: space-between;
             padding: 8px 16px;
             background-color: var(--vscode-toolbar-activeBackground, var(--vscode-tab-activeBackground));
             border-bottom: 1px solid var(--vscode-panel-border);
-            gap: 8px;
             flex-shrink: 0;
+        }
+
+        .toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .toolbar button {
@@ -244,16 +323,25 @@ export class SqlQueryPanel {
             cursor: not-allowed;
         }
 
+        .secondary-btn {
+            background-color: var(--vscode-button-secondaryBackground) !important;
+            color: var(--vscode-button-secondaryForeground) !important;
+        }
+
+        .secondary-btn:hover {
+            background-color: var(--vscode-button-secondaryHoverBackground) !important;
+        }
+
         .query-editor {
             flex: 1;
-            min-height: 200px;
+            min-height: 100px;
             font-family: var(--vscode-editor-font-family);
             font-size: var(--vscode-editor-font-size);
             background-color: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border);
             padding: 12px;
-            resize: vertical;
+            resize: none;
             outline: none;
         }
 
@@ -262,6 +350,56 @@ export class SqlQueryPanel {
             display: flex;
             flex-direction: column;
             min-height: 200px;
+            max-height: calc(100vh - 40px);
+            overflow: hidden;
+        }
+
+        .results-section.maximized {
+            max-height: calc(100vh - 60px);
+        }
+
+        .tab-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            background-color: var(--vscode-titleBar-activeBackground);
+        }
+
+        .tab-group {
+            display: flex;
+            flex: 1;
+        }
+
+        .tab {
+            padding: 8px 16px;
+            cursor: pointer;
+            border-right: 1px solid var(--vscode-panel-border);
+            background-color: var(--vscode-tab-inactiveBackground);
+            color: var(--vscode-tab-inactiveForeground);
+            user-select: none;
+        }
+
+        .tab:hover {
+            background-color: var(--vscode-tab-hoverBackground);
+        }
+
+        .tab.active {
+            background-color: var(--vscode-tab-activeBackground);
+            color: var(--vscode-tab-activeForeground);
+            border-bottom: 2px solid var(--vscode-focusBorder);
+        }
+
+        .tab-content {
+            flex: 1;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .tab-content.active {
+            display: flex;
+            overflow: hidden;
         }
 
         .results-header {
@@ -278,10 +416,12 @@ export class SqlQueryPanel {
             flex: 1;
             overflow: auto;
             background-color: var(--vscode-editor-background);
+            min-height: 0;
         }
 
         table {
             width: 100%;
+            min-width: max-content;
             border-collapse: collapse;
             font-size: 13px;
         }
@@ -293,15 +433,35 @@ export class SqlQueryPanel {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 200px;
+            min-width: 120px;
+            max-width: 400px;
+        }
+
+        /* Allow specific columns to be wider if needed */
+        th.wide-column, td.wide-column {
+            max-width: 600px;
+        }
+
+        /* Handle very long content gracefully */
+        th:hover, td:hover {
+            overflow: visible;
+            white-space: normal;
+            word-break: break-word;
+            position: relative;
+            z-index: 100;
+            background-color: var(--vscode-editor-background);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--vscode-focusBorder);
         }
 
         th {
-            background-color: var(--vscode-list-headerBackground);
+            background-color: var(--vscode-list-headerBackground, var(--vscode-editor-background));
             font-weight: 600;
             position: sticky;
             top: 0;
             z-index: 1;
+            opacity: 1;
+            backdrop-filter: blur(0px);
         }
 
         tr:hover {
@@ -348,41 +508,191 @@ export class SqlQueryPanel {
             background-color: var(--vscode-panel-border);
             cursor: row-resize;
             flex-shrink: 0;
+            transition: background-color 0.2s ease;
+            position: relative;
         }
 
         .splitter:hover {
             background-color: var(--vscode-focusBorder);
+            height: 6px;
+        }
+
+        .splitter.hidden {
+            display: none;
+        }
+
+        .expand-button {
+            background: none;
+            border: none;
+            color: var(--vscode-foreground);
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            min-width: 32px;
+            height: 32px;
+            margin-right: 8px;
+        }
+
+        .expand-button:hover {
+            background-color: var(--vscode-toolbar-hoverBackground);
+        }
+
+        .expand-button:active {
+            background-color: var(--vscode-toolbar-activeBackground);
+        }
+
+        .performance-stats {
+            padding: 16px;
+            font-family: var(--vscode-editor-font-family);
+            overflow: auto;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+            min-width: max-content;
+        }
+
+        .stats-card {
+            background-color: var(--vscode-input-background);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 4px;
+            padding: 12px;
+        }
+
+        .stats-card h3 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--vscode-foreground);
+        }
+
+        .stats-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .stats-list li {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            font-size: 13px;
+        }
+
+        .stats-list li:last-child {
+            border-bottom: none;
+        }
+
+        .stats-label {
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .stats-value {
+            font-weight: 500;
+            color: var(--vscode-foreground);
+        }
+
+        .complexity-simple {
+            color: var(--vscode-charts-green);
+        }
+
+        .complexity-moderate {
+            color: var(--vscode-charts-orange);
+        }
+
+        .complexity-complex {
+            color: var(--vscode-charts-red);
+        }
+
+        .scan-type {
+            font-family: var(--vscode-editor-font-family);
+            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: 4px;
+        }
+
+        .scan-index {
+            background-color: var(--vscode-charts-green);
+            color: var(--vscode-editor-background);
+        }
+
+        .scan-bitmap {
+            background-color: var(--vscode-charts-orange);
+            color: var(--vscode-editor-background);
+        }
+
+        .scan-seq {
+            background-color: var(--vscode-charts-red);
+            color: var(--vscode-editor-background);
         }
     </style>
 </head>
 <body>
-    <div class="toolbar">
-        <button id="executeBtn">Run Query</button>
-        <button id="exportBtn" disabled>Export Results</button>
-        <span id="statusText"></span>
-    </div>
-    
-    <textarea 
-        id="queryEditor" 
-        class="query-editor" 
-        placeholder="Enter your SQL query here..."
-        spellcheck="false"
-    ></textarea>
-    
-    <div class="splitter" id="splitter"></div>
-    
-    <div class="results-section">
-        <div class="results-header">
-            <span id="resultsTitle">Results</span>
-            <span id="resultsInfo"></span>
+    <div class="main-container">
+        <div class="query-section" id="querySection">
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <button id="executeBtn">Run Query</button>
+                    <button id="exportBtn" disabled>Export Results</button>
+                    <span id="statusText"></span>
+                </div>
+                <div class="toolbar-right">
+                    <button id="openNeonConsoleBtn" class="secondary-btn" title="Open SQL editor in Neon console">Open in Neon console</button>
+                </div>
+            </div>
+            
+            <textarea 
+                id="queryEditor" 
+                class="query-editor" 
+                placeholder="Enter your SQL query here..."
+                spellcheck="false"
+            ></textarea>
         </div>
-        <div class="results-table" id="resultsContainer">
-            <div class="no-results">Execute a query to see results</div>
+        
+        <div class="splitter" id="splitter"></div>
+        
+        <div class="results-section" id="resultsSection">
+            <div class="tab-container">
+                <div class="tab-group">
+                    <div class="tab active" id="resultsTab">Results</div>
+                    <div class="tab" id="performanceTab">Performance</div>
+                </div>
+                <button class="expand-button" id="expandBtn" title="Expand to full page">
+                    <span id="expandIcon">⛶</span>
+                </button>
+            </div>
+            
+            <div class="tab-content active" id="resultsContent">
+                <div class="results-header">
+                    <span id="resultsTitle">Query Results</span>
+                    <span id="resultsInfo"></span>
+                </div>
+                <div class="results-table" id="resultsContainer">
+                    <div class="no-results">Execute a query to see results</div>
+                </div>
+            </div>
+            
+            <div class="tab-content" id="performanceContent">
+                <div class="performance-stats" id="performanceStats">
+                    <div class="no-results">Execute a query to see performance statistics</div>
+                </div>
+            </div>
         </div>
-    </div>
-    
-    <div class="status-bar" id="statusBar">
-        Ready
+        
+        <div class="status-bar" id="statusBar">
+            Ready
+        </div>
     </div>
 
     <script>
@@ -394,14 +704,37 @@ export class SqlQueryPanel {
         const queryEditor = document.getElementById('queryEditor');
         const executeBtn = document.getElementById('executeBtn');
         const exportBtn = document.getElementById('exportBtn');
+        const openNeonConsoleBtn = document.getElementById('openNeonConsoleBtn');
         const resultsContainer = document.getElementById('resultsContainer');
         const resultsInfo = document.getElementById('resultsInfo');
         const statusBar = document.getElementById('statusBar');
         const splitter = document.getElementById('splitter');
         
+        // Layout elements
+        const querySection = document.getElementById('querySection');
+        const resultsSection = document.getElementById('resultsSection');
+        const expandBtn = document.getElementById('expandBtn');
+        const expandIcon = document.getElementById('expandIcon');
+        
+        // Tab elements
+        const resultsTab = document.getElementById('resultsTab');
+        const performanceTab = document.getElementById('performanceTab');
+        const resultsContent = document.getElementById('resultsContent');
+        const performanceContent = document.getElementById('performanceContent');
+        const performanceStats = document.getElementById('performanceStats');
+        
+        // State
+        let isExpanded = false;
+        
         // Event listeners
         executeBtn.addEventListener('click', executeQuery);
         exportBtn.addEventListener('click', exportResults);
+        openNeonConsoleBtn.addEventListener('click', openNeonConsole);
+        expandBtn.addEventListener('click', toggleExpand);
+        
+        // Tab switching
+        resultsTab.addEventListener('click', () => switchTab('results'));
+        performanceTab.addEventListener('click', () => switchTab('performance'));
         
         // Keyboard shortcuts
         queryEditor.addEventListener('keydown', (e) => {
@@ -411,24 +744,35 @@ export class SqlQueryPanel {
             }
         });
         
-        // Splitter functionality
+        // Global keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Backquote') {
+                e.preventDefault();
+                toggleExpand();
+            }
+        });
+        
+        // Splitter functionality for resizing
         let isDragging = false;
         let startY = 0;
-        let startHeight = 0;
+        let startQueryHeight = 0;
         
         splitter.addEventListener('mousedown', (e) => {
+            if (isExpanded) return;
             isDragging = true;
             startY = e.clientY;
-            startHeight = queryEditor.offsetHeight;
+            startQueryHeight = querySection.offsetHeight;
             document.addEventListener('mousemove', handleSplitterDrag);
             document.addEventListener('mouseup', stopSplitterDrag);
+            e.preventDefault();
         });
         
         function handleSplitterDrag(e) {
-            if (!isDragging) return;
+            if (!isDragging || isExpanded) return;
             const deltaY = e.clientY - startY;
-            const newHeight = Math.max(100, startHeight + deltaY);
-            queryEditor.style.height = newHeight + 'px';
+            const newHeight = Math.max(120, Math.min(window.innerHeight * 0.8, startQueryHeight + deltaY));
+            querySection.style.height = newHeight + 'px';
+            querySection.style.maxHeight = newHeight + 'px';
         }
         
         function stopSplitterDrag() {
@@ -436,6 +780,40 @@ export class SqlQueryPanel {
             document.removeEventListener('mousemove', handleSplitterDrag);
             document.removeEventListener('mouseup', stopSplitterDrag);
         }
+        
+        function toggleExpand() {
+            isExpanded = !isExpanded;
+            
+            if (isExpanded) {
+                querySection.classList.add('collapsed');
+                resultsSection.classList.add('maximized');
+                splitter.classList.add('hidden');
+                expandIcon.textContent = '⛷';
+                expandBtn.title = 'Collapse from full page';
+            } else {
+                querySection.classList.remove('collapsed');
+                resultsSection.classList.remove('maximized');
+                splitter.classList.remove('hidden');
+                expandIcon.textContent = '⛶';
+                expandBtn.title = 'Expand to full page';
+                
+                // Reset to default height when collapsing
+                querySection.style.height = '';
+                querySection.style.maxHeight = '';
+            }
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (!isExpanded && querySection.style.height) {
+                const currentHeight = parseInt(querySection.style.height);
+                const maxHeight = window.innerHeight * 0.8;
+                if (currentHeight > maxHeight) {
+                    querySection.style.height = maxHeight + 'px';
+                    querySection.style.maxHeight = maxHeight + 'px';
+                }
+            }
+        });
         
         // Message handling
         window.addEventListener('message', (event) => {
@@ -476,6 +854,12 @@ export class SqlQueryPanel {
             });
         }
         
+        function openNeonConsole() {
+            vscode.postMessage({
+                command: 'openNeonConsole'
+            });
+        }
+        
         function exportResults() {
             if (currentData.length === 0) return;
             
@@ -486,6 +870,23 @@ export class SqlQueryPanel {
             });
         }
         
+        function switchTab(tabName) {
+            // Remove active class from all tabs and content
+            resultsTab.classList.remove('active');
+            performanceTab.classList.remove('active');
+            resultsContent.classList.remove('active');
+            performanceContent.classList.remove('active');
+            
+            // Add active class to selected tab and content
+            if (tabName === 'results') {
+                resultsTab.classList.add('active');
+                resultsContent.classList.add('active');
+            } else if (tabName === 'performance') {
+                performanceTab.classList.add('active');
+                performanceContent.classList.add('active');
+            }
+        }
+
         function handleQueryResult(message) {
             setButtonsEnabled(true);
             
@@ -493,12 +894,15 @@ export class SqlQueryPanel {
                 const result = message.result;
                 currentData = result.rows;
                 displayResults(result);
+                displayPerformanceStats(result.performanceStats);
                 updateStatus(\`Query executed in \${result.executionTime}ms - \${result.rowCount} rows\`);
                 exportBtn.disabled = result.rowCount === 0;
             } else {
                 displayError(message.error);
                 updateStatus('Query failed');
                 exportBtn.disabled = true;
+                // Clear performance stats on error
+                performanceStats.innerHTML = '<div class="no-results">No performance data available</div>';
             }
         }
         
@@ -570,6 +974,127 @@ export class SqlQueryPanel {
         
         function updateStatus(text) {
             statusBar.textContent = text;
+        }
+        
+        function displayPerformanceStats(stats) {
+            if (!stats) {
+                performanceStats.innerHTML = '<div class="no-results">No performance data available</div>';
+                return;
+            }
+            
+            const formatTime = (ms) => ms !== undefined ? \`\${ms.toFixed(2)}ms\` : 'N/A';
+            const formatBytes = (bytes) => {
+                if (!bytes) return 'N/A';
+                if (bytes < 1024) return \`\${bytes} B\`;
+                if (bytes < 1024 * 1024) return \`\${(bytes / 1024).toFixed(1)} KB\`;
+                return \`\${(bytes / (1024 * 1024)).toFixed(1)} MB\`;
+            };
+            
+            const getComplexityClass = (complexity) => {
+                switch(complexity?.toLowerCase()) {
+                    case 'simple': return 'complexity-simple';
+                    case 'moderate': return 'complexity-moderate';
+                    case 'complex': return 'complexity-complex';
+                    default: return '';
+                }
+            };
+            
+            const getScanBadge = (scanType) => {
+                switch(scanType) {
+                    case 'index_scan': return '<span class="scan-type scan-index">INDEX</span>';
+                    case 'bitmap_scan': return '<span class="scan-type scan-bitmap">BITMAP</span>';
+                    case 'seq_scan': return '<span class="scan-type scan-seq">SEQ SCAN</span>';
+                    default: return '';
+                }
+            };
+            
+            let indexesHtml = 'None';
+            if (stats.indexesUsed && stats.indexesUsed.length > 0) {
+                indexesHtml = stats.indexesUsed.map(idx => \`<code>\${idx}</code>\`).join(', ');
+            }
+            
+            let scansHtml = 'None';
+            if (stats.tablesScanStatus && Object.keys(stats.tablesScanStatus).length > 0) {
+                scansHtml = Object.entries(stats.tablesScanStatus)
+                    .map(([table, scanType]) => \`<div><code>\${table}</code> \${getScanBadge(scanType)}</div>\`)
+                    .join('');
+            }
+            
+            performanceStats.innerHTML = \`
+                <div class="stats-grid">
+                    <div class="stats-card">
+                        <h3>Execution Times</h3>
+                        <ul class="stats-list">
+                            <li>
+                                <span class="stats-label">Total Execution:</span>
+                                <span class="stats-value">\${formatTime(stats.executionTime)}</span>
+                            </li>
+                            <li>
+                                <span class="stats-label">Connection Time:</span>
+                                <span class="stats-value">\${formatTime(stats.connectionTime)}</span>
+                            </li>
+                            <li>
+                                <span class="stats-label">Query Planning:</span>
+                                <span class="stats-value">\${formatTime(stats.queryPlanningTime)}</span>
+                            </li>
+                            <li>
+                                <span class="stats-label">Query Execution:</span>
+                                <span class="stats-value">\${formatTime(stats.queryExecutionTime)}</span>
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <div class="stats-card">
+                        <h3>Data Transfer</h3>
+                        <ul class="stats-list">
+                            <li>
+                                <span class="stats-label">Rows Returned:</span>
+                                <span class="stats-value">\${stats.rowsReturned?.toLocaleString() || 'N/A'}</span>
+                            </li>
+                            <li>
+                                <span class="stats-label">Rows Affected:</span>
+                                <span class="stats-value">\${stats.rowsAffected?.toLocaleString() || 'N/A'}</span>
+                            </li>
+                            <li>
+                                <span class="stats-label">Data Received:</span>
+                                <span class="stats-value">\${formatBytes(stats.bytesReceived)}</span>
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <div class="stats-card">
+                        <h3>Query Analysis</h3>
+                        <ul class="stats-list">
+                            <li>
+                                <span class="stats-label">Complexity:</span>
+                                <span class="stats-value \${getComplexityClass(stats.queryComplexity)}">\${stats.queryComplexity || 'Unknown'}</span>
+                            </li>
+                            <li>
+                                <span class="stats-label">Cache Hits:</span>
+                                <span class="stats-value">\${stats.cacheHits?.toLocaleString() || 'N/A'}</span>
+                            </li>
+                            <li>
+                                <span class="stats-label">Disk Reads:</span>
+                                <span class="stats-value">\${stats.diskReads?.toLocaleString() || 'N/A'}</span>
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <div class="stats-card">
+                        <h3>Indexes Used</h3>
+                        <div style="font-size: 13px; line-height: 1.4;">
+                            \${indexesHtml}
+                        </div>
+                    </div>
+                    
+                    <div class="stats-card">
+                        <h3>Table Scans</h3>
+                        <div style="font-size: 13px; line-height: 1.6;">
+                            \${scansHtml}
+                        </div>
+                    </div>
+                </div>
+            \`;
         }
     </script>
 </body>
