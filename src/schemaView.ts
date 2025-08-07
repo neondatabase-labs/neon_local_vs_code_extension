@@ -333,9 +333,7 @@ export class SchemaViewProvider {
             vscode.commands.registerCommand('neonLocal.schema.showDetails', (item: SchemaItem) => {
                 this.showItemDetails(item);
             }),
-            vscode.commands.registerCommand('neonLocal.schema.copyName', (item: SchemaItem) => {
-                this.copyItemName(item);
-            }),
+
             vscode.commands.registerCommand('neonLocal.schema.openSqlQuery', () => {
                 this.openSqlQuery();
             }),
@@ -434,14 +432,7 @@ export class SchemaViewProvider {
         }
     }
 
-    private async copyItemName(item: SchemaItem): Promise<void> {
-        try {
-            await vscode.env.clipboard.writeText(item.name);
-            vscode.window.showInformationMessage(`Copied "${item.name}" to clipboard`);
-        } catch (error) {
-            vscode.window.showErrorMessage('Failed to copy to clipboard');
-        }
-    }
+
 
     private openSqlQuery(): void {
         SqlQueryPanel.createOrShow(this.context, this.stateService);

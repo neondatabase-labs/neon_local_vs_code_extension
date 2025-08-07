@@ -61,10 +61,7 @@
         "title": "Refresh",
         "icon": "$(refresh)"
       },
-      {
-        "command": "neonLocal.schema.copyName",
-        "title": "Copy Name"
-      },
+
 
       {
         "command": "neonLocal.schema.openSqlQuery",
@@ -196,11 +193,7 @@
         }
       ],
       "view/item/context": [
-        {
-          "command": "neonLocal.schema.copyName",
-          "when": "view == neonLocalSchema",
-          "group": "1_copy"
-        },
+
         {
           "command": "neonLocal.schema.resetFromParent",
           "when": "view == neonLocalSchema && viewItem == connection",
@@ -225,7 +218,7 @@
         {
           "command": "neonLocal.schema.launchPsql",
           "when": "view == neonLocalSchema && viewItem == database",
-          "group": "5_terminal"
+          "group": "4_query"
         }
       ]
     }

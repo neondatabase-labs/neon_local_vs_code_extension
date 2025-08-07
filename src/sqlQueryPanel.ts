@@ -475,7 +475,7 @@ export class SqlQueryPanel {
         }
 
         /* Handle very long content gracefully */
-        th:hover, td:hover {
+        th:hover {
             overflow: visible;
             white-space: normal;
             word-break: break-word;

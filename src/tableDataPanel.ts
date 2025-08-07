@@ -451,9 +451,7 @@ export class TableDataPanel {
             cursor: pointer;
         }
 
-        .editable-cell:hover {
-            background-color: var(--vscode-list-activeSelectionBackground);
-        }
+
 
         .cell-editor {
             width: 100%;
@@ -558,8 +556,16 @@ export class TableDataPanel {
             cursor: pointer;
         }
 
-        .row-editing .editable-cell:hover {
-            background-color: var(--vscode-list-activeSelectionBackground);
+
+
+        .new-row {
+            background-color: var(--vscode-inputValidation-infoBackground, var(--vscode-list-hoverBackground));
+            border: 1px solid var(--vscode-inputValidation-infoBorder, var(--vscode-focusBorder));
+        }
+
+        .new-row .row-number {
+            font-weight: bold;
+            color: var(--vscode-inputValidation-infoForeground, var(--vscode-foreground));
         }
 
         .primary-key {
@@ -805,22 +811,7 @@ export class TableDataPanel {
         </div>
     </div>
 
-    <!-- Add Row Modal -->
-    <div id="addRowModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <span class="modal-title">Add New Row</span>
-                <span class="close" id="closeAddModal">&times;</span>
-            </div>
-            <form id="addRowForm">
-                <div id="addRowFields"></div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" id="cancelAddBtn">Cancel</button>
-                    <button type="submit" class="btn">Add Row</button>
-                </div>
-            </form>
-        </div>
-    </div>
+
 
     <!-- Confirmation Dialog -->
     <div id="confirmDialog" class="confirm-dialog">
@@ -845,6 +836,8 @@ export class TableDataPanel {
         let columns = [];
         let pendingDeleteRow = null;
         let editingRowIndex = -1;
+        let isAddingNewRow = false;
+        let newRowData = {};
         
         // Elements
         const tableContainer = document.getElementById('tableContainer');
@@ -859,12 +852,7 @@ export class TableDataPanel {
         const pageInfo = document.getElementById('pageInfo');
         const limitSelect = document.getElementById('limitSelect');
         
-        // Modal elements
-        const addRowModal = document.getElementById('addRowModal');
-        const closeAddModal = document.getElementById('closeAddModal');
-        const cancelAddBtn = document.getElementById('cancelAddBtn');
-        const addRowForm = document.getElementById('addRowForm');
-        const addRowFields = document.getElementById('addRowFields');
+        // Modal elements (for confirmation dialog only)
         
         // Confirmation dialog elements
         const confirmDialog = document.getElementById('confirmDialog');
@@ -873,15 +861,13 @@ export class TableDataPanel {
         const confirmDelete = document.getElementById('confirmDelete');
         
         // Event listeners
-        addRowBtn.addEventListener('click', showAddRowModal);
+        addRowBtn.addEventListener('click', startAddNewRow);
         refreshBtn.addEventListener('click', refresh);
         openNeonConsoleBtn.addEventListener('click', openNeonConsole);
         prevPageBtn.addEventListener('click', () => loadPage(currentPage - 1));
         nextPageBtn.addEventListener('click', () => loadPage(currentPage + 1));
         limitSelect.addEventListener('change', changeLimitSize);
-        closeAddModal.addEventListener('click', hideAddRowModal);
-        cancelAddBtn.addEventListener('click', hideAddRowModal);
-        addRowForm.addEventListener('submit', submitAddRow);
+
         
         // Confirmation dialog event listeners
         confirmCancel.addEventListener('click', hideConfirmDialog);
@@ -889,9 +875,7 @@ export class TableDataPanel {
         
         // Modal click outside to close
         window.addEventListener('click', (e) => {
-            if (e.target === addRowModal) {
-                hideAddRowModal();
-            } else if (e.target === confirmDialog) {
+            if (e.target === confirmDialog) {
                 hideConfirmDialog();
             }
         });
@@ -961,7 +945,13 @@ export class TableDataPanel {
         function handleRowOperation(message) {
             if (message.success) {
                 updateStatus('Operation completed successfully');
-                hideAddRowModal();
+                
+                // Reset new row state if we were adding a row
+                if (isAddingNewRow) {
+                    isAddingNewRow = false;
+                    newRowData = {};
+                    editingRowIndex = -1;
+                }
             } else {
                 updateStatus(\`Error: \${message.error}\`);
                 showErrorMessage(\`Error: \${message.error}\`);
@@ -1019,6 +1009,13 @@ export class TableDataPanel {
             
             // Create body
             const tbody = document.createElement('tbody');
+            
+            // Add new row at top if we're adding
+            if (isAddingNewRow) {
+                const newTr = createNewRowElement();
+                tbody.appendChild(newTr);
+            }
+            
             data.rows.forEach((row, index) => {
                 const tr = document.createElement('tr');
                 tr.dataset.rowIndex = index;
@@ -1359,62 +1356,153 @@ export class TableDataPanel {
             return pkValues;
         }
         
-        function showAddRowModal() {
-            // Build form fields
-            addRowFields.innerHTML = '';
+        function startAddNewRow() {
+            if (isAddingNewRow) {
+                return; // Already adding a row
+            }
+            
+            // Cancel any existing edit
+            if (editingRowIndex !== -1) {
+                cancelRowEdit(editingRowIndex);
+            }
+            
+            // Initialize new row data with empty values
+            newRowData = {};
             columns.forEach(col => {
-                const group = document.createElement('div');
-                group.className = 'form-group';
-                
-                const label = document.createElement('label');
-                label.className = 'form-label';
-                label.htmlFor = \`field_\${col.name}\`;
-                label.innerHTML = \`\${col.name}\${col.nullable ? '' : ' <span class="required">*</span>'}\`;
-                
-                const input = document.createElement('input');
-                input.id = \`field_\${col.name}\`;
-                input.name = col.name;
-                input.className = 'form-input';
-                input.type = getInputType(col.type);
-                input.placeholder = col.defaultValue ? \`Default: \${col.defaultValue}\` : '';
-                input.required = !col.nullable;
-                
-                const info = document.createElement('div');
-                info.className = 'column-info';
-                info.textContent = \`Type: \${col.type}\${col.maxLength ? \` (max \${col.maxLength})\` : ''}\`;
-                
-                group.appendChild(label);
-                group.appendChild(input);
-                group.appendChild(info);
-                addRowFields.appendChild(group);
+                newRowData[col.name] = '';
             });
             
-            addRowModal.style.display = 'block';
-        }
-        
-        function hideAddRowModal() {
-            addRowModal.style.display = 'none';
-            addRowForm.reset();
-        }
-        
-        function submitAddRow(e) {
-            e.preventDefault();
+            isAddingNewRow = true;
+            editingRowIndex = -1; // New row is at index -1
             
-            const formData = new FormData(addRowForm);
+            // Re-render table with new row at top
+            displayTable(currentData);
+            
+            // Scroll to top
+            tableContainer.scrollTop = 0;
+            
+            // Focus first input in the new row
+            setTimeout(() => {
+                const firstInput = tableContainer.querySelector('tr[data-row-index="-1"] input');
+                if (firstInput) {
+                    firstInput.focus();
+                }
+            }, 100);
+        }
+        
+        function saveNewRow() {
+            if (!isAddingNewRow) return;
+            
+            // Collect data from inputs
             const rowData = {};
+            const newRow = tableContainer.querySelector('tr[data-row-index="-1"]');
+            if (!newRow) return;
             
-            columns.forEach(col => {
-                const value = formData.get(col.name);
-                if (value !== null && value !== '') {
-                    rowData[col.name] = value;
+            const inputs = newRow.querySelectorAll('input, select');
+            inputs.forEach(input => {
+                const columnName = input.dataset.column;
+                if (columnName) {
+                    const value = input.type === 'checkbox' ? input.checked : input.value;
+                    if (value !== null && value !== '') {
+                        rowData[columnName] = value;
+                    }
                 }
             });
             
+            // Send to backend
             vscode.postMessage({
                 command: 'insertRow',
                 rowData
             });
+            
+            // Reset state
+            isAddingNewRow = false;
+            newRowData = {};
         }
+        
+        function cancelNewRow() {
+            if (!isAddingNewRow) return;
+            
+            isAddingNewRow = false;
+            newRowData = {};
+            editingRowIndex = -1;
+            
+            // Re-render table without new row
+            displayTable(currentData);
+        }
+        
+        function createNewRowElement() {
+            const tr = document.createElement('tr');
+            tr.dataset.rowIndex = '-1';
+            tr.classList.add('row-editing', 'new-row');
+            
+            // Row number cell (show as "New")
+            const rowNumCell = document.createElement('td');
+            rowNumCell.className = 'row-number';
+            rowNumCell.textContent = 'New';
+            tr.appendChild(rowNumCell);
+            
+            // Data cells with inputs
+            columns.forEach(col => {
+                const td = document.createElement('td');
+                td.classList.add('editable-cell');
+                td.dataset.column = col.name;
+                
+                const input = document.createElement('input');
+                input.type = getInputType(col.type);
+                input.value = newRowData[col.name] || '';
+                input.dataset.column = col.name;
+                input.placeholder = col.defaultValue ? 'Default: ' + col.defaultValue : '';
+                input.className = 'cell-input';
+                
+                if (col.isPrimaryKey) {
+                    td.classList.add('primary-key');
+                } else if (col.isForeignKey) {
+                    td.classList.add('foreign-key');
+                }
+                
+                // Save input value to newRowData on change
+                input.addEventListener('input', (e) => {
+                    newRowData[col.name] = e.target.value;
+                });
+                
+                // Handle tab navigation
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Tab') {
+                        // Let tab navigation work naturally
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        saveNewRow();
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        cancelNewRow();
+                    }
+                });
+                
+                td.appendChild(input);
+                tr.appendChild(td);
+            });
+            
+            // Actions cell with save/cancel buttons
+            const actionsCell = document.createElement('td');
+            actionsCell.className = 'actions-cell';
+            actionsCell.innerHTML = 
+                '<button class="action-btn save-btn" onclick="saveNewRow()" title="Save new row">' +
+                    '<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">' +
+                        '<path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>' +
+                    '</svg>' +
+                '</button>' +
+                '<button class="action-btn cancel-btn" onclick="cancelNewRow()" title="Cancel new row">' +
+                    '<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">' +
+                        '<path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>' +
+                    '</svg>' +
+                '</button>';
+            tr.appendChild(actionsCell);
+            
+            return tr;
+        }
+        
+
         
         function getInputType(dataType) {
             const type = dataType.toLowerCase();
