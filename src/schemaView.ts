@@ -4,6 +4,7 @@ import { StateService } from './services/state.service';
 import { AuthManager } from './auth/authManager';
 import { SqlQueryPanel } from './sqlQueryPanel';
 import { TableDataPanel } from './tableDataPanel';
+import { DockerService } from './services/docker.service';
 
 export class SchemaTreeItem extends vscode.TreeItem {
     constructor(
@@ -70,7 +71,7 @@ export class SchemaTreeItem extends vscode.TreeItem {
         switch (item.type) {
             case 'connection':
                 const connection = item.metadata;
-                return connection?.selectedDatabase || 'postgres';
+                return 'Branch';
             case 'column':
                 const column = item.metadata;
                 if (column?.data_type) {
@@ -95,7 +96,7 @@ export class SchemaTreeItem extends vscode.TreeItem {
     private getIcon(): vscode.ThemeIcon | undefined {
         switch (this.item.type) {
             case 'connection':
-                return new vscode.ThemeIcon('plug');
+                return new vscode.ThemeIcon('git-branch');
             case 'database':
                 return new vscode.ThemeIcon('database');
             case 'schema':
@@ -126,22 +127,26 @@ export class SchemaTreeItem extends vscode.TreeItem {
 }
 
 export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
-    private _onDidChangeTreeData: vscode.EventEmitter<SchemaItem | undefined | null | void> = new vscode.EventEmitter<SchemaItem | undefined | null | void>();
+    public _onDidChangeTreeData: vscode.EventEmitter<SchemaItem | undefined | null | void> = new vscode.EventEmitter<SchemaItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<SchemaItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
     private schemaCache = new Map<string, SchemaItem[]>();
+    public containerReadyCache: { isReady: boolean; timestamp: number } | null = null;
+    private readonly CONTAINER_CHECK_CACHE_DURATION = 10000; // 10 seconds
+    private isPreloading = false;
 
     constructor(
         private schemaService: SchemaService,
         private stateService: StateService,
-        private authManager: AuthManager
+        private authManager: AuthManager,
+        private dockerService: DockerService
     ) {
         // Listen for authentication state changes
         this.authManager.onDidChangeAuthentication((isAuthenticated) => {
             console.debug('Schema tree: Authentication state changed', { isAuthenticated });
             if (!isAuthenticated) {
                 this.clearCache();
-                this.refresh();
+                // Don't auto-refresh - require manual refresh
             }
         });
     }
@@ -153,6 +158,41 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
 
     public clearCache(): void {
         this.schemaCache.clear();
+        this.containerReadyCache = null;
+        this.isPreloading = false;
+        console.debug('Schema view: All caches cleared');
+    }
+
+    public forceRefresh(): void {
+        console.debug('Schema view: Force refresh triggered - clearing all caches and refreshing');
+        this.clearCache();
+        this._onDidChangeTreeData.fire();
+        // Also fire a delayed refresh to ensure VS Code processes the change
+        setTimeout(() => {
+            this._onDidChangeTreeData.fire();
+        }, 50);
+    }
+
+    private async checkContainerReadyWithCache(): Promise<boolean> {
+        const now = Date.now();
+        
+        // Return cached result if still valid
+        if (this.containerReadyCache && 
+            (now - this.containerReadyCache.timestamp) < this.CONTAINER_CHECK_CACHE_DURATION) {
+            return this.containerReadyCache.isReady;
+        }
+        
+        // Check container readiness
+        try {
+            const isReady = await this.dockerService.checkContainerReady();
+            this.containerReadyCache = { isReady, timestamp: now };
+            return isReady;
+        } catch (error) {
+            console.error('Error checking container readiness:', error);
+            // Cache negative result for shorter duration
+            this.containerReadyCache = { isReady: false, timestamp: now - (this.CONTAINER_CHECK_CACHE_DURATION - 2000) };
+            return false;
+        }
     }
 
     getTreeItem(element: SchemaItem): vscode.TreeItem {
@@ -187,13 +227,34 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
                 return [];
             }
 
+            // Check if proxy container is ready before loading data (with caching)
+            const isContainerReady = await this.checkContainerReadyWithCache();
+            if (!isContainerReady) {
+                console.warn('Schema view: Proxy container is not ready yet');
+                vscode.window.showWarningMessage('Database proxy is not ready yet. Please wait for the container to start completely.');
+                return [];
+            }
+
             if (!element) {
-                // Root level - show connection root node
-                return this.getConnectionRoot(viewData);
+                // Root level - show connection root node and preload all data
+                const connectionRoot = this.getConnectionRoot(viewData);
+                console.debug('Schema view: Returning root connection node for branch:', viewData.currentlyConnectedBranch);
+                
+                // Start preloading all schema data in the background (only if not already preloading)
+                if (!this.isPreloading) {
+                    this.isPreloading = true;
+                    this.preloadAllSchemaData().catch(error => {
+                        console.error('Error preloading schema data:', error);
+                    }).finally(() => {
+                        this.isPreloading = false;
+                    });
+                }
+                return connectionRoot;
             }
 
             const cacheKey = element.id;
             if (this.schemaCache.has(cacheKey)) {
+                console.debug(`Schema view: Returning cached data for ${cacheKey}`);
                 return this.schemaCache.get(cacheKey)!;
             }
 
@@ -217,7 +278,7 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
                     const tableParts = element.id.split('_');
                     const tableDatabase = tableParts[1];
                     const tableSchema = tableParts[2];
-                    const tableName = tableParts[3];
+                    const tableName = tableParts.slice(3).join('_');
                     children = await this.getTableChildren(tableDatabase, tableSchema, tableName);
                     break;
             }
@@ -239,6 +300,8 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
         const selectedDatabase = viewData.selectedDatabase || 'postgres';
         const port = viewData.port || 5432;
 
+        console.debug('Schema view: Creating connection root for branch:', branchName);
+
         const connectionItem: SchemaItem = {
             id: 'connection_root',
             name: `${branchName}`,
@@ -258,7 +321,10 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
 
     private async getDatabases(): Promise<SchemaItem[]> {
         try {
-            return await this.schemaService.getDatabases();
+            console.debug('Schema view: Fetching databases from service');
+            const databases = await this.schemaService.getDatabases();
+            console.debug(`Schema view: Retrieved ${databases.length} databases`);
+            return databases;
         } catch (error) {
             console.error('Error fetching databases:', error);
             return [];
@@ -300,21 +366,124 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
             return [];
         }
     }
+
+    private async preloadAllSchemaData(): Promise<void> {
+        try {
+            console.debug('Schema view: Starting preload of all schema data...');
+            
+            // Check if we're still connected and container is ready
+            const viewData = await this.stateService.getViewData();
+            if (!viewData.connected) {
+                console.debug('Schema view: Aborting preload - not connected');
+                return;
+            }
+            
+            // Load all databases first
+            const databases = await this.getDatabases();
+            
+            // Don't preload if there are too many databases (performance consideration)
+            if (databases.length > 10) {
+                console.debug(`Schema view: Skipping preload due to large number of databases (${databases.length})`);
+                return;
+            }
+            
+            // Cache databases for connection root
+            this.schemaCache.set('connection_root', databases);
+            
+            // For each database, load schemas and their contents
+            for (const database of databases) {
+                try {
+                    const schemas = await this.getSchemas(database.name);
+                    
+                    // Don't preload if there are too many schemas in this database
+                    if (schemas.length > 20) {
+                        console.debug(`Schema view: Skipping preload for database ${database.name} due to large number of schemas (${schemas.length})`);
+                        continue;
+                    }
+                    
+                    // Cache schemas
+                    this.schemaCache.set(database.id, schemas);
+                    
+                    // For each schema, load tables and their contents
+                    for (const schema of schemas) {
+                        try {
+                            const parts = schema.id.split('_');
+                            const dbName = parts[1];
+                            const schemaName = parts[2];
+                            
+                            const tablesAndFunctions = await this.getTablesAndFunctions(dbName, schemaName);
+                            
+                            // Don't preload table details if there are too many tables
+                            if (tablesAndFunctions.length > 50) {
+                                console.debug(`Schema view: Skipping table detail preload for schema ${schemaName} due to large number of tables (${tablesAndFunctions.length})`);
+                                // Still cache the tables/functions list, just not their children
+                                this.schemaCache.set(schema.id, tablesAndFunctions);
+                                continue;
+                            }
+                            
+                            // Cache tables and functions
+                            this.schemaCache.set(schema.id, tablesAndFunctions);
+                            
+                            // For each table/view, load columns, indexes, and triggers
+                            const tablePromises = tablesAndFunctions
+                                .filter(item => item.type === 'table' || item.type === 'view')
+                                .map(async (tableItem) => {
+                                    try {
+                                        const tableParts = tableItem.id.split('_');
+                                        const tableDatabase = tableParts[1];
+                                        const tableSchema = tableParts[2];
+                                        const tableName = tableParts.slice(3).join('_');
+                                        
+                                        const tableChildren = await this.getTableChildren(tableDatabase, tableSchema, tableName);
+                                        
+                                        // Cache table children
+                                        this.schemaCache.set(tableItem.id, tableChildren);
+                                    } catch (error) {
+                                        console.error(`Error preloading table children for ${tableItem.name}:`, error);
+                                    }
+                                });
+                            
+                            // Execute table preloading in parallel but limit concurrency
+                            const batchSize = 3; // Process 3 tables at a time to avoid overwhelming the database
+                            for (let i = 0; i < tablePromises.length; i += batchSize) {
+                                const batch = tablePromises.slice(i, i + batchSize);
+                                await Promise.all(batch);
+                            }
+                            
+                        } catch (error) {
+                            console.error(`Error preloading schema ${schema.name}:`, error);
+                        }
+                    }
+                } catch (error) {
+                    console.error(`Error preloading database ${database.name}:`, error);
+                }
+            }
+            
+            console.debug('Schema view: Preload completed successfully');
+            
+            // Don't auto-refresh tree view - data will be available when manually refreshed
+            
+        } catch (error) {
+            console.error('Error during schema preload:', error);
+        }
+    }
 }
 
 export class SchemaViewProvider {
     private treeDataProvider: SchemaTreeProvider;
     private treeView: vscode.TreeView<SchemaItem>;
     private lastConnectionState: boolean = false;
+    private lastConnectedBranch: string = '';
     private schemaService: SchemaService;
 
     constructor(
         private context: vscode.ExtensionContext,
         private stateService: StateService,
-        private authManager: AuthManager
+        private authManager: AuthManager,
+        private dockerService: DockerService
     ) {
         this.schemaService = new SchemaService(stateService, context);
-        this.treeDataProvider = new SchemaTreeProvider(this.schemaService, stateService, authManager);
+        this.treeDataProvider = new SchemaTreeProvider(this.schemaService, stateService, authManager, dockerService);
         
         this.treeView = vscode.window.createTreeView('neonLocalSchema', {
             treeDataProvider: this.treeDataProvider,
@@ -328,6 +497,7 @@ export class SchemaViewProvider {
     private registerCommands(): void {
         this.context.subscriptions.push(
             vscode.commands.registerCommand('neonLocal.schema.refresh', () => {
+                console.debug('Schema view: Manual refresh triggered');
                 this.treeDataProvider.refresh();
             }),
             vscode.commands.registerCommand('neonLocal.schema.showDetails', (item: SchemaItem) => {
@@ -348,6 +518,12 @@ export class SchemaViewProvider {
             }),
             vscode.commands.registerCommand('neonLocal.schema.launchPsql', (item: SchemaItem) => {
                 this.launchPsql(item);
+            }),
+            vscode.commands.registerCommand('neonLocal.schema.truncateTable', (item: SchemaItem) => {
+                this.truncateTable(item);
+            }),
+            vscode.commands.registerCommand('neonLocal.schema.dropTable', (item: SchemaItem) => {
+                this.dropTable(item);
             })
         );
     }
@@ -358,33 +534,47 @@ export class SchemaViewProvider {
             vscode.commands.registerCommand('neonLocal.schema.onConnectionStateChanged', async (viewData) => {
                 const wasConnectedBefore = this.lastConnectionState;
                 const isConnectedNow = viewData?.connected || false;
+                const currentBranch = viewData?.currentlyConnectedBranch || '';
+                const branchChanged = currentBranch !== this.lastConnectedBranch;
                 
                 console.debug('Schema view: Connection state changed', {
                     wasConnectedBefore,
                     isConnectedNow,
-                    shouldRefresh: isConnectedNow && (!wasConnectedBefore || isConnectedNow !== wasConnectedBefore)
+                    lastBranch: this.lastConnectedBranch,
+                    currentBranch,
+                    branchChanged
                 });
                 
-                // Update the last known connection state
+                // Update the last known states
                 this.lastConnectionState = isConnectedNow;
+                this.lastConnectedBranch = currentBranch;
                 
-                // Refresh the schema tree when connection is established or changes
-                if (isConnectedNow) {
-                    console.debug('Schema view: Refreshing due to connection established');
-                    this.treeDataProvider.refresh();
+                // Handle connection state changes
+                if (isConnectedNow && (!wasConnectedBefore || branchChanged)) {
+                    console.debug('Schema view: New connection or branch change - forcing aggressive refresh');
+                    // Use force refresh to ensure complete cache clear and tree update
+                    this.treeDataProvider.forceRefresh();
                 } else if (wasConnectedBefore && !isConnectedNow) {
-                    console.debug('Schema view: Clearing cache due to connection lost');
+                    console.debug('Schema view: Connection lost - clearing all caches');
                     this.treeDataProvider.clearCache();
                     this.treeDataProvider.refresh();
                 }
             })
         );
 
-        // Store initial connection state
+        // Store initial connection state and refresh if already connected
         this.stateService.getViewData().then(viewData => {
             this.lastConnectionState = viewData.connected;
+            this.lastConnectedBranch = viewData.currentlyConnectedBranch || '';
+            console.debug('Schema view: Initial state stored', { 
+                connected: viewData.connected, 
+                branch: this.lastConnectedBranch 
+            });
+            
+            // If already connected on startup, refresh to show current branch data
             if (viewData.connected) {
-                this.treeDataProvider.refresh();
+                console.debug('Schema view: Already connected on startup - force refreshing with current branch data');
+                this.treeDataProvider.forceRefresh();
             }
         });
     }
@@ -513,6 +703,92 @@ export class SchemaViewProvider {
             terminal.sendText(`psql "${connectionString}"`);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to launch PSQL: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+
+    private async truncateTable(item: SchemaItem): Promise<void> {
+        if (item.type !== 'table') {
+            return;
+        }
+
+        try {
+            // Parse table ID: table_database_schema_tablename
+            const parts = item.id.split('_');
+            const database = parts[1];
+            const schema = parts[2];
+            const tableName = parts.slice(3).join('_');
+
+            // Show confirmation dialog
+            const confirmMessage = `Are you sure you want to truncate table "${schema}.${tableName}"? This action will remove all data from the table and cannot be undone.`;
+            
+            const answer = await vscode.window.showWarningMessage(
+                confirmMessage,
+                { modal: true },
+                'Truncate'
+            );
+
+            if (answer !== 'Truncate') {
+                return;
+            }
+
+            // Execute truncate command
+            const query = `TRUNCATE TABLE ${schema}.${tableName}`;
+            await this.schemaService.testConnection(database); // Ensure connection
+            
+            // Use the schema service connection pool to execute the truncate
+            const connectionPool = (this.schemaService as any).connectionPool;
+            await connectionPool.executeQuery(query, [], database);
+
+            vscode.window.showInformationMessage(`Table "${schema}.${tableName}" has been truncated successfully.`);
+            
+            // Refresh the schema view to reflect any changes
+            this.treeDataProvider.refresh();
+            
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to truncate table: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+
+    private async dropTable(item: SchemaItem): Promise<void> {
+        if (item.type !== 'table') {
+            return;
+        }
+
+        try {
+            // Parse table ID: table_database_schema_tablename  
+            const parts = item.id.split('_');
+            const database = parts[1];
+            const schema = parts[2];
+            const tableName = parts.slice(3).join('_');
+
+            // Show confirmation dialog with stronger warning
+            const confirmMessage = `Are you sure you want to DROP table "${schema}.${tableName}"? This action will permanently delete the table and all its data. This cannot be undone.`;
+            
+            const answer = await vscode.window.showErrorMessage(
+                confirmMessage,
+                { modal: true },
+                'Drop Table'
+            );
+
+            if (answer !== 'Drop Table') {
+                return;
+            }
+
+            // Execute drop command
+            const query = `DROP TABLE ${schema}.${tableName}`;
+            await this.schemaService.testConnection(database); // Ensure connection
+            
+            // Use the schema service connection pool to execute the drop
+            const connectionPool = (this.schemaService as any).connectionPool;
+            await connectionPool.executeQuery(query, [], database);
+
+            vscode.window.showInformationMessage(`Table "${schema}.${tableName}" has been dropped successfully.`);
+            
+            // Refresh the schema view to reflect the removal
+            this.treeDataProvider.refresh();
+            
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to drop table: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 

@@ -759,6 +759,93 @@ export class TableDataPanel {
         .limit-select:focus {
             outline: 1px solid var(--vscode-focusBorder);
         }
+
+        .filter-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-right: 12px;
+        }
+
+        .filter-input {
+            background-color: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 3px;
+            padding: 4px 8px;
+            font-size: 12px;
+            width: 200px;
+        }
+
+        .filter-input:focus {
+            outline: 1px solid var(--vscode-focusBorder);
+        }
+
+        .control-btn {
+            background-color: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border: none;
+            border-radius: 3px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .control-btn:hover {
+            background-color: var(--vscode-button-secondaryHoverBackground);
+        }
+
+        .sortable-header {
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+
+        .sortable-header:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .sort-indicator {
+            position: absolute;
+            right: 4px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+            opacity: 0.7;
+        }
+
+        .column-visibility-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background-color: var(--vscode-dropdown-background);
+            border: 1px solid var(--vscode-dropdown-border);
+            border-radius: 3px;
+            padding: 8px;
+            z-index: 1000;
+            min-width: 200px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .column-visibility-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px;
+            cursor: pointer;
+        }
+
+        .column-visibility-item:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .column-visibility-item input[type="checkbox"] {
+            margin: 0;
+        }
+
+        .hidden-column {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -777,6 +864,15 @@ export class TableDataPanel {
             </span>
         </div>
         <div class="toolbar-right">
+            <div class="filter-controls">
+                <input type="text" id="filterInput" placeholder="Filter data..." class="filter-input" />
+                <button id="columnVisibilityBtn" class="control-btn" title="Show/Hide Columns">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M2 3h12v1H2V3zm0 3h12v1H2V6zm0 3h12v1H2V9zm0 3h12v1H2v-1z"/>
+                        <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h11A1.5 1.5 0 0 1 15 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 13.5v-11z" fill="none" stroke="currentColor" stroke-width="0.5"/>
+                    </svg>
+                </button>
+            </div>
             <button class="btn btn-secondary" id="openNeonConsoleBtn" title="Open this table in Neon console">Open in Neon console</button>
         </div>
     </div>
@@ -830,6 +926,11 @@ export class TableDataPanel {
         const vscode = acquireVsCodeApi();
         
         let currentData = null;
+        let filteredData = [];
+        let originalColumns = [];
+        let visibleColumns = [];
+        let sortColumn = null;
+        let sortDirection = 'asc';
         let currentPage = 0;
         let pageSize = 100;
         let editingCell = null;
@@ -851,6 +952,8 @@ export class TableDataPanel {
         const nextPageBtn = document.getElementById('nextPageBtn');
         const pageInfo = document.getElementById('pageInfo');
         const limitSelect = document.getElementById('limitSelect');
+        const filterInput = document.getElementById('filterInput');
+        const columnVisibilityBtn = document.getElementById('columnVisibilityBtn');
         
         // Modal elements (for confirmation dialog only)
         
@@ -867,6 +970,8 @@ export class TableDataPanel {
         prevPageBtn.addEventListener('click', () => loadPage(currentPage - 1));
         nextPageBtn.addEventListener('click', () => loadPage(currentPage + 1));
         limitSelect.addEventListener('change', changeLimitSize);
+        filterInput.addEventListener('input', applyFilter);
+        columnVisibilityBtn.addEventListener('click', toggleColumnVisibility);
 
         
         // Confirmation dialog event listeners
@@ -914,13 +1019,19 @@ export class TableDataPanel {
             currentPage = message.page;
             pageSize = message.pageSize;
             columns = currentData.columns;
+            originalColumns = currentData.columns.map(col => col.name);
+            visibleColumns = [...originalColumns];
+            filteredData = [...currentData.rows];
+            sortColumn = null;
+            sortDirection = 'asc';
+            filterInput.value = '';
             
             // Update the limit selector to match the current pageSize
             limitSelect.value = pageSize.toString();
             
             displayTable(currentData);
             updatePagination();
-            updateStatus(\`Showing \${currentData.rows.length} of \${currentData.totalCount} rows\`);
+            updateStatus(\`Showing \${filteredData.length} of \${currentData.totalCount} rows\`);
         }
         
         function loadPage(page) {
@@ -965,9 +1076,16 @@ export class TableDataPanel {
         }
         
         function displayTable(data) {
-            if (!data || data.rows.length === 0) {
+            // If we don't have any data structure and we're not adding a new row, show no data message
+            if (!data || (!data.columns || data.columns.length === 0)) {
                 tableContainer.innerHTML = '<div class="no-data">No data to display</div>';
                 return;
+            }
+            
+            // If we have column structure but no data rows and we're not adding a new row, show a different message
+            if (filteredData.length === 0 && !isAddingNewRow) {
+                // Still create the table structure so Add Row button can work
+                // But show "empty table" message in the table body
             }
             
             const table = document.createElement('table');
@@ -982,17 +1100,32 @@ export class TableDataPanel {
             rowNumHeader.textContent = '#';
             headerRow.appendChild(rowNumHeader);
             
-            // Column headers
+            // Column headers (only visible columns)
             data.columns.forEach(col => {
+                if (!visibleColumns.includes(col.name)) return;
+                
                 const th = document.createElement('th');
                 th.textContent = col.name;
                 th.title = \`\${col.type}\${col.nullable ? '' : ' (NOT NULL)'}\${col.isPrimaryKey ? ' (PK)' : ''}\${col.isForeignKey ? ' (FK)' : ''}\`;
+                th.className = 'sortable-header';
+                th.style.position = 'relative';
                 
                 if (col.isPrimaryKey) {
                     th.classList.add('primary-key');
                 } else if (col.isForeignKey) {
                     th.classList.add('foreign-key');
                 }
+                
+                // Add sort indicator if this column is being sorted
+                if (sortColumn === col.name) {
+                    const sortIndicator = document.createElement('span');
+                    sortIndicator.className = 'sort-indicator';
+                    sortIndicator.textContent = sortDirection === 'asc' ? '↑' : '↓';
+                    th.appendChild(sortIndicator);
+                }
+                
+                // Add click handler for sorting
+                th.addEventListener('click', () => sortBy(col.name));
                 
                 headerRow.appendChild(th);
             });
@@ -1016,7 +1149,21 @@ export class TableDataPanel {
                 tbody.appendChild(newTr);
             }
             
-            data.rows.forEach((row, index) => {
+            // If no data and not adding a new row, show empty table message
+            if (filteredData.length === 0 && !isAddingNewRow) {
+                const emptyRow = document.createElement('tr');
+                const emptyCell = document.createElement('td');
+                emptyCell.colSpan = data.columns.length + 2; // +2 for row number and actions columns
+                emptyCell.textContent = 'No data in this table. Click "Add Row" to add the first row.';
+                emptyCell.style.textAlign = 'center';
+                emptyCell.style.fontStyle = 'italic';
+                emptyCell.style.color = 'var(--vscode-descriptionForeground)';
+                emptyCell.style.padding = '32px';
+                emptyRow.appendChild(emptyCell);
+                tbody.appendChild(emptyRow);
+            }
+            
+            filteredData.forEach((row, index) => {
                 const tr = document.createElement('tr');
                 tr.dataset.rowIndex = index;
                 
@@ -1030,8 +1177,9 @@ export class TableDataPanel {
                 rowNumCell.textContent = (currentPage * pageSize) + index + 1;
                 tr.appendChild(rowNumCell);
                 
-                // Data cells
+                // Data cells (only visible columns)
                 data.columns.forEach(col => {
+                    if (!visibleColumns.includes(col.name)) return;
                     const td = document.createElement('td');
                     const value = row[col.name];
                     
@@ -1361,6 +1509,12 @@ export class TableDataPanel {
                 return; // Already adding a row
             }
             
+            // Check if we have column definitions
+            if (!columns || columns.length === 0) {
+                updateStatus('Cannot add row: Table structure not loaded');
+                return;
+            }
+            
             // Cancel any existing edit
             if (editingRowIndex !== -1) {
                 cancelRowEdit(editingRowIndex);
@@ -1442,8 +1596,10 @@ export class TableDataPanel {
             rowNumCell.textContent = 'New';
             tr.appendChild(rowNumCell);
             
-            // Data cells with inputs
+            // Data cells with inputs (only visible columns)
             columns.forEach(col => {
+                if (!visibleColumns.includes(col.name)) return;
+                
                 const td = document.createElement('td');
                 td.classList.add('editable-cell');
                 td.dataset.column = col.name;
@@ -1575,6 +1731,135 @@ export class TableDataPanel {
                 confirmCancel.removeEventListener('click', resetDialog);
             };
             confirmCancel.addEventListener('click', resetDialog);
+        }
+        
+        function applyFilter() {
+            const filterValue = filterInput.value.toLowerCase().trim();
+            
+            if (!filterValue) {
+                filteredData = [...currentData.rows];
+            } else {
+                filteredData = currentData.rows.filter(row => {
+                    return visibleColumns.some(colName => {
+                        const value = row[colName];
+                        const searchText = value === null ? 'null' : String(value).toLowerCase();
+                        return searchText.includes(filterValue);
+                    });
+                });
+            }
+            
+            // Re-apply sorting if active
+            if (sortColumn) {
+                applySorting();
+            }
+            
+            displayTable(currentData);
+            updateStatus(\`Showing \${filteredData.length} of \${currentData.totalCount} rows\`);
+        }
+        
+        function sortBy(column) {
+            if (sortColumn === column) {
+                // Toggle direction if same column
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                // New column, start with ascending
+                sortColumn = column;
+                sortDirection = 'asc';
+            }
+            
+            applySorting();
+            displayTable(currentData);
+        }
+        
+        function applySorting() {
+            if (!sortColumn) return;
+            
+            filteredData.sort((a, b) => {
+                const aVal = a[sortColumn];
+                const bVal = b[sortColumn];
+                
+                // Handle null values
+                if (aVal === null && bVal === null) return 0;
+                if (aVal === null) return sortDirection === 'asc' ? -1 : 1;
+                if (bVal === null) return sortDirection === 'asc' ? 1 : -1;
+                
+                // Try numeric comparison first
+                const aNum = Number(aVal);
+                const bNum = Number(bVal);
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                    return sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
+                }
+                
+                // String comparison
+                const aStr = String(aVal).toLowerCase();
+                const bStr = String(bVal).toLowerCase();
+                if (aStr < bStr) return sortDirection === 'asc' ? -1 : 1;
+                if (aStr > bStr) return sortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        
+        function toggleColumnVisibility() {
+            // Remove existing dropdown if present
+            const existingDropdown = document.querySelector('.column-visibility-dropdown');
+            if (existingDropdown) {
+                existingDropdown.remove();
+                return;
+            }
+            
+            // Create dropdown
+            const dropdown = document.createElement('div');
+            dropdown.className = 'column-visibility-dropdown';
+            
+            originalColumns.forEach(colName => {
+                const item = document.createElement('div');
+                item.className = 'column-visibility-item';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = visibleColumns.includes(colName);
+                checkbox.addEventListener('change', () => toggleColumn(colName));
+                
+                const label = document.createElement('span');
+                label.textContent = colName;
+                
+                item.appendChild(checkbox);
+                item.appendChild(label);
+                dropdown.appendChild(item);
+            });
+            
+            // Position dropdown relative to button
+            columnVisibilityBtn.parentElement.style.position = 'relative';
+            columnVisibilityBtn.parentElement.appendChild(dropdown);
+            
+            // Close dropdown when clicking outside
+            setTimeout(() => {
+                document.addEventListener('click', function closeDropdown(e) {
+                    if (!dropdown.contains(e.target) && e.target !== columnVisibilityBtn) {
+                        dropdown.remove();
+                        document.removeEventListener('click', closeDropdown);
+                    }
+                });
+            }, 0);
+        }
+        
+        function toggleColumn(column) {
+            const index = visibleColumns.indexOf(column);
+            if (index > -1) {
+                visibleColumns.splice(index, 1);
+            } else {
+                // Add column back in original order
+                const originalIndex = originalColumns.indexOf(column);
+                let insertIndex = 0;
+                for (let i = 0; i < originalIndex; i++) {
+                    if (visibleColumns.includes(originalColumns[i])) {
+                        insertIndex++;
+                    }
+                }
+                visibleColumns.splice(insertIndex, 0, column);
+            }
+            
+            displayTable(currentData);
         }
     </script>
 </body>

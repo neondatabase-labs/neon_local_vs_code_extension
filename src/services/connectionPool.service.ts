@@ -59,8 +59,8 @@ export class ConnectionPoolService {
             ...config,
             max: 5, // Maximum number of clients in the pool
             min: 0, // Minimum number of clients in the pool
-            idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-            connectionTimeoutMillis: 10000, // Time to wait for a connection to be established
+            idleTimeoutMillis: 60000, // Close idle clients after 60 seconds
+            connectionTimeoutMillis: 150000, // Time to wait for a connection to be established
         });
     }
 
@@ -110,7 +110,7 @@ export class ConnectionPoolService {
                 }
                 
                 // Wait before retrying (exponential backoff)
-                await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 500));
+                await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 5000));
             }
         }
         
@@ -161,7 +161,7 @@ export class ConnectionPoolService {
             const timeout = setTimeout(() => {
                 socket.destroy();
                 resolve(false);
-            }, 5000); // 5 second timeout
+            }, 10000); // 10 second timeout
             
             socket.connect(config.port, config.host, () => {
                 clearTimeout(timeout);

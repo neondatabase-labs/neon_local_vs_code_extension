@@ -167,7 +167,8 @@ export async function activate(context: vscode.ExtensionContext) {
   const schemaViewProvider = new SchemaViewProvider(
     context,
     stateService,
-    authManager
+    authManager,
+    dockerService
   );
 
   // Store schema service for cleanup

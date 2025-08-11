@@ -2,7 +2,7 @@
   "name": "neon-local-connect",
   "displayName": "Neon Local Connect",
   "description": "Local development environment for Neon Databases with branch management",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "publisher": "databricks",
   "repository": {
     "type": "git",
@@ -86,6 +86,16 @@
         "command": "neonLocal.schema.launchPsql",
         "title": "Launch PSQL",
         "icon": "$(terminal)"
+      },
+      {
+        "command": "neonLocal.schema.truncateTable",
+        "title": "Truncate Table",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "neonLocal.schema.dropTable",
+        "title": "Drop Table",
+        "icon": "$(trash)"
       }
     ],
     "configuration": {
@@ -164,7 +174,7 @@
       "activitybar": [
         {
           "id": "neon-local-connect",
-          "title": "Neon Local",
+          "title": "Neon Local Connect",
           "icon": "resources/Neon_logo.png"
         }
       ]
@@ -174,7 +184,7 @@
         {
           "type": "webview",
           "id": "neonLocalConnect",
-          "name": "Connect"
+          "name": "Database Connection"
         },
         {
           "type": "tree",
@@ -219,6 +229,16 @@
           "command": "neonLocal.schema.launchPsql",
           "when": "view == neonLocalSchema && viewItem == database",
           "group": "4_query"
+        },
+        {
+          "command": "neonLocal.schema.truncateTable",
+          "when": "view == neonLocalSchema && viewItem == table",
+          "group": "5_modify"
+        },
+        {
+          "command": "neonLocal.schema.dropTable",
+          "when": "view == neonLocalSchema && viewItem == table",
+          "group": "5_modify"
         }
       ]
     }

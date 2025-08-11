@@ -444,6 +444,104 @@ export class SqlQueryPanel {
             font-weight: 600;
         }
 
+        .results-title-section {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .results-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-input {
+            background-color: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 3px;
+            padding: 4px 8px;
+            font-size: 12px;
+            width: 200px;
+        }
+
+        .filter-input:focus {
+            outline: 1px solid var(--vscode-focusBorder);
+        }
+
+        .control-btn {
+            background-color: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border: none;
+            border-radius: 3px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .control-btn:hover {
+            background-color: var(--vscode-button-secondaryHoverBackground);
+        }
+
+        .sortable-header {
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+
+        .sortable-header:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .sort-indicator {
+            position: absolute;
+            right: 4px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+            opacity: 0.7;
+        }
+
+        .column-visibility-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background-color: var(--vscode-dropdown-background);
+            border: 1px solid var(--vscode-dropdown-border);
+            border-radius: 3px;
+            padding: 8px;
+            z-index: 1000;
+            min-width: 200px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .column-visibility-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px;
+            cursor: pointer;
+        }
+
+        .column-visibility-item:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
+
+        .column-visibility-item input[type="checkbox"] {
+            margin: 0;
+        }
+
+        .hidden-column {
+            display: none;
+        }
+
         .results-table {
             flex: 1;
             overflow: auto;
@@ -483,7 +581,6 @@ export class SqlQueryPanel {
             z-index: 100;
             background-color: var(--vscode-editor-background);
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-            border: 1px solid var(--vscode-focusBorder);
         }
 
         th {
@@ -708,8 +805,21 @@ export class SqlQueryPanel {
             
             <div class="tab-content active" id="resultsContent">
                 <div class="results-header">
-                    <span id="resultsTitle">Query Results</span>
-                    <span id="resultsInfo"></span>
+                    <div class="results-title-section">
+                        <span id="resultsTitle">Query Results</span>
+                        <span id="resultsInfo"></span>
+                    </div>
+                    <div class="results-controls">
+                        <div class="filter-controls">
+                            <input type="text" id="filterInput" placeholder="Filter results..." class="filter-input" />
+                            <button id="columnVisibilityBtn" class="control-btn" title="Show/Hide Columns">
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                                    <path d="M2 3h12v1H2V3zm0 3h12v1H2V6zm0 3h12v1H2V9zm0 3h12v1H2v-1z"/>
+                                    <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h11A1.5 1.5 0 0 1 15 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 13.5v-11z" fill="none" stroke="currentColor" stroke-width="0.5"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <div class="results-table" id="resultsContainer">
                     <div class="no-results">Execute a query to see results</div>
@@ -732,6 +842,11 @@ export class SqlQueryPanel {
         const vscode = acquireVsCodeApi();
         
         let currentData = [];
+        let filteredData = [];
+        let originalColumns = [];
+        let visibleColumns = [];
+        let sortColumn = null;
+        let sortDirection = 'asc';
         
         // Elements
         const queryEditor = document.getElementById('queryEditor');
@@ -743,6 +858,8 @@ export class SqlQueryPanel {
         const resultsInfo = document.getElementById('resultsInfo');
         const statusBar = document.getElementById('statusBar');
         const splitter = document.getElementById('splitter');
+        const filterInput = document.getElementById('filterInput');
+        const columnVisibilityBtn = document.getElementById('columnVisibilityBtn');
         
         // Layout elements
         const querySection = document.getElementById('querySection');
@@ -765,6 +882,8 @@ export class SqlQueryPanel {
         exportBtn.addEventListener('click', exportResults);
         openNeonConsoleBtn.addEventListener('click', openNeonConsole);
         expandBtn.addEventListener('click', toggleExpand);
+        filterInput.addEventListener('input', applyFilter);
+        columnVisibilityBtn.addEventListener('click', toggleColumnVisibility);
         
         // Tab switching
         resultsTab.addEventListener('click', () => switchTab('results'));
@@ -939,6 +1058,12 @@ export class SqlQueryPanel {
             if (message.success) {
                 const result = message.result;
                 currentData = result.rows;
+                originalColumns = result.columns;
+                visibleColumns = [...result.columns];
+                filteredData = [...result.rows];
+                sortColumn = null;
+                sortDirection = 'asc';
+                filterInput.value = '';
                 displayResults(result);
                 displayPerformanceStats(result.performanceStats);
                 updateStatus(\`Query executed in \${result.executionTime}ms - \${result.rowCount} rows\`);
@@ -959,15 +1084,39 @@ export class SqlQueryPanel {
                 return;
             }
             
+            displayTable();
+        }
+        
+        function displayTable() {
+            if (filteredData.length === 0) {
+                resultsContainer.innerHTML = '<div class="no-results">No results match the filter</div>';
+                resultsInfo.textContent = 'No matching rows';
+                return;
+            }
+            
             const table = document.createElement('table');
             
             // Create header
             const thead = document.createElement('thead');
             const headerRow = document.createElement('tr');
-            result.columns.forEach(col => {
+            visibleColumns.forEach(col => {
                 const th = document.createElement('th');
                 th.textContent = col;
                 th.title = col;
+                th.className = 'sortable-header';
+                th.style.position = 'relative';
+                
+                // Add sort indicator if this column is being sorted
+                if (sortColumn === col) {
+                    const sortIndicator = document.createElement('span');
+                    sortIndicator.className = 'sort-indicator';
+                    sortIndicator.textContent = sortDirection === 'asc' ? '↑' : '↓';
+                    th.appendChild(sortIndicator);
+                }
+                
+                // Add click handler for sorting
+                th.addEventListener('click', () => sortBy(col));
+                
                 headerRow.appendChild(th);
             });
             thead.appendChild(headerRow);
@@ -975,9 +1124,9 @@ export class SqlQueryPanel {
             
             // Create body
             const tbody = document.createElement('tbody');
-            result.rows.forEach(row => {
+            filteredData.forEach(row => {
                 const tr = document.createElement('tr');
-                result.columns.forEach(col => {
+                visibleColumns.forEach(col => {
                     const td = document.createElement('td');
                     const value = row[col];
                     td.textContent = value === null ? 'NULL' : String(value);
@@ -990,7 +1139,7 @@ export class SqlQueryPanel {
             
             resultsContainer.innerHTML = '';
             resultsContainer.appendChild(table);
-            resultsInfo.textContent = \`\${result.rowCount} rows\`;
+            resultsInfo.textContent = \`\${filteredData.length} of \${currentData.length} rows\`;
         }
         
         function displayError(error) {
@@ -1141,6 +1290,134 @@ export class SqlQueryPanel {
                     </div>
                 </div>
             \`;
+        }
+        
+        function applyFilter() {
+            const filterValue = filterInput.value.toLowerCase().trim();
+            
+            if (!filterValue) {
+                filteredData = [...currentData];
+            } else {
+                filteredData = currentData.filter(row => {
+                    return visibleColumns.some(col => {
+                        const value = row[col];
+                        const searchText = value === null ? 'null' : String(value).toLowerCase();
+                        return searchText.includes(filterValue);
+                    });
+                });
+            }
+            
+            // Re-apply sorting if active
+            if (sortColumn) {
+                applySorting();
+            }
+            
+            displayTable();
+        }
+        
+        function sortBy(column) {
+            if (sortColumn === column) {
+                // Toggle direction if same column
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                // New column, start with ascending
+                sortColumn = column;
+                sortDirection = 'asc';
+            }
+            
+            applySorting();
+            displayTable();
+        }
+        
+        function applySorting() {
+            if (!sortColumn) return;
+            
+            filteredData.sort((a, b) => {
+                const aVal = a[sortColumn];
+                const bVal = b[sortColumn];
+                
+                // Handle null values
+                if (aVal === null && bVal === null) return 0;
+                if (aVal === null) return sortDirection === 'asc' ? -1 : 1;
+                if (bVal === null) return sortDirection === 'asc' ? 1 : -1;
+                
+                // Try numeric comparison first
+                const aNum = Number(aVal);
+                const bNum = Number(bVal);
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                    return sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
+                }
+                
+                // String comparison
+                const aStr = String(aVal).toLowerCase();
+                const bStr = String(bVal).toLowerCase();
+                if (aStr < bStr) return sortDirection === 'asc' ? -1 : 1;
+                if (aStr > bStr) return sortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        
+        function toggleColumnVisibility() {
+            // Remove existing dropdown if present
+            const existingDropdown = document.querySelector('.column-visibility-dropdown');
+            if (existingDropdown) {
+                existingDropdown.remove();
+                return;
+            }
+            
+            // Create dropdown
+            const dropdown = document.createElement('div');
+            dropdown.className = 'column-visibility-dropdown';
+            
+            originalColumns.forEach(col => {
+                const item = document.createElement('div');
+                item.className = 'column-visibility-item';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = visibleColumns.includes(col);
+                checkbox.addEventListener('change', () => toggleColumn(col));
+                
+                const label = document.createElement('span');
+                label.textContent = col;
+                
+                item.appendChild(checkbox);
+                item.appendChild(label);
+                dropdown.appendChild(item);
+            });
+            
+            // Position dropdown relative to button
+            columnVisibilityBtn.parentElement.style.position = 'relative';
+            columnVisibilityBtn.parentElement.appendChild(dropdown);
+            
+            // Close dropdown when clicking outside
+            setTimeout(() => {
+                document.addEventListener('click', function closeDropdown(e) {
+                    if (!dropdown.contains(e.target) && e.target !== columnVisibilityBtn) {
+                        dropdown.remove();
+                        document.removeEventListener('click', closeDropdown);
+                    }
+                });
+            }, 0);
+        }
+        
+        function toggleColumn(column) {
+            const index = visibleColumns.indexOf(column);
+            if (index > -1) {
+                visibleColumns.splice(index, 1);
+            } else {
+                // Add column back in original order
+                const originalIndex = originalColumns.indexOf(column);
+                let insertIndex = 0;
+                for (let i = 0; i < originalIndex; i++) {
+                    if (visibleColumns.includes(originalColumns[i])) {
+                        insertIndex++;
+                    }
+                }
+                visibleColumns.splice(insertIndex, 0, column);
+            }
+            
+            displayTable();
         }
     </script>
 </body>
