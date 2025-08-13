@@ -146,7 +146,8 @@ export class TableDataService {
             const values = columns.map(col => rowData[col]);
             const placeholders = columns.map((_, index) => `$${index + 1}`);
 
-            const insertQuery = `
+            // First, try the insert with RETURNING clause
+            let insertQuery = `
                 INSERT INTO ${schema}.${table} (${columns.join(', ')})
                 VALUES (${placeholders.join(', ')})
                 RETURNING *
@@ -154,7 +155,33 @@ export class TableDataService {
 
             console.debug('Executing insert:', insertQuery, 'with values:', values);
             
-            const result = await client.query(insertQuery, values);
+            let result;
+            try {
+                result = await client.query(insertQuery, values);
+            } catch (returningError) {
+                // If RETURNING clause fails, fall back to INSERT without RETURNING
+                console.debug('RETURNING clause failed, falling back to standard INSERT:', returningError);
+                
+                insertQuery = `
+                    INSERT INTO ${schema}.${table} (${columns.join(', ')})
+                    VALUES (${placeholders.join(', ')})
+                `;
+                
+                const insertResult = await client.query(insertQuery, values);
+                
+                if (insertResult.rowCount === 0) {
+                    throw new Error('Insert operation did not affect any rows');
+                }
+                
+                // For inserts without RETURNING, we can't easily get the exact row back
+                // especially if there are auto-generated columns (like serial IDs)
+                // Return a basic representation of what was inserted
+                const insertedRow: TableRow = { ...rowData };
+                return {
+                    ...insertedRow,
+                    __rowId: 'new'
+                };
+            }
             
             if (result.rows.length === 0) {
                 throw new Error('Insert operation did not return any data');
@@ -186,6 +213,29 @@ export class TableDataService {
         try {
             client = await this.getConnection(database);
 
+            // Validate input data
+            if (!updateData.newValues || Object.keys(updateData.newValues).length === 0) {
+                throw new Error('No values provided for update');
+            }
+
+            console.debug('Update data received:', {
+                newValues: updateData.newValues,
+                primaryKeyValues: updateData.primaryKeyValues
+            });
+
+            if (!updateData.primaryKeyValues || Object.keys(updateData.primaryKeyValues).length === 0) {
+                // Get table columns to check if there are any primary keys defined
+                const columns = await this.getTableColumns(client, schema, table);
+                const primaryKeyColumns = columns.filter(col => col.isPrimaryKey);
+                
+                if (primaryKeyColumns.length === 0) {
+                    console.warn(`Table '${schema}.${table}' has no primary key defined. Updates may not work reliably without unique identifiers.`);
+                    throw new Error(`Cannot update row: Table '${schema}.${table}' has no primary key defined. Please add a primary key to enable row editing.`);
+                } else {
+                    throw new Error('Primary key values are required for update operation but were not provided');
+                }
+            }
+
             // Build SET clause
             const setColumns = Object.keys(updateData.newValues);
             const setClause = setColumns.map((col, index) => `${col} = $${index + 1}`).join(', ');
@@ -194,10 +244,16 @@ export class TableDataService {
             const whereColumns = Object.keys(updateData.primaryKeyValues);
             const whereClause = whereColumns.map((col, index) => `${col} = $${setColumns.length + index + 1}`).join(' AND ');
 
+            // Validate that we have a proper WHERE clause
+            if (!whereClause.trim()) {
+                throw new Error('Unable to build WHERE clause - no primary key columns found');
+            }
+
             // Combine all values
             const allValues = [...Object.values(updateData.newValues), ...Object.values(updateData.primaryKeyValues)];
 
-            const updateQuery = `
+            // First, try the update with RETURNING clause
+            let updateQuery = `
                 UPDATE ${schema}.${table}
                 SET ${setClause}
                 WHERE ${whereClause}
@@ -206,7 +262,38 @@ export class TableDataService {
 
             console.debug('Executing update:', updateQuery, 'with values:', allValues);
             
-            const result = await client.query(updateQuery, allValues);
+            let result;
+            try {
+                result = await client.query(updateQuery, allValues);
+            } catch (returningError) {
+                // If RETURNING clause fails, fall back to UPDATE without RETURNING
+                console.debug('RETURNING clause failed, falling back to standard UPDATE:', returningError);
+                
+                updateQuery = `
+                    UPDATE ${schema}.${table}
+                    SET ${setClause}
+                    WHERE ${whereClause}
+                `;
+                
+                const updateResult = await client.query(updateQuery, allValues);
+                
+                if (updateResult.rowCount === 0) {
+                    throw new Error('Update operation did not affect any rows');
+                }
+                
+                // Fetch the updated row with a separate SELECT query
+                const selectQuery = `
+                    SELECT * FROM ${schema}.${table}
+                    WHERE ${whereClause}
+                `;
+                
+                const selectValues = Object.values(updateData.primaryKeyValues);
+                result = await client.query(selectQuery, selectValues);
+                
+                if (result.rows.length === 0) {
+                    throw new Error('Could not retrieve updated row');
+                }
+            }
             
             if (result.rows.length === 0) {
                 throw new Error('Update operation did not affect any rows');

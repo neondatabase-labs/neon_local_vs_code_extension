@@ -467,7 +467,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
                   <div className="detail-value connection-string-container">
                     <div className="connection-string">
                       import {'{'} neonConfig {'}'} from '@neondatabase/serverless';<br /><br />
-                      neonConfig.fetchEndpoint = 'http://localhost:{state.port}/sql';
+                      neonConfig.fetchEndpoint = 'http://localhost:{state.port}/sql';<br /><br />
                     </div>
                   </div>
                 </div>

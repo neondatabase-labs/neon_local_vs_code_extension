@@ -1498,9 +1498,25 @@ export class TableDataPanel {
         
         function getPrimaryKeyValues(row) {
             const pkValues = {};
-            columns.filter(col => col.isPrimaryKey).forEach(col => {
-                pkValues[col.name] = row[col.name];
-            });
+            const primaryKeyColumns = columns.filter(col => col.isPrimaryKey);
+            
+            if (primaryKeyColumns.length > 0) {
+                // Use actual primary key columns
+                primaryKeyColumns.forEach(col => {
+                    pkValues[col.name] = row[col.name];
+                });
+            } else {
+                // Fallback: use all non-null columns as identifier
+                // This is not ideal but allows updates on tables without primary keys
+                console.warn('Table has no primary key, using all columns as identifier for update');
+                columns.forEach(col => {
+                    const value = row[col.name];
+                    if (value !== null && value !== undefined) {
+                        pkValues[col.name] = value;
+                    }
+                });
+            }
+            
             return pkValues;
         }
         

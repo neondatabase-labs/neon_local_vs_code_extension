@@ -33,7 +33,9 @@ export class SchemaTreeItem extends vscode.TreeItem {
         switch (item.type) {
             case 'connection':
                 const connection = item.metadata;
-                return `Connected to: ${connection?.branchName || 'Unknown Branch'} (${connection?.projectName || 'Unknown Project'})${connection?.selectedDatabase ? `\nDatabase: ${connection.selectedDatabase}` : ''}${connection?.port ? `\nPort: ${connection.port}` : ''}`;
+                const branchDisplayName = connection?.branchName || 'Unknown';
+                
+                return `Database Branch: ${branchDisplayName}\nProject: ${connection?.projectName || 'Unknown Project'}${connection?.port ? `\nPort: ${connection.port}` : ''}`;
             case 'database':
                 return `Database: ${item.name}${item.metadata?.size ? ` (${item.metadata.size})` : ''}`;
             case 'schema':
@@ -71,7 +73,7 @@ export class SchemaTreeItem extends vscode.TreeItem {
         switch (item.type) {
             case 'connection':
                 const connection = item.metadata;
-                return 'Branch';
+                return 'BRANCH';
             case 'column':
                 const column = item.metadata;
                 if (column?.data_type) {
@@ -294,21 +296,42 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
     }
 
     private getConnectionRoot(viewData: any): SchemaItem[] {
-        const branchName = viewData.currentlyConnectedBranch || 'Unknown Branch';
+        const connectionType = viewData.connectionType || 'existing';
+        const branchId = viewData.currentlyConnectedBranch || 'Unknown Branch';
+        const branchName = viewData.selectedBranchName || viewData.connection?.selectedBranchName;
+        
+        // For existing branches, use the branch name if available, otherwise fall back to ID
+        // For ephemeral branches (type 'new'), always use the branch ID
+        let displayName: string;
+        if (connectionType === 'existing' && branchName) {
+            displayName = branchName;
+        } else {
+            displayName = branchId;
+        }
+        
         const projectName = viewData.connection?.selectedProjectName || 'Unknown Project';
         const orgName = viewData.connection?.selectedOrgName || 'Unknown Organization';
         const selectedDatabase = viewData.selectedDatabase || 'postgres';
         const port = viewData.port || 5432;
 
-        console.debug('Schema view: Creating connection root for branch:', branchName);
+        console.debug('Schema view: Creating connection root', {
+            connectionType,
+            branchId,
+            branchName,
+            displayName,
+            projectName
+        });
 
         const connectionItem: SchemaItem = {
             id: 'connection_root',
-            name: `${branchName}`,
+            name: `${displayName}`,
             type: 'connection' as const,
             parent: undefined,
             metadata: {
-                branchName,
+                branchName: displayName,
+                branchId,
+                actualBranchName: branchName,
+                connectionType,
                 projectName,
                 orgName,
                 selectedDatabase,
