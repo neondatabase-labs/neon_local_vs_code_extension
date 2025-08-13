@@ -4,9 +4,11 @@ import { StateService } from './services/state.service';
 import { ConnectViewProvider } from './connectView';
 import { DatabaseViewProvider } from './databaseView';
 import { ActionsViewProvider } from './actionsView';
+import { SchemaViewProvider } from './schemaView';
 import { DockerService } from './services/docker.service';
 import { ViewData } from './types';
 import { NeonApiService } from './services/api.service';
+import { SchemaService } from './services/schema.service';
 import { AuthManager } from './auth/authManager';
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -24,6 +26,14 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('neonLocal.viewDataChanged', async (viewData: ViewData) => {
       webviewService.updateViewData('neonLocal', viewData);
+      
+      // Notify schema view of connection state changes
+      try {
+        await vscode.commands.executeCommand('neonLocal.schema.onConnectionStateChanged', viewData);
+      } catch (error) {
+        // Command may not be registered yet during initialization, silently ignore
+        console.debug('Schema view connection state notification skipped (view not ready):', error);
+      }
     })
   );
 
@@ -154,6 +164,15 @@ export async function activate(context: vscode.ExtensionContext) {
     webviewService,
     stateService
   );
+  const schemaViewProvider = new SchemaViewProvider(
+    context,
+    stateService,
+    authManager,
+    dockerService
+  );
+
+  // Store schema service for cleanup
+  globalServices.schemaService = schemaViewProvider.getSchemaService();
 
   // Register core commands
   disposables.push(
@@ -480,5 +499,42 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider('neonLocalActions', actionsViewProvider)
   );
 
+  // Update context for schema view visibility
+  const updateSchemaViewContext = async () => {
+    const viewData = await stateService.getViewData();
+    vscode.commands.executeCommand('setContext', 'neonLocal.connected', viewData.connected);
+  };
+
+  // Initial context update
+  updateSchemaViewContext();
+
+  // Listen for connection state changes to update context
+  const originalSetIsProxyRunning = stateService.setIsProxyRunning.bind(stateService);
+  stateService.setIsProxyRunning = async (value: boolean) => {
+    await originalSetIsProxyRunning(value);
+    vscode.commands.executeCommand('setContext', 'neonLocal.connected', value);
+  };
+
   context.subscriptions.push(...disposables);
+}
+
+// Store services globally for cleanup
+let globalServices: {
+  schemaService?: SchemaService;
+} = {};
+
+export async function deactivate() {
+  console.debug('Extension deactivating, cleaning up resources...');
+  
+  try {
+    // Cleanup schema service connection pools
+    if (globalServices.schemaService) {
+      await globalServices.schemaService.cleanup();
+      console.debug('Schema service cleanup completed');
+    }
+    
+    console.debug('Extension deactivation cleanup completed');
+  } catch (error) {
+    console.error('Error during extension deactivation:', error);
+  }
 } 

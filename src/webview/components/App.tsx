@@ -267,14 +267,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
     }
   };
 
-  const handleDriverSelect = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const driver = event.target.value as 'serverless' | 'postgres';
-    updateState({ connection: { ...state.connection, driver } });
-    vscode.postMessage({
-      command: 'updateDriver',
-      driver
-    });
-  };
+
 
   const handlePortChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
@@ -420,10 +413,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
                 <div className="detail-value">{state.connection.parentBranchName || state.connection.parentBranchId || 'Not selected'}</div>
               </div>
             )}
-            <div className="detail-row">
-              <div className="detail-label">Driver</div>
-              <div className="detail-value">{state.connection.driver === 'serverless' ? 'Neon Serverless (http)' : 'PostgreSQL'}</div>
-            </div>
+
             {state.connectionInfo && (
               <div>
                 <div className="detail-row">
@@ -477,7 +467,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
                   <div className="detail-value connection-string-container">
                     <div className="connection-string">
                       import {'{'} neonConfig {'}'} from '@neondatabase/serverless';<br /><br />
-                      neonConfig.fetchEndpoint = 'http://localhost:{state.port}/sql';
+                      neonConfig.fetchEndpoint = 'http://localhost:{state.port}/sql';<br /><br />
                     </div>
                   </div>
                 </div>
@@ -493,32 +483,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
             >
               {isProcessingCommand ? 'Disconnecting...' : 'Disconnect'}
             </button>
-            <div className="action-group">
-              <button
-                className="action-button"
-                onClick={() => handleAction('resetFromParent')}
-              >
-                Reset from Parent Branch
-              </button>
-              <button
-                className="action-button"
-                onClick={() => handleAction('openSqlEditor')}
-              >
-                Open SQL Editor
-              </button>
-              <button
-                className="action-button"
-                onClick={() => handleAction('openTableView')}
-              >
-                Open Table View
-              </button>
-              <button
-                className="action-button"
-                onClick={() => handleAction('launchPsql')}
-              >
-                Launch PSQL
-              </button>
-            </div>
+
           </div>
         </>
       ) : (
@@ -626,22 +591,7 @@ export const MainApp: React.FC<MainAppProps> = ({ vscode }) => {
                   </div>
                 )}
 
-                <div className="section">
-                  <div className="label-with-help">
-                    <label htmlFor="driver">Driver</label>
-                    <HelpIcon 
-                      tooltip="Select PostgreSQL driver for traditional database connections or Neon Serverless driver for serverless applications requiring an http connection."
-                    />
-                  </div>
-                  <select
-                    id="driver"
-                    value={state.connection.driver}
-                    onChange={handleDriverSelect}
-                  >
-                    <option value="postgres">PostgreSQL</option>
-                    <option value="serverless">Neon Serverless (http)</option>
-                  </select>
-                </div>
+
 
                 <div className="section">
                   <div className="label-with-help">

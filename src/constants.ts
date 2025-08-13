@@ -30,5 +30,6 @@ export const VIEW_TYPES = {
     CONNECT: 'neonLocalConnect',
     DATABASE: 'neonLocalDatabase',
     ACTIONS: 'neonLocalActions',
+    SCHEMA: 'neonLocalSchema',
     SIGN_IN: 'neonLocal.signIn'
 } as const; 

@@ -200,13 +200,7 @@
             <select id="parent-branch" disabled></select>
         </div>
 
-        <div class="form-group">
-            <label for="driver">Driver</label>
-            <select id="driver">
-                <option value="postgres">PostgreSQL</option>
-                <option value="serverless">Neon Serverless (http)</option>
-            </select>
-        </div>
+
 
         <div class="form-group">
             <div id="status" class="status disconnected">
@@ -227,7 +221,7 @@
         const orgSelect = document.getElementById('org');
         const projectSelect = document.getElementById('project');
         const branchSelect = document.getElementById('branch');
-        const driverSelect = document.getElementById('driver');
+
         const startButton = document.getElementById('startProxy');
         const stopButton = document.getElementById('stopProxy');
         const statusDiv = document.getElementById('status');
@@ -324,29 +318,12 @@
                     command: 'selectBranch',
                     branchId: select.value,
                     restartProxy: isProxyRunning,
-                    driver: driverSelect.value
+                    driver: 'postgres'
                 });
             }
         });
 
-        driverSelect.addEventListener('change', () => {
-            const isProxyRunning = document.getElementById('stopProxy').style.display === 'block';
-            if (isProxyRunning) {
-                // Stop proxy first, then restart with new driver
-                vscode.postMessage({ command: 'stopProxy' });
-                
-                // Get the current branch value
-                const currentBranch = branchSelect.value;
-                if (currentBranch && currentBranch !== 'create') {
-                    vscode.postMessage({
-                        command: 'selectBranch',
-                        branchId: currentBranch,
-                        restartProxy: true,
-                        driver: driverSelect.value
-                    });
-                }
-            }
-        });
+
 
         startButton.addEventListener('click', () => {
             const connectionType = document.getElementById('connection-type');
@@ -365,7 +342,7 @@
                 
                 vscode.postMessage({ 
                     command: 'startProxy',
-                    driver: driverSelect.value,
+                    driver: 'postgres',
                     isExisting: true,
                     branchId: branchSelect.value
                 });
@@ -382,7 +359,7 @@
                 
                 vscode.postMessage({ 
                     command: 'startProxy',
-                    driver: driverSelect.value,
+                    driver: 'postgres',
                     isExisting: false,
                     parentBranchId: parentBranchSelect.value
                 });

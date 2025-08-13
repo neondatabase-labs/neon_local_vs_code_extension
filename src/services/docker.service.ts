@@ -300,13 +300,13 @@ export class DockerService {
 
     private async pullImage(): Promise<void> {
         try {
-            await this.docker.getImage('neondatabase/neon_local:latest').inspect();
+            await this.docker.getImage('neondatabase/neon_local:v1').inspect();
         } catch {
             const authConfig = this.getDockerAuthConfig();
             const pullOpts = authConfig ? { authconfig: authConfig } : {};
 
             await new Promise((resolve, reject) => {
-                this.docker.pull('neondatabase/neon_local:latest', pullOpts, (err: any, stream: any) => {
+                this.docker.pull('neondatabase/neon_local:v1', pullOpts, (err: any, stream: any) => {
                     if (err) {
                         reject(err);
                         return;
@@ -556,7 +556,7 @@ export class DockerService {
 
             // Create container configuration
             const containerConfig: any = {
-                Image: 'neondatabase/neon_local:latest',
+                Image: 'neondatabase/neon_local:v1',
                 name: this.containerName,
                 StopTimeout: 20, // 20 second grace period for manual stops
                 Env: [
@@ -614,7 +614,7 @@ export class DockerService {
 
         // Create container configuration
         const containerConfig: any = {
-            Image: 'neondatabase/neon_local:latest',
+            Image: 'neondatabase/neon_local:v1',
             name: this.containerName,
             StopTimeout: 20, // 20 second grace period for manual stops
             Env: [

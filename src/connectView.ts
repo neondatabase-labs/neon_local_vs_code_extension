@@ -341,6 +341,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                         vscode.window.showErrorMessage('Selected project not found');
                         return;
                     }
+                    // Clear branch selections and update project selection
                     await this._stateService.updateState({
                         selection: {
                             orgs: currentState.orgs,
@@ -357,11 +358,69 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                         }
                     });
                     
+                    // Also clear the current branch to ensure container gets the right branch ID later
+                    await this._stateService.setCurrentBranch('');
+                    await this._stateService.setParentBranchId('');
+                    
                     // Fetch branches for the selected project
                     try {
                         const apiService = new NeonApiService(this._extensionContext);
                         const branches = await apiService.getBranches(message.projectId);
                         await this._stateService.setBranches(branches);
+                        
+                        // After loading branches, check if there's a previously selected branch for this project
+                        // that should be restored and properly synchronized
+                        const updatedState = await this._stateService.getViewData();
+                        if (updatedState.selectedBranchId && updatedState.connectionType === 'existing') {
+                            // Verify the branch still exists in the project
+                            const branchExists = branches.find(branch => branch.id === updatedState.selectedBranchId);
+                            if (branchExists) {
+                                console.debug('Restoring previously selected branch for project:', updatedState.selectedBranchId);
+                                // Update the state to ensure branch name is correct AND sync the backend current branch
+                                await this._stateService.setCurrentBranch(updatedState.selectedBranchId);
+                                await this._stateService.updateState({
+                                    selection: {
+                                        ...updatedState,
+                                        selectedBranchName: branchExists.name
+                                    }
+                                });
+                            } else {
+                                // Branch no longer exists, clear the selection
+                                console.debug('Previously selected branch no longer exists, clearing selection');
+                                await this._stateService.setCurrentBranch('');
+                                await this._stateService.updateState({
+                                    selection: {
+                                        ...updatedState,
+                                        selectedBranchId: undefined,
+                                        selectedBranchName: undefined
+                                    }
+                                });
+                            }
+                        } else if (updatedState.parentBranchId && updatedState.connectionType === 'new') {
+                            // Handle parent branch restoration for new connection type
+                            const branchExists = branches.find(branch => branch.id === updatedState.parentBranchId);
+                            if (branchExists) {
+                                console.debug('Restoring previously selected parent branch for project:', updatedState.parentBranchId);
+                                // Sync the backend parent branch state
+                                await this._stateService.setParentBranchId(updatedState.parentBranchId);
+                                await this._stateService.updateState({
+                                    selection: {
+                                        ...updatedState,
+                                        parentBranchName: branchExists.name
+                                    }
+                                });
+                            } else {
+                                console.debug('Previously selected parent branch no longer exists, clearing selection');
+                                await this._stateService.setParentBranchId('');
+                                await this._stateService.updateState({
+                                    selection: {
+                                        ...updatedState,
+                                        parentBranchId: undefined,
+                                        parentBranchName: undefined
+                                    }
+                                });
+                            }
+                        }
                     } catch (error) {
                         console.error('Error fetching branches:', error);
                         if (error instanceof Error) {
@@ -417,10 +476,7 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     }
                     await this.updateView();
                     break;
-                case 'updateDriver':
-                    await this._stateService.setSelectedDriver(message.driver);
-                    await this.updateView();
-                    break;
+
                 case 'updatePort':
                     await this._stateService.setPort(message.port);
                     await this.updateView();
@@ -571,18 +627,6 @@ export class ConnectViewProvider implements vscode.WebviewViewProvider {
                     await this._stateService.setIsProxyRunning(false);
                     await this.updateView();
                     break;
-                      case 'resetFromParent':
-        await vscode.commands.executeCommand('neon-local-connect.resetFromParent');
-        break;
-      case 'openSqlEditor':
-        await vscode.commands.executeCommand('neon-local-connect.openSqlEditor');
-        break;
-      case 'openTableView':
-        await vscode.commands.executeCommand('neon-local-connect.openTableView');
-        break;
-      case 'launchPsql':
-        await vscode.commands.executeCommand('neon-local-connect.launchPsql');
-        break;
                 case 'updateConnectionType':
                     console.debug('ConnectViewProvider: Handling connection type update:', {
                         newType: message.connectionType,
