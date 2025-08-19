@@ -264,16 +264,31 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
 
             switch (element.type) {
                 case 'connection':
-                    children = await this.getDatabases();
+                    children = await Promise.race([
+                        this.getDatabases(),
+                        new Promise<SchemaItem[]>((_, reject) => 
+                            setTimeout(() => reject(new Error('Connection timeout')), 5000)
+                        )
+                    ]);
                     break;
                 case 'database':
-                    children = await this.getSchemas(element.name);
+                    children = await Promise.race([
+                        this.getSchemas(element.name),
+                        new Promise<SchemaItem[]>((_, reject) => 
+                            setTimeout(() => reject(new Error('Schema loading timeout')), 5000)
+                        )
+                    ]);
                     break;
                 case 'schema':
                     const parts = element.id.split('_');
                     const database = parts[1];
                     const schema = parts[2];
-                    children = await this.getTablesAndFunctions(database, schema);
+                    children = await Promise.race([
+                        this.getTablesAndFunctions(database, schema),
+                        new Promise<SchemaItem[]>((_, reject) => 
+                            setTimeout(() => reject(new Error('Tables loading timeout')), 5000)
+                        )
+                    ]);
                     break;
                 case 'table':
                 case 'view':
@@ -400,9 +415,17 @@ export class SchemaTreeProvider implements vscode.TreeDataProvider<SchemaItem> {
                 console.debug('Schema view: Aborting preload - not connected');
                 return;
             }
+
+            // Add a small delay to let the container fully stabilize
+            await new Promise(resolve => setTimeout(resolve, 500));
             
-            // Load all databases first
-            const databases = await this.getDatabases();
+            // Load all databases first with timeout
+            const databases = await Promise.race([
+                this.getDatabases(),
+                new Promise<SchemaItem[]>((_, reject) => 
+                    setTimeout(() => reject(new Error('Database loading timeout')), 10000)
+                )
+            ]);
             
             // Don't preload if there are too many databases (performance consideration)
             if (databases.length > 10) {

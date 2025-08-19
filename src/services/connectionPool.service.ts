@@ -25,6 +25,7 @@ export interface ManagedClient {
 
 export class ConnectionPoolService {
     private pools: Map<string, Pool> = new Map();
+    private poolStates: Map<string, 'active' | 'ending' | 'ended'> = new Map();
     private stateService: StateService;
 
     constructor(stateService: StateService) {
@@ -55,13 +56,24 @@ export class ConnectionPoolService {
     }
 
     private createPool(config: ConnectionConfig): Pool {
-        return new Pool({
+        const pool = new Pool({
             ...config,
             max: 5, // Maximum number of clients in the pool
             min: 0, // Minimum number of clients in the pool
             idleTimeoutMillis: 60000, // Close idle clients after 60 seconds
-            connectionTimeoutMillis: 150000, // Time to wait for a connection to be established
+            connectionTimeoutMillis: 5000, // Reduced timeout for faster failure detection
         });
+
+        const poolKey = this.getPoolKey(config.database);
+        this.poolStates.set(poolKey, 'active');
+
+        // Handle pool errors
+        pool.on('error', (err) => {
+            console.error(`Pool error for database ${config.database}:`, err);
+            this.handlePoolError(poolKey);
+        });
+
+        return pool;
     }
 
     async getConnection(database?: string): Promise<ManagedClient> {
@@ -74,9 +86,23 @@ export class ConnectionPoolService {
         }
         
         const poolKey = this.getPoolKey(config.database);
+        const poolState = this.poolStates.get(poolKey);
+
+        // If pool is ending or ended, wait or create new one
+        if (poolState === 'ending') {
+            // Wait a bit for pool to finish ending, then create new one
+            await new Promise(resolve => setTimeout(resolve, 100));
+            return this.getConnection(database); // Recursive call after wait
+        }
 
         let pool = this.pools.get(poolKey);
-        if (!pool) {
+        if (!pool || poolState === 'ended') {
+            // Clean up any existing ended pool
+            if (pool) {
+                this.pools.delete(poolKey);
+                this.poolStates.delete(poolKey);
+            }
+            
             pool = this.createPool(config);
             this.pools.set(poolKey, pool);
         }
@@ -88,9 +114,8 @@ export class ConnectionPoolService {
         } catch (error) {
             console.error(`Failed to get connection for database ${config.database}:`, error);
             
-            // If pool connection fails, remove the pool and try creating a direct connection
-            this.pools.delete(poolKey);
-            await pool.end();
+            // If pool connection fails, safely close and remove the pool
+            await this.safeClosePool(poolKey);
             
             const directClient = await this.createDirectConnection(config);
             return this.wrapDirectClient(directClient);
@@ -109,12 +134,44 @@ export class ConnectionPoolService {
                     throw error;
                 }
                 
-                // Wait before retrying (exponential backoff)
-                await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 5000));
+                // Shorter wait with reduced backoff for better UX
+                await new Promise(resolve => setTimeout(resolve, Math.min(500 * Math.pow(2, i), 2000)));
             }
         }
         
         throw new Error('All connection attempts failed');
+    }
+
+    private async handlePoolError(poolKey: string): Promise<void> {
+        console.debug(`Handling pool error for ${poolKey}`);
+        await this.safeClosePool(poolKey);
+    }
+
+    private async safeClosePool(poolKey: string): Promise<void> {
+        const pool = this.pools.get(poolKey);
+        if (!pool) return;
+
+        const currentState = this.poolStates.get(poolKey);
+        if (currentState === 'ending' || currentState === 'ended') {
+            return; // Already being closed or closed
+        }
+
+        this.poolStates.set(poolKey, 'ending');
+        
+        try {
+            await pool.end();
+            this.poolStates.set(poolKey, 'ended');
+            console.debug(`Pool ${poolKey} safely closed`);
+        } catch (error) {
+            console.error(`Error closing pool ${poolKey}:`, error);
+            this.poolStates.set(poolKey, 'ended');
+        } finally {
+            this.pools.delete(poolKey);
+            // Keep the poolState as 'ended' briefly to prevent immediate recreation
+            setTimeout(() => {
+                this.poolStates.delete(poolKey);
+            }, 1000);
+        }
     }
 
     private async createDirectConnection(config: ConnectionConfig): Promise<Client> {
@@ -211,29 +268,17 @@ export class ConnectionPoolService {
     }
 
     async closeAll(): Promise<void> {
-        const closePromises = Array.from(this.pools.values()).map(pool => 
-            pool.end().catch(error => 
-                console.error('Error closing pool:', error)
-            )
-        );
+        const poolKeys = Array.from(this.pools.keys());
+        const closePromises = poolKeys.map(poolKey => this.safeClosePool(poolKey));
         
         await Promise.all(closePromises);
         this.pools.clear();
+        this.poolStates.clear();
     }
 
     async closePool(database: string): Promise<void> {
         const poolKey = this.getPoolKey(database);
-        const pool = this.pools.get(poolKey);
-        
-        if (pool) {
-            try {
-                await pool.end();
-            } catch (error) {
-                console.error(`Error closing pool for database ${database}:`, error);
-            } finally {
-                this.pools.delete(poolKey);
-            }
-        }
+        await this.safeClosePool(poolKey);
     }
 
     // Health check for all pools
